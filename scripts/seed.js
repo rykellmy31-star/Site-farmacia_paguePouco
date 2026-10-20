@@ -52,7 +52,7 @@ function svgBanner(titulo, subtitulo, cor1, cor2) {
     <circle cx="1050" cy="80" r="120"/><circle cx="980" cy="330" r="70"/><circle cx="120" cy="360" r="90"/>
   </g>
   <text x="70" y="180" font-family="system-ui, sans-serif" font-size="72" font-weight="800" fill="#ffffff">${titulo}</text>
-  <text x="70" y="240" font-family="system-ui, sans-serif" font-size="30" fill="#eafff5">${subtitulo}</text>
+  <text x="70" y="240" font-family="system-ui, sans-serif" font-size="30" fill="#fff1f1">${subtitulo}</text>
   <rect x="70" y="290" rx="34" height="62" width="290" fill="#ffffff"/>
   <text x="215" y="330" font-family="system-ui, sans-serif" font-size="26" font-weight="700" fill="${cor2}" text-anchor="middle">Confira as ofertas</text>
 </svg>`;
@@ -84,9 +84,9 @@ function garantirBanners(db) {
   const dir = path.join(config.uploadsDir, 'banners');
   fs.mkdirSync(dir, { recursive: true });
   const definicoes = [
-    { arquivo: 'banner-principal-1.svg', titulo: 'Ofertas do dia', subtitulo: 'Até 60% de desconto em produtos selecionados', cor1: '#0f8b5f', cor2: '#0a6b48', link: '/ofertas', ordem: 1 },
-    { arquivo: 'banner-principal-2.svg', titulo: 'Cuidados com a saúde', subtitulo: 'Vitaminas, suplementos e dermocosméticos', cor1: '#ff8a3d', cor2: '#d95400', link: '/busca?q=vitamina', ordem: 2 },
-    { arquivo: 'banner-principal-3.svg', titulo: 'Entregamos para todo o Brasil', subtitulo: 'Frete fixo por estado — consulte pelo CEP', cor1: '#0b5f8a', cor2: '#08405d', link: '/cep', ordem: 3 },
+    { arquivo: 'banner-principal-1.svg', titulo: 'Ofertas do dia', subtitulo: 'Até 60% de desconto em produtos selecionados', cor1: '#8b0000', cor2: '#8b0000', link: '/ofertas', ordem: 1 },
+    { arquivo: 'banner-principal-2.svg', titulo: 'Cuidados com a saúde', subtitulo: 'Vitaminas, suplementos e dermocosméticos', cor1: '#8b0000', cor2: '#8b0000', link: '/busca?q=vitamina', ordem: 2 },
+    { arquivo: 'banner-principal-3.svg', titulo: 'Entregamos para todo o Brasil', subtitulo: 'Frete fixo por estado — consulte pelo CEP', cor1: '#8b0000', cor2: '#8b0000', link: '/cep', ordem: 3 },
   ];
   const bannersCol = db.collection('banners');
   if (!forcar && bannersCol.count()) return;

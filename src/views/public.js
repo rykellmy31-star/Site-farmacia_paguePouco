@@ -15,6 +15,13 @@ import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
 /* ------------------------------------------------------------------ */
 /* HOME                                                                */
 /* ------------------------------------------------------------------ */
+// Atualiza as imagens padrão no navegador após a troca de cores.
+function bannerImageUrl(value) {
+  return typeof value === 'string' && new RegExp('^/uploads/banners/banner-principal-[123][.]svg$').test(value)
+    ? value + '?v=vermelho-20261020'
+    : value;
+}
+
 export function carrosselBanners(banners, id = 'carrosselPrincipal') {
   if (!banners.length) return '';
   return `
@@ -24,8 +31,8 @@ export function carrosselBanners(banners, id = 'carrosselPrincipal') {
         <div class="slide">
           ${b.link ? `<a href="${e(b.link)}">` : '<span>'}
             <picture>
-              ${b.imagemMobile ? `<source media="(max-width: 640px)" srcset="${e(b.imagemMobile)}">` : ''}
-              <img src="${e(b.imagem)}" alt="${e(b.titulo || 'Banner promocional')}" ${i === 0 ? '' : 'loading="lazy"'} width="1200" height="525">
+              ${b.imagemMobile ? `<source media="(max-width: 640px)" srcset="${e(bannerImageUrl(b.imagemMobile))}">` : ''}
+              <img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || 'Banner promocional')}" ${i === 0 ? '' : 'loading="lazy"'} width="1200" height="525">
             </picture>
           ${b.link ? '</a>' : '</span>'}
         </div>`).join('')}
@@ -134,7 +141,7 @@ export function homePage(ctx) {
       case 'banners':
         return `<section class="secao" id="banners" style="margin-top:14px">${carrosselBanners(banners)}
           ${bannersSec.length ? `<div class="vitrine mt-2" style="grid-template-columns:repeat(${Math.min(bannersSec.length, 3)},1fr)">
-            ${bannersSec.map((b) => `<a href="${e(b.link || '#')}"><img src="${e(b.imagem)}" alt="${e(b.titulo || '')}" loading="lazy" style="border-radius:12px"></a>`).join('')}
+            ${bannersSec.map((b) => `<a href="${e(b.link || '#')}"><img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || '')}" loading="lazy" style="border-radius:12px"></a>`).join('')}
           </div>` : ''}
         </section>`;
       case 'categorias': return secaoDepartamentos(arvore);
