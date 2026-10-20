@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Shampoo hidratante 350mL">
+  <rect width="400" height="400" fill="hsl(118, 38%, 92%)"/>
+  <circle cx="200" cy="170" r="86" fill="#ffffff" opacity="0.85"/>
+  <text x="200" y="196" font-family="system-ui, sans-serif" font-size="86" font-weight="700" text-anchor="middle" fill="#0a6b48">D</text>
+  <text x="200" y="312" font-family="system-ui, sans-serif" font-size="19" font-weight="600" text-anchor="middle" fill="#1b2b26">DermaVie</text>
+  <text x="200" y="340" font-family="system-ui, sans-serif" font-size="13" text-anchor="middle" fill="#5b6b64">Imagem ilustrativa</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-label="Entregamos para todo o Brasil">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0b5f8a"/><stop offset="100%" stop-color="#08405d"/>
+  </linearGradient></defs>
+  <rect width="1200" height="420" fill="url(#g)"/>
+  <g fill="rgba(255,255,255,.14)">
+    <circle cx="1050" cy="80" r="120"/><circle cx="980" cy="330" r="70"/><circle cx="120" cy="360" r="90"/>
+  </g>
+  <text x="70" y="180" font-family="system-ui, sans-serif" font-size="72" font-weight="800" fill="#ffffff">Entregamos para todo o Brasil</text>
+  <text x="70" y="240" font-family="system-ui, sans-serif" font-size="30" fill="#eafff5">Frete fixo por estado — consulte pelo CEP</text>
+  <rect x="70" y="290" rx="34" height="62" width="290" fill="#ffffff"/>
+  <text x="215" y="330" font-family="system-ui, sans-serif" font-size="26" font-weight="700" fill="#08405d" text-anchor="middle">Confira as ofertas</text>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Produto sem foto">
+  <rect width="400" height="400" fill="#eef4f1"/>
+  <circle cx="200" cy="170" r="86" fill="#ffffff"/>
+  <text x="200" y="196" font-family="system-ui, sans-serif" font-size="78" font-weight="700" text-anchor="middle" fill="#0a6b48">PP</text>
+  <text x="200" y="312" font-family="system-ui, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#1b2b26">Farmácia Pague Pouco</text>
+  <text x="200" y="340" font-family="system-ui, sans-serif" font-size="13" text-anchor="middle" fill="#5b6b64">Imagem em breve</text>
+</svg>

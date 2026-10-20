@@ -1,0 +1,25 @@
+{
+  "name": "farmacia-pague-pouco",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Loja virtual completa da Farmacia Pague Pouco - site publico, painel Super Administrador, carrinho, checkout, fretes por estado, pagamentos, estoque e CMS.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "seed:force": "node scripts/seed.js --force",
+    "test": "node scripts/test.js",
+    "backup": "node scripts/backup.js",
+    "reset": "node scripts/reset.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "comments": {
+    "dependencias": "Nenhuma. O sistema roda apenas com modulos nativos do Node.js (http, fs, crypto, zlib). Nenhum pacote precisa ser instalado, portanto nao ha custo e nao ha risco de quebra por ausencia de node_modules."
+  }
+}
