@@ -1,3 +1,7 @@
+> **Cloudflare Workers:** a entrada é `src/cloudflare/worker.js`, com SQLite persistente e assets configurados em `wrangler.jsonc`. Use `npm run build` e `npx wrangler deploy`. Configure `ADMIN_EMAIL` e o segredo `ADMIN_PASSWORD` (mínimo 12 caracteres) para o primeiro acesso. [Instruções completas de implantação](docs/07-cloudflare-workers.md).
+>
+> As instruções Node.js abaixo continuam válidas para uso local. Na Cloudflare, não use as contas de demonstração, armazenamento em disco ou transporte SMTP descritos no modo local; confira as diferenças no guia acima.
+
 # Farmácia Pague Pouco — Loja Virtual
 
 Sistema completo de e-commerce farmacêutico: **site público, painel Super Admin,

@@ -1,3 +1,4 @@
+import { config } from '../../config.js';
 /** views/admin/config.js — Fretes, WhatsApp, configurações, páginas, usuários, auditoria, sistema e editor visual. */
 import { escapeHtml as e, sanitizeHtml } from '../../lib/security.js';
 import {
@@ -535,11 +536,12 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
 
     ${painel({
       titulo: 'Backup dos dados',
-      corpo: `<p class="texto-pequeno">O backup copia os arquivos do banco de dados (snapshots) para uma pasta interna.
-      Em produção, recomenda-se também um backup externo (hospedagem/nuvem) contratado pela empresa.</p>
+      corpo: `<p class="texto-pequeno">${config.isCloudflare
+        ? 'Baixe uma cópia privada dos cadastros, pedidos e configurações em JSON. As imagens e vídeos não estão incluídos nesta exportação. Guarde o arquivo em local seguro.'
+        : 'O backup copia os arquivos do banco de dados (snapshots) para uma pasta interna.'}</p>
       <form method="post" action="/admin/api/sistema/backup">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
-        <button class="botao" type="submit">Gerar backup agora</button>
+        <button class="botao" type="submit">${config.isCloudflare ? "Baixar backup JSON" : "Gerar backup agora"}</button>
       </form>
       ${stats.backups.length ? `<p class="texto-pequeno mt-2 mb-0">Últimos backups: ${stats.backups.slice(0, 5).map((b) => `<code>${e(b)}</code>`).join(', ')}</p>` : ''}`,
     })}

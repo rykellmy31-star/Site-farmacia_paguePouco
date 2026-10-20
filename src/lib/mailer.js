@@ -129,7 +129,7 @@ export async function sendMail(db, { to, subject, html, text, meta = {} }) {
     arquivo: null,
   };
 
-  if (config.mail.enabled && config.mail.host && config.mail.user) {
+  if (!config.isCloudflare && config.mail.enabled && config.mail.host && config.mail.user) {
     try {
       await smtpSendRaw(raw, to);
       record.status = 'enviado';
@@ -142,11 +142,16 @@ export async function sendMail(db, { to, subject, html, text, meta = {} }) {
   }
 
   // Sempre guarda uma cópia na fila/arquivo (auditoria e modo desenvolvimento)
+  if (config.isCloudflare) {
+    record.raw = raw;
+    record.arquivo = null;
+  } else {
   const dir = mailDir(db);
   await fsp.mkdir(dir, { recursive: true });
   const fname = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.eml`;
   await fsp.writeFile(path.join(dir, fname), raw, 'utf8');
   record.arquivo = fname;
+  }
   const saved = db.collection('mailOutbox').insert(record);
   return saved;
 }

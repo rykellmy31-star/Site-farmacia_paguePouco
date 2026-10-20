@@ -15,11 +15,18 @@
     "seed:force": "node scripts/seed.js --force",
     "test": "node scripts/test.js",
     "backup": "node scripts/backup.js",
-    "reset": "node scripts/reset.js"
+    "reset": "node scripts/reset.js",
+    "build": "node scripts/prepare-cloudflare.js",
+    "dev:cloudflare": "wrangler dev",
+    "deploy:cloudflare": "wrangler deploy",
+    "check:cloudflare": "wrangler deploy --dry-run",
+    "test:cloudflare": "node --test tests/cloudflare.test.js"
   },
   "dependencies": {},
-  "devDependencies": {},
+  "devDependencies": {
+    "wrangler": "4.151.3"
+  },
   "comments": {
-    "dependencias": "Nenhuma. O sistema roda apenas com modulos nativos do Node.js (http, fs, crypto, zlib). Nenhum pacote precisa ser instalado, portanto nao ha custo e nao ha risco de quebra por ausencia de node_modules."
+    "dependencias": "O servidor Node.js continua sem dependências de execução. Wrangler é usado apenas para desenvolvimento e implantação no Cloudflare Workers."
   }
 }

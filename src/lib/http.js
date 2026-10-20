@@ -6,6 +6,7 @@
  *  - arquivos estáticos com ETag, cache e tipos MIME seguros
  */
 import http from 'node:http';
+import { dispatchFetch, readWebBody } from '../cloudflare/http-adapter.js';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -44,7 +45,7 @@ export function parseCookies(header) {
     if (i < 0) continue;
     const k = part.slice(0, i).trim();
     const v = part.slice(i + 1).trim();
-    out[k] = decodeURIComponent(v);
+    try { out[k] = decodeURIComponent(v); } catch { /* Ignora cookie malformado. */ }
   }
   return out;
 }
@@ -54,9 +55,9 @@ export function serializeCookie(name, value, opts = {}) {
   parts.push(`Path=${opts.path || '/'}`);
   if (opts.maxAge != null) parts.push(`Max-Age=${Math.floor(opts.maxAge)}`);
   if (opts.expires) parts.push(`Expires=${opts.expires.toUTCString()}`);
-  parts.push(`HttpOnly`);
+  if (opts.httpOnly !== false) parts.push('HttpOnly');
   parts.push(`SameSite=${opts.sameSite || 'Lax'}`);
-  if (opts.secure || (process.env.PUBLIC_BASE_URL || '').startsWith('https')) parts.push('Secure');
+  if (opts.secure || (config.publicBaseUrl || '').startsWith('https')) parts.push('Secure');
   return parts.join('; ');
 }
 
@@ -112,13 +113,14 @@ class Response {
     if (this._ended) return;
     this._ended = true;
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8');
-    this.headers['Content-Length'] = buf.length;
+    if (!Object.keys(this.headers).some(name => name.toLowerCase() === 'content-length')) this.headers['Content-Length'] = buf.length;
     this.raw.writeHead(this.statusCode, this.headers);
     this.raw.end(buf);
   }
 }
 
 async function readBody(req, limitBytes) {
+  if (req._webRequest) return readWebBody(req._webRequest, Math.min(limitBytes, 20 * 1024 * 1024));
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
@@ -258,6 +260,7 @@ export function createApp() {
 
   const app = {
     routes,
+    fetch(request, context) { return dispatchFetch(app, request, context); },
     use(fn) {
       middlewares.push(fn);
       return app;
@@ -291,7 +294,7 @@ export function createApp() {
         cookies: parseCookies(rawReq.headers.cookie),
         ip: clientIp(rawReq),
         params: {},
-        ctx: {},
+        ctx: rawReq.context || {},
       };
       const res = new Response(rawRes);
 
@@ -344,6 +347,7 @@ export function createApp() {
 }
 
 export function clientIp(req) {
+  if (config.isCloudflare) return req.trustedIp || 'unknown';
   if (config.trustProxy) {
     const xf = req.headers['x-forwarded-for'];
     if (xf) return String(xf).split(',')[0].trim();
@@ -357,6 +361,21 @@ export function clientIp(req) {
 /* Arquivos estáticos                                                  */
 /* ------------------------------------------------------------------ */
 async function serveStatic(req, res, dir, prefix, opts = {}) {
+  if (config.isCloudflare) {
+    const rel = decodeURIComponent(req.pathname.slice(prefix.length)).replace(/^\/+/, '');
+    if (rel.split('/').some(p => p === '..' || p === '.') || rel.includes('\\') || rel.includes('\0')) {
+      return void res.text('Caminho inválido.', 400);
+    }
+    let result = prefix === '/uploads' ? req.ctx.db.fileResponse(rel, req.raw._webRequest) : null;
+    if (!result) result = await req.ctx.env.ASSETS.fetch(req.raw._webRequest);
+    if (result.status === 404 && opts.notFound) return void opts.notFound(req, res);
+    for (const [name, value] of result.headers) {
+      if (!['transfer-encoding', 'set-cookie'].includes(name) && (name !== 'content-length' || req.method === 'HEAD')) res.set(name, value);
+    }
+    res.status(result.status);
+    if (result.status === 404) return void res.text('Arquivo não encontrado.', 404);
+    return void res.end(Buffer.from(await result.arrayBuffer()));
+  }
   const rel = decodeURIComponent(req.pathname.slice(prefix.length)) || '';
   const safe = path.normalize(rel).replace(/^(\.\.[/\\])+/, '');
   let filePath = path.join(dir, safe);

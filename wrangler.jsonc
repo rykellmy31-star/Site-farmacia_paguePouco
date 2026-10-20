@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "farmacia-pague-pouco",
+  "main": "src/cloudflare/worker.js",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "keep_vars": true,
+  "build": {
+    "command": "node scripts/prepare-cloudflare.js"
+  },
+  "assets": {
+    "directory": ".cloudflare/assets",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LOJA",
+        "class_name": "LojaDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "LojaDurableObject"
+      ]
+    }
+  ]
+}

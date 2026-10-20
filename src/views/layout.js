@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 /**
  * views/layout.js — Layout público: cabeçalho, navegação, rodapé, WhatsApp,
  * barra de cookies e temas vindos das configurações do painel.
@@ -239,7 +240,7 @@ export function paginaPublica(ctx, { titulo, descricao, conteudo, headExtra = ''
   const arvore = ctx.arvore || montarArvore(db);
   const tituloFinal = titulo ? `${titulo} | ${empresa.nomeFantasia || 'Farmácia Pague Pouco'}` : (seo.tituloPadrao || empresa.nomeFantasia);
   const descFinal = descricao || seo.descricaoPadrao || '';
-  const url = canonical || `${process.env.PUBLIC_BASE_URL || ''}${req?.pathname || ''}`;
+  const url = canonical || `${config.publicBaseUrl || ''}${req?.pathname || ''}`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">

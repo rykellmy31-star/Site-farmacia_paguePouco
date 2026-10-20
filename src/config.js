@@ -9,8 +9,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const ROOT = path.resolve(__dirname, '..');
+// WebSocketPair identifica o runtime Workers sem executar I/O no escopo global.
+export const IS_CLOUDFLARE = typeof WebSocketPair !== 'undefined';
+export const ROOT = IS_CLOUDFLARE ? '/' : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Carrega .env simples (sem dependências)
 function loadEnv(file) {
@@ -29,7 +30,7 @@ function loadEnv(file) {
     if (!(key in process.env)) process.env[key] = val;
   }
 }
-loadEnv(path.join(ROOT, '.env'));
+if (!IS_CLOUDFLARE) loadEnv(path.join(ROOT, '.env'));
 
 const bool = (v, def = false) => {
   if (v == null || v === '') return def;
@@ -41,6 +42,7 @@ const int = (v, def) => {
 };
 
 function resolveSecret() {
+  if (IS_CLOUDFLARE) return ''; // Preenchido com segredo persistente do Durable Object.
   const env = process.env.SESSION_SECRET;
   if (env && env !== 'TROQUE_ESTE_VALOR_POR_UMA_CHAVE_ALEATORIA_LONGA') return env;
   const secretPath = path.resolve(process.env.DATA_DIR || path.join(ROOT, 'data'), '.session-secret');
@@ -57,6 +59,7 @@ function resolveSecret() {
 }
 
 export const config = {
+  isCloudflare: IS_CLOUDFLARE,
   root: ROOT,
   env: process.env.NODE_ENV || 'development',
   isDev: bool(process.env.DEV_MODE, true),
@@ -109,3 +112,30 @@ export const config = {
 };
 
 export const isProduction = () => config.env === 'production';
+
+/** Configuração por binding, sem .env ou escritas no filesystem do Worker. */
+export function configureCloudflare(env, origin, persistentSecret) {
+  config.isCloudflare = true;
+  config.env = 'production';
+  config.isDev = false;
+  config.root = '/';
+  config.dataDir = '/data';
+  config.publicDir = '/public';
+  config.uploadsDir = '/data/uploads';
+  config.publicBaseUrl = String(env.PUBLIC_BASE_URL || origin).replace(/\/$/, '');
+  config.sessionSecret = env.SESSION_SECRET || persistentSecret;
+  config.trustProxy = true;
+  config.payments.provider = String(env.PAYMENT_PROVIDER || 'internal').toLowerCase();
+  config.payments.mp = {
+    accessToken: env.MP_ACCESS_TOKEN || '', publicKey: env.MP_PUBLIC_KEY || '',
+    webhookSecret: env.MP_WEBHOOK_SECRET || '', pixKey: env.MP_PIX_KEY || '',
+    sandbox: bool(env.MP_SANDBOX, true),
+  };
+  config.cep.viacep = bool(env.VIACEP_ENABLED, false);
+  // Limite de memória do runtime: uploads de vídeo até 16 MiB por arquivo.
+  config.uploads.maxImageBytes = Math.min(int(env.MAX_IMAGE_BYTES, 8 * 1024 * 1024), 8 * 1024 * 1024);
+  config.uploads.maxVideoBytes = Math.min(int(env.MAX_VIDEO_BYTES, 16 * 1024 * 1024), 16 * 1024 * 1024);
+  config.uploads.imageOptimize = false;
+  config.mail.enabled = false; // No Worker, e-mails ficam na fila privada persistente.
+  config.mail.from = env.MAIL_FROM || 'no-reply@paguepouco.com.br';
+}

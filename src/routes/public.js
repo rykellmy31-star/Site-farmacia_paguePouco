@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 /** routes/public.js — Rotas abertas do site (sem login). */
 import { escapeHtml as e } from '../lib/security.js';
 import { criarContexto } from './context.js';
@@ -112,7 +113,7 @@ export function registrarRotasPublicas(app, db) {
 
   /* ------------------------------- SEO -------------------------------- */
   app.get('/robots.txt', (req, res) => {
-    const base = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
+    const base = config.publicBaseUrl;
     res.text(`User-agent: *
 Allow: /
 Disallow: /admin
@@ -126,7 +127,7 @@ Sitemap: ${base}/sitemap.xml
   });
 
   app.get('/sitemap.xml', (req, res) => {
-    const base = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
+    const base = config.publicBaseUrl;
     const hoje = new Date().toISOString().slice(0, 10);
     const urls = [
       `${base}/`, `${base}/departamentos`, `${base}/ofertas`, `${base}/cep`,

@@ -181,6 +181,11 @@ const buckets = new Map();
 export function rateLimit(scope, max, windowMs = config.rateLimit.windowMs) {
   return (req, res) => {
     const key = `${scope}:${req.ip}`;
+    if (req.ctx?.db?.takeRateLimit) {
+      const limit = req.ctx.db.takeRateLimit(key, max, windowMs);
+      req.rateLimitResetAt = limit.resetAt;
+      return limit.allowed;
+    }
     const now = Date.now();
     const b = buckets.get(key);
     if (!b || now > b.resetAt) {
@@ -197,7 +202,7 @@ export function rateLimitMiddleware(scope, max, windowMs) {
   const check = rateLimit(scope, max, windowMs);
   return (req, res) => {
     if (check(req, res)) return;
-    const retry = Math.ceil((buckets.get(`${scope}:${req.ip}`)?.resetAt || Date.now() + 1000 - Date.now()) / 1000);
+    const retry = Math.ceil(((req.rateLimitResetAt || buckets.get(`${scope}:${req.ip}`)?.resetAt || Date.now() + 1000) - Date.now()) / 1000);
     res.set('Retry-After', String(Math.max(retry, 1)));
     if (req.path.startsWith('/api/') || req.path.startsWith('/admin/api/') || req.headers['x-requested-with'] === 'fetch') {
       res.json({ ok: false, error: 'Muitas requisições. Aguarde alguns instantes e tente novamente.' }, 429);
@@ -212,11 +217,11 @@ export function resetRateLimits() {
 }
 
 // limpeza periódica (evita crescimento infinito)
-const _cleaner = setInterval(() => {
+const _cleaner = config.isCloudflare ? null : setInterval(() => {
   const now = Date.now();
   for (const [k, v] of buckets) if (now > v.resetAt + 60_000) buckets.delete(k);
 }, 60_000);
-_cleaner.unref?.();
+_cleaner?.unref?.();
 
 /* ------------------------------------------------------------------ */
 /* Validadores                                                         */

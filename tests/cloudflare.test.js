@@ -1,0 +1,200 @@
+/**
+ * Verificações locais: não chama deploy, não usa produção e não cria recursos remotos.
+ * Node 22+; npm install; npm run test:cloudflare.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn, execFileSync } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import net from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { CloudStore } from '../src/cloudflare/store.js';
+import { RequestQueue } from '../src/cloudflare/request-queue.js';
+import { dispatchFetch, readWebBody } from '../src/cloudflare/http-adapter.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+test('fila protege uma reserva durante await e continua após falha', async () => {
+  const queue = new RequestQueue();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let available = 1;
+  const events = [];
+  const first = queue.run(async () => {
+    assert.equal(available, 1);
+    events.push('first:start');
+    await gate;
+    available--;
+    events.push('first:end');
+  });
+  const second = queue.run(async () => {
+    events.push('second');
+    assert.equal(available, 0);
+    throw new Error('expected failure');
+  });
+  const failure = assert.rejects(second, /expected failure/);
+  const third = queue.run(() => events.push('third'));
+  await Promise.resolve();
+  assert.deepEqual(events, ['first:start']);
+  release();
+  await Promise.all([first, failure, third]);
+  assert.deepEqual(events, ['first:start', 'first:end', 'second', 'third']);
+});
+
+test('limite do corpo é aplicado mesmo sem Content-Length', async () => {
+  let cancelled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(4));
+      controller.enqueue(new Uint8Array(4));
+    },
+    cancel() { cancelled = true; },
+  });
+  const request = new Request('https://tests.example/upload', { method: 'POST', body, duplex: 'half' });
+  await assert.rejects(readWebBody(request, 5), error => error.status === 413);
+  assert.equal(cancelled, true);
+});
+
+test('ponte HTTP preserva múltiplos cookies e elimina corpo em HEAD', async () => {
+  const app = { async handle(req, res) {
+    res.writeHead(200, { 'Set-Cookie': ['a=1; Secure', 'b=2; HttpOnly'], 'Content-Type': 'text/html' });
+    res.end(Buffer.from('page'));
+  } };
+  const get = await dispatchFetch(app, new Request('https://tests.example/'));
+  assert.equal(await get.text(), 'page');
+  assert.equal(get.headers.getSetCookie().length, 2);
+  assert.equal(get.headers.get('cache-control'), 'no-store');
+  const head = await dispatchFetch(app, new Request('https://tests.example/', { method: 'HEAD' }));
+  assert.equal(await head.text(), '');
+});
+
+
+test('mídia respeita intervalos, cache e HEAD com tamanho original', async () => {
+  const bytes = Buffer.from('abcdefgh');
+  const db = Object.create(CloudStore.prototype);
+  db.sql = { exec(query) {
+    return query.includes('SELECT * FROM files')
+      ? [{ mime: 'video/mp4', size: bytes.length, etag: '"test-etag"', modified: '2026-10-20T00:00:00Z' }]
+      : [{ body: bytes }];
+  } };
+  const request = (headers = {}, method = 'GET') => new Request('https://tests.example/uploads/test.mp4', { headers, method });
+  const partial = db.fileResponse('test.mp4', request({ Range: 'bytes=2-4' }));
+  assert.equal(partial.status, 206);
+  assert.equal(partial.headers.get('content-range'), 'bytes 2-4/8');
+  assert.equal(await partial.text(), 'cde');
+  assert.equal(await db.fileResponse('test.mp4', request({ Range: 'bytes=-3' })).text(), 'fgh');
+  assert.equal(db.fileResponse('test.mp4', request({ Range: 'bytes=8-9' })).status, 416);
+  assert.equal(db.fileResponse('test.mp4', request({ 'If-None-Match': '"test-etag"' })).status, 304);
+  const head = db.fileResponse('test.mp4', request({}, 'HEAD'));
+  assert.equal(head.headers.get('content-length'), '8');
+  assert.equal(await head.text(), '');
+});
+
+test('Workers local: site, login, uploads e dados sobrevivem à reinicialização', { timeout: 180000 }, async t => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'pague-pouco-worker-'));
+  const socket = net.createServer();
+  socket.listen(0, '127.0.0.1');
+  await once(socket, 'listening');
+  const port = socket.address().port;
+  await new Promise(resolve => socket.close(resolve));
+  const origin = 'http://127.0.0.1:' + port;
+  const password = 'SomenteTeste-Cloudflare-2026';
+  let child;
+  let logs = '';
+  const cookies = new Map();
+  const saveCookies = response => {
+    for (const line of response.headers.getSetCookie()) {
+      const pair = line.split(';')[0], index = pair.indexOf('=');
+      cookies.set(pair.slice(0, index), pair.slice(index + 1));
+    }
+  };
+  const headers = () => ({ Cookie: [...cookies].map(([k, v]) => k + '=' + v).join('; ') });
+  async function call(url, opts = {}) {
+    const response = await fetch(origin + url, { redirect: 'manual', ...opts,
+      headers: { ...headers(), ...opts.headers } });
+    saveCookies(response);
+    return response;
+  }
+  async function stop() {
+    if (!child || child.exitCode !== null) return;
+    const processToStop = child;
+    const exited = once(processToStop, 'exit');
+    processToStop.kill('SIGTERM');
+    const timer = setTimeout(() => processToStop.kill('SIGKILL'), 5000);
+    try { await exited; } finally { clearTimeout(timer); }
+    child = null;
+  }
+  async function start() {
+    logs = '';
+    child = spawn(process.execPath, [
+      path.join(root, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--local',
+      '--ip', '127.0.0.1', '--port', String(port), '--persist-to', directory,
+      '--var', 'ADMIN_EMAIL:admin@tests.example', '--var', 'ADMIN_PASSWORD:' + password,
+    ], { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', BROWSER: 'none' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', data => { logs = (logs + data).slice(-12000); });
+    child.stderr.on('data', data => { logs = (logs + data).slice(-12000); });
+    for (let attempt = 0; attempt < 150; attempt++) {
+      if (child.exitCode !== null) throw new Error('Wrangler encerrou: ' + logs);
+      try {
+        const response = await fetch(origin + '/__health', { signal: AbortSignal.timeout(1500) });
+        if (response.ok) return;
+      } catch { /* Inicializando o workerd local. */ }
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    throw new Error('Worker local não inicializou: ' + logs);
+  }
+  t.after(async () => { await stop(); await rm(directory, { recursive: true, force: true }); });
+  execFileSync(process.execPath, ['scripts/prepare-cloudflare.js'], { cwd: root, stdio: 'pipe' });
+  const seed = JSON.parse(await readFile(path.join(root, '.cloudflare/seed.json'), 'utf8'));
+  assert.equal('admins' in seed, false);
+  assert.equal('customers' in seed, false);
+
+  await start();
+  assert.equal((await call('/')).status, 200);
+  assert.equal((await call('/styles.css')).status, 200);
+  assert.equal((await call('/data/db/admins.json')).status, 404);
+  const login = await call('/admin/login');
+  assert.equal(login.status, 200);
+  const csrf = decodeURIComponent(cookies.get('pp_csrf'));
+  assert.ok(csrf);
+  const badCsrf = await call('/admin/login', { method: 'POST', body: new URLSearchParams({ email: 'admin@tests.example', senha: password }) });
+  assert.equal(badCsrf.status, 403);
+  const signed = await call('/admin/login', { method: 'POST', body: new URLSearchParams({
+    email: 'admin@tests.example', senha: password, _csrf: csrf,
+  }) });
+  assert.equal(signed.status, 303);
+  assert.equal(signed.headers.get('location'), '/admin');
+  assert.ok(cookies.get('pp_admin_sess'));
+  assert.equal((await call('/admin')).status, 200);
+
+  const form = new FormData();
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="green"/></svg>';
+  form.append('_csrf', csrf);
+  form.append('file', new Blob([svg], { type: 'image/svg+xml' }), 'teste.svg');
+  const uploaded = await call('/admin/api/upload', { method: 'POST', body: form });
+  assert.equal(uploaded.status, 200);
+  const uploadResult = await uploaded.json();
+  const backup = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: csrf }) });
+  assert.equal(backup.status, 200);
+  const snapshot = await backup.json();
+  assert.equal(snapshot.collections.admins.length, 1);
+  assert.equal('__meta' in snapshot.collections, false);
+  const media = snapshot.collections.midia.find(item => item.nome === 'teste.svg');
+  assert.ok(media, JSON.stringify(uploadResult));
+  assert.equal(await (await call(media.url)).text(), svg);
+
+  await stop();
+  await start();
+  assert.equal((await call('/admin')).status, 200, 'sessão persiste após reinicialização');
+  assert.equal(await (await call(media.url)).text(), svg, 'upload persiste após reinicialização');
+  const range = await call(media.url, { headers: { Range: 'bytes=0-3' } });
+  assert.equal(range.status, 206);
+  assert.equal(await range.text(), '<svg');
+  const check = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: csrf }) });
+  const recovered = await check.json();
+  assert.equal(recovered.collections.admins.length, 1, 'bootstrap não duplica usuários');
+  assert.equal(recovered.collections.midia.filter(item => item.id === media.id).length, 1);
+});

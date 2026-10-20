@@ -4,3 +4,8 @@ data/
 *.log
 .DS_Store
 backups/
+
+.cloudflare/
+.wrangler/
+.dev.vars
+.dev.vars.*

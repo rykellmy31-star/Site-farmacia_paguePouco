@@ -96,7 +96,8 @@ export async function saveUpload(db, file, opts = {}) {
   // Otimização opcional (requer "sharp" instalado manualmente; falha silenciosa)
   if (kind === 'image' && config.uploads.imageOptimize) {
     try {
-      const sharp = (await import('sharp')).default;
+      const optionalModule = 'sharp';
+      const sharp = (await import(optionalModule)).default;
       buffer = await sharp(file.data).rotate().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
       ext = 'webp';
     } catch {
@@ -108,15 +109,19 @@ export async function saveUpload(db, file, opts = {}) {
   const now = new Date();
   const relDir = path.join(String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'));
   const absDir = path.join(config.uploadsDir, relDir);
-  await fsp.mkdir(absDir, { recursive: true });
+  if (!config.isCloudflare) await fsp.mkdir(absDir, { recursive: true });
   const filename = `${id}.${ext}`;
   const absPath = path.join(absDir, filename);
+  if (config.isCloudflare) {
+    db.putFile(path.posix.join(relDir, filename), buffer, ext === 'webp' ? 'image/webp' : detected.mime);
+  } else {
   await fsp.writeFile(absPath, buffer, { flag: 'wx', mode: 0o644 });
   await fsp.writeFile(`${absPath}.json`, JSON.stringify({
     original: String(file.filename || '').slice(0, 200),
     contentType: detected.mime,
     enviadoEm: now.toISOString(),
   }));
+  }
 
   const record = db.collection('midia').insert({
     id,
@@ -149,12 +154,16 @@ export async function deleteUpload(db, id, { force = false } = {}) {
     return { ok: false, erro: `Este arquivo está sendo usado em ${usos} local(is). Remova o vínculo antes ou force a exclusão.`, usos };
   }
   const abs = path.join(config.uploadsDir, rec.caminho);
+  if (config.isCloudflare) {
+    db.deleteFile(rec.caminho);
+  } else {
   try {
     await fsp.unlink(abs);
   } catch { /* arquivo já removido */ }
   try {
     await fsp.unlink(`${abs}.json`);
   } catch { /* opcional */ }
+  }
   db.collection('midia').remove(id);
   return { ok: true };
 }
@@ -187,5 +196,6 @@ export function uploadStats(db) {
 }
 
 export function ensureUploadDirs() {
+  if (config.isCloudflare) return;
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }

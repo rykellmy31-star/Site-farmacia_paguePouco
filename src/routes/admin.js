@@ -448,7 +448,7 @@ export function registrarRotasAdmin(app, db) {
     const ctx = ctxAdmin(req, db);
     let backups = [];
     try {
-      backups = fs.readdirSync(path.join(db.dataDir, 'backups')).sort().reverse();
+      if (!config.isCloudflare) backups = fs.readdirSync(path.join(db.dataDir, 'backups')).sort().reverse();
     } catch { /* sem pasta */ }
     res.html(telaSistema(ctx, {
       emails: outbox(db, 40),
@@ -1342,6 +1342,12 @@ function registrarApi(app, db) {
   /* -------------------------------- SISTEMA ----------------------------- */
   app.post('/admin/api/sistema/backup', async (req, res) => {
     if (!guardApi(req, res, 'sistema.*')) return;
+    if (config.isCloudflare) {
+      logAdmin(db, req.adminUser, 'exportou_backup', 'sistema', null, {}, req);
+      res.set('Content-Disposition', 'attachment; filename="pague-pouco-backup-' + new Date().toISOString().slice(0, 10) + '.json"');
+      res.set('Cache-Control', 'no-store');
+      return void res.json(db.exportData());
+    }
     const destino = path.join(db.dataDir, 'backups', `backup-${new Date().toISOString().replace(/[:.]/g, '-')}`);
     await db.backup(destino);
     logAdmin(db, req.adminUser, 'gerou_backup', 'sistema', destino, {}, req);

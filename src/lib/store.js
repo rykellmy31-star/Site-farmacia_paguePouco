@@ -35,7 +35,7 @@ export function nowISO() {
 
 const OP = { SET: 's', DEL: 'd' };
 
-class Collection {
+export class Collection {
   constructor(store, name) {
     this.store = store;
     this.name = name;
