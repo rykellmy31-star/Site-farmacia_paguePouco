@@ -643,3 +643,17 @@ input::placeholder, textarea::placeholder {
 .rodape-inferior { border-top-color: #ecd7d7; }
 .grafico-barras .barra:hover::after { background: #fff0f0; border: 1px solid #e1b9b9; }
 ::selection { background: #ffd6d6; color: #8b0000; }
+
+/* Logo original: mantém a proporção da imagem no celular e no painel. */
+.logo img { max-width: min(200px, 38vw); }
+.admin-topo .marca-admin img {
+  height: 56px;
+  max-width: min(190px, 36vw);
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.admin-topo .container { flex-wrap: wrap; gap: 10px; }
+@media (max-width: 767px) {
+  .admin-topo .marca-admin { flex: 1 1 100%; min-width: 0; }
+}

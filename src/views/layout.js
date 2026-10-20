@@ -259,7 +259,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta property="og:image" content="${e(ogImage || seo.ogImage || '')}">
 <meta name="theme-color" content="${e(tema.corPrimaria || '#8b0000')}">
 <link rel="icon" href="${e(tema.faviconUrl || '/img/favicon.svg')}">
-<link rel="stylesheet" href="/styles.css?v=vermelho-20261020">
+<link rel="stylesheet" href="/styles.css?v=logo-20261020">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};

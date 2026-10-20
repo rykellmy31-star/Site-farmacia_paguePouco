@@ -35,8 +35,9 @@ export const DEFAULT_SETTINGS = () => ({
     corSecundaria: '#8b0000',
     corTexto: '#8b0000',
     corFundo: '#fffafa',
-    logoUrl: '',
-    logoAltura: 44,
+    logotipoVersao: 'logo-original-2026-10-20',
+    logoUrl: '/img/logo-pague-pouco.png',
+    logoAltura: 64,
     faviconUrl: '',
     barraTopoTexto: 'Entregamos para todo o Brasil • Dúvidas? Fale com nosso farmacêutico',
     barraTopoAtiva: true,
@@ -208,6 +209,16 @@ export function ensureSettings(db) {
       corPrimaria: '#8b0000', corPrimariaEscura: '#6b0000',
       corSecundaria: '#8b0000', corTexto: '#8b0000',
       corFundo: '#fffafa', atualizadoEm: nowISO(),
+    });
+  }
+  // Instala a logo fornecida também em bancos que já estavam em uso.
+  // A marcação impede que futuras trocas pelo painel sejam sobrescritas.
+  if (tema && tema.logotipoVersao !== 'logo-original-2026-10-20') {
+    db.collection('settings').update('tema', {
+      logotipoVersao: 'logo-original-2026-10-20',
+      logoUrl: '/img/logo-pague-pouco.png',
+      logoAltura: 64,
+      atualizadoEm: nowISO(),
     });
   }
 }
