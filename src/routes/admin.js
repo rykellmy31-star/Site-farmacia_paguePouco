@@ -48,7 +48,7 @@ function guard(req, res, permission) {
     return false;
   }
   if (!can(req.adminUser, permission)) {
-    res.status(403).html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="/styles.css?v=logo-20261020"></head>
+    res.status(403).html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="/styles.css?v=banners-inteiros-20261020"></head>
       <body><div class="container mt-3"><div class="pagina-conteudo">
       <h1>403 — Sem permissão</h1>
       <p>Seu perfil (<strong>${e(ROLES[req.adminUser.role]?.nome || req.adminUser.role)}</strong>) não tem permissão para esta área.</p>
@@ -103,7 +103,7 @@ export function registrarRotasAdmin(app, db) {
     const loginLogoUrl = getAllSettings(db).tema?.logoUrl || '';
     res.html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Painel — Farmácia Pague Pouco</title><link rel="stylesheet" href="/styles.css?v=logo-20261020">
+      <title>Painel — Farmácia Pague Pouco</title><link rel="stylesheet" href="/styles.css?v=banners-inteiros-20261020">
       <link rel="icon" href="/img/favicon.svg"></head>
       <body style="background:var(--fundo);display:flex;align-items:center;justify-content:center;min-height:100vh">
       <div style="width:100%;max-width:420px;padding:14px">

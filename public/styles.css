@@ -237,7 +237,7 @@ body.com-menu-mobile { padding-bottom: 62px; }
 .carrossel .trilha::-webkit-scrollbar { display: none; }
 .carrossel .slide { flex: 0 0 100%; scroll-snap-align: start; position: relative; }
 .carrossel .slide a { display: block; }
-.carrossel .slide img { width: 100%; aspect-ratio: 16/7; object-fit: cover; }
+.carrossel .slide img { width: 100%; height: auto; aspect-ratio: auto; object-fit: contain; }
 .carrossel .seta {
   position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255, 255, 255, .92);
   border: 0; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; box-shadow: var(--sombra);
@@ -657,3 +657,16 @@ input::placeholder, textarea::placeholder {
 @media (max-width: 767px) {
   .admin-topo .marca-admin { flex: 1 1 100%; min-width: 0; }
 }
+
+/* Banners inteiros: não recorta a arte e mantém controles fora dos textos. */
+.carrossel .slide { min-width: 0; }
+.carrossel .slide picture, .carrossel .slide > span { display: block; }
+.carrossel.com-controles { padding-bottom: 48px; }
+.carrossel.com-controles .seta {
+  top: auto;
+  bottom: 6px;
+  transform: none;
+  width: 36px;
+  height: 36px;
+}
+.carrossel.com-controles .pontos { bottom: 19px; }

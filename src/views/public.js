@@ -25,14 +25,14 @@ function bannerImageUrl(value) {
 export function carrosselBanners(banners, id = 'carrosselPrincipal') {
   if (!banners.length) return '';
   return `
-  <div class="carrossel" id="${e(id)}" data-carrossel>
+  <div class="carrossel${banners.length > 1 ? ' com-controles' : ''}" id="${e(id)}" data-carrossel>
     <div class="trilha" data-trilha>
       ${banners.map((b, i) => `
         <div class="slide">
           ${b.link ? `<a href="${e(b.link)}">` : '<span>'}
             <picture>
               ${b.imagemMobile ? `<source media="(max-width: 640px)" srcset="${e(bannerImageUrl(b.imagemMobile))}">` : ''}
-              <img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || 'Banner promocional')}" ${i === 0 ? '' : 'loading="lazy"'} width="1200" height="525">
+              <img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || 'Banner promocional')}" ${i === 0 ? '' : 'loading="lazy"'} width="1200" height="420">
             </picture>
           ${b.link ? '</a>' : '</span>'}
         </div>`).join('')}
