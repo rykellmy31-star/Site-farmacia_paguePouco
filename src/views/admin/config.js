@@ -274,13 +274,13 @@ export function telaConfiguracoes(ctx, { settings }) {
       ${painel({
         titulo: 'Aparência (cores e logotipo)',
         corpo: `<div class="campo-linha">
-            ${campoAdmin({ nome: 'corPrimaria', rotulo: 'Cor principal', tipo: 'color', valor: tema.corPrimaria || '#0f8b5f' })}
-            ${campoAdmin({ nome: 'corPrimariaEscura', rotulo: 'Cor principal escura', tipo: 'color', valor: tema.corPrimariaEscura || '#0a6b48' })}
-            ${campoAdmin({ nome: 'corSecundaria', rotulo: 'Cor de destaque', tipo: 'color', valor: tema.corSecundaria || '#ff6a00' })}
+            ${campoAdmin({ nome: 'corPrimaria', rotulo: 'Cor principal', tipo: 'color', valor: tema.corPrimaria || '#8b0000' })}
+            ${campoAdmin({ nome: 'corPrimariaEscura', rotulo: 'Cor principal escura', tipo: 'color', valor: tema.corPrimariaEscura || '#6b0000' })}
+            ${campoAdmin({ nome: 'corSecundaria', rotulo: 'Cor de destaque', tipo: 'color', valor: tema.corSecundaria || '#8b0000' })}
           </div>
           <div class="campo-linha">
-            ${campoAdmin({ nome: 'corTexto', rotulo: 'Cor do texto', tipo: 'color', valor: tema.corTexto || '#1b2b26' })}
-            ${campoAdmin({ nome: 'corFundo', rotulo: 'Cor de fundo', tipo: 'color', valor: tema.corFundo || '#f5f7f6' })}
+            ${campoAdmin({ nome: 'corTexto', rotulo: 'Cor do texto', tipo: 'color', valor: tema.corTexto || '#8b0000' })}
+            ${campoAdmin({ nome: 'corFundo', rotulo: 'Cor de fundo', tipo: 'color', valor: tema.corFundo || '#fffafa' })}
             ${campoAdmin({ nome: 'logoAltura', rotulo: 'Altura do logo (px)', tipo: 'number', valor: tema.logoAltura || 44 })}
           </div>
           <div class="campo">

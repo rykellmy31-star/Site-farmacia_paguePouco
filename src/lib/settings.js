@@ -29,11 +29,12 @@ export const DEFAULT_SETTINGS = () => ({
     redes: { instagram: '', facebook: '', tiktok: '' },
   },
   tema: {
-    corPrimaria: '#0f8b5f',
-    corPrimariaEscura: '#0a6b48',
-    corSecundaria: '#ff6a00',
-    corTexto: '#1b2b26',
-    corFundo: '#f5f7f6',
+    identidadeVisualVersao: 'vermelho-2026-10-20',
+    corPrimaria: '#8b0000',
+    corPrimariaEscura: '#6b0000',
+    corSecundaria: '#8b0000',
+    corTexto: '#8b0000',
+    corFundo: '#fffafa',
     logoUrl: '',
     logoAltura: 44,
     faviconUrl: '',
@@ -198,5 +199,15 @@ export function ensureSettings(db) {
     if (!db.collection('settings').get(key)) {
       db.collection('settings').insert({ id: key, ...value });
     }
+  }
+  // Atualiza também bancos já implantados; novas mudanças no painel são preservadas.
+  const tema = db.collection('settings').get('tema');
+  if (tema && tema.identidadeVisualVersao !== 'vermelho-2026-10-20') {
+    db.collection('settings').update('tema', {
+      identidadeVisualVersao: 'vermelho-2026-10-20',
+      corPrimaria: '#8b0000', corPrimariaEscura: '#6b0000',
+      corSecundaria: '#8b0000', corTexto: '#8b0000',
+      corFundo: '#fffafa', atualizadoEm: nowISO(),
+    });
   }
 }

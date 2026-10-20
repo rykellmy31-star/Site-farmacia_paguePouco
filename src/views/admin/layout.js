@@ -49,10 +49,10 @@ export function paginaAdmin(ctx, { titulo, conteudo, ativo = '', headExtra = '',
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${e(titulo)} — Painel | ${e(empresa.nomeFantasia || 'Pague Pouco')}</title>
 <meta name="robots" content="noindex,nofollow">
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/styles.css?v=vermelho-20261020">
 <link rel="icon" href="/img/favicon.svg">
 <style>
-:root{--primaria:${e(ctx.settings.tema?.corPrimaria || '#0f8b5f')};--primaria-escura:${e(ctx.settings.tema?.corPrimariaEscura || '#0a6b48')};--secundaria:${e(ctx.settings.tema?.corSecundaria || '#ff6a00')};}
+:root{--marca-texto:${e(ctx.settings.tema?.corTexto || '#8b0000')};--primaria:${e(ctx.settings.tema?.corPrimaria || '#8b0000')};--primaria-escura:${e(ctx.settings.tema?.corPrimariaEscura || '#6b0000')};--secundaria:${e(ctx.settings.tema?.corSecundaria || '#8b0000')};}
 .admin-menu .separador-menu{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--texto-suave);padding:12px 12px 4px;font-weight:700}
 .admin-menu ul{list-style:none;margin:0;padding:8px}
 @media(min-width:768px){.admin-menu ul{padding:12px 10px}}

@@ -4,16 +4,17 @@
    ========================================================================== */
 
 :root {
-  --primaria: #0f8b5f;
-  --primaria-escura: #0a6b48;
-  --primaria-clara: #e6f4ee;
-  --secundaria: #ff6a00;
-  --secundaria-escura: #d95400;
-  --texto: #1b2b26;
-  --texto-suave: #5b6b64;
-  --fundo: #f5f7f6;
+  --marca-texto: #8b0000;
+  --primaria: #8b0000;
+  --primaria-escura: #6b0000;
+  --primaria-clara: #fff0f0;
+  --secundaria: #8b0000;
+  --secundaria-escura: #6b0000;
+  --texto: #8b0000;
+  --texto-suave: #8b0000;
+  --fundo: #fffafa;
   --branco: #ffffff;
-  --borda: #e2e8e5;
+  --borda: #ecd7d7;
   --sucesso: #0b7a3d;
   --sucesso-bg: #dcf5e6;
   --erro: #b3261e;
@@ -109,7 +110,7 @@ input.entrada, select.entrada, textarea.entrada {
   background: #fff; min-height: 44px; transition: border-color .15s, box-shadow .15s;
 }
 .campo input:focus, .campo select:focus, .campo textarea:focus, .entrada:focus {
-  border-color: var(--primaria); outline: none; box-shadow: 0 0 0 3px rgba(15, 139, 95, .16);
+  border-color: var(--primaria); outline: none; box-shadow: 0 0 0 3px rgba(139, 0, 0, .16);
 }
 .campo .dica { font-size: .8rem; color: var(--texto-suave); margin-top: 4px; }
 .campo .erro-campo { color: var(--erro); font-size: .8rem; margin-top: 4px; display: block; }
@@ -564,7 +565,7 @@ body.com-menu-mobile { padding-bottom: 62px; }
 .editor-texto .ferramentas { display: flex; gap: 4px; padding: 6px; border-bottom: 1px solid var(--borda); flex-wrap: wrap; background: var(--fundo); }
 .editor-texto .ferramentas button { border: 1px solid var(--borda); background: #fff; border-radius: 5px; padding: 5px 9px; cursor: pointer; font-size: .8rem; }
 .editor-texto .area { min-height: 240px; padding: 12px; outline: none; }
-.editor-texto .area:focus { box-shadow: inset 0 0 0 2px rgba(15, 139, 95, .2); }
+.editor-texto .area:focus { box-shadow: inset 0 0 0 2px rgba(139, 0, 0, .2); }
 
 /* ==========================================================================
    RESPONSIVO
@@ -609,3 +610,36 @@ body.com-menu-mobile { padding-bottom: 62px; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto; }
 }
+
+/* Identidade visual vermelha: textos uniformes em superfícies claras. */
+body, body * {
+  color: var(--marca-texto) !important;
+}
+body *::before, body *::after {
+  color: var(--marca-texto) !important;
+}
+input::placeholder, textarea::placeholder {
+  color: var(--marca-texto);
+  opacity: .75;
+}
+:root { accent-color: #8b0000; }
+.barra-topo, .menu-departamentos, .menu-departamentos .todos,
+.rodape, .barra-cookies, .admin-topo {
+  background: #fff0f0;
+  border-color: #ecd7d7;
+}
+.botao, .botao.destaque, .botao.perigo, .busca button,
+.botao-whatsapp, .notificacao, .passos li.ativo,
+.menu-conta a.ativo, .paginacao .atual, .admin-menu a.ativo,
+.acao-topo .contador, .produto .etiqueta-desconto,
+.item-midia .principal-marca {
+  background: #fff0f0;
+  border-color: #e1b9b9;
+}
+.botao:hover, .botao.destaque:hover, .botao.perigo:hover,
+.busca button:hover, .botao-whatsapp:hover {
+  background: #ffe0e0;
+}
+.rodape-inferior { border-top-color: #ecd7d7; }
+.grafico-barras .barra:hover::after { background: #fff0f0; border: 1px solid #e1b9b9; }
+::selection { background: #ffd6d6; color: #8b0000; }

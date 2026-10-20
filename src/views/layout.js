@@ -257,16 +257,17 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta property="og:description" content="${e(descFinal)}">
 <meta property="og:url" content="${e(url)}">
 <meta property="og:image" content="${e(ogImage || seo.ogImage || '')}">
-<meta name="theme-color" content="${e(tema.corPrimaria || '#0f8b5f')}">
+<meta name="theme-color" content="${e(tema.corPrimaria || '#8b0000')}">
 <link rel="icon" href="${e(tema.faviconUrl || '/img/favicon.svg')}">
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/styles.css?v=vermelho-20261020">
 <style>
 :root{
-  --primaria:${e(tema.corPrimaria || '#0f8b5f')};
-  --primaria-escura:${e(tema.corPrimariaEscura || '#0a6b48')};
-  --secundaria:${e(tema.corSecundaria || '#ff6a00')};
-  --texto:${e(tema.corTexto || '#1b2b26')};
-  --fundo:${e(tema.corFundo || '#f5f7f6')};
+  --primaria:${e(tema.corPrimaria || '#8b0000')};
+  --primaria-escura:${e(tema.corPrimariaEscura || '#6b0000')};
+  --secundaria:${e(tema.corSecundaria || '#8b0000')};
+  --texto:${e(tema.corTexto || '#8b0000')};
+  --marca-texto:${e(tema.corTexto || '#8b0000')};
+  --fundo:${e(tema.corFundo || '#fffafa')};
 }
 </style>
 ${seo.googleAnalyticsId ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${e(seo.googleAnalyticsId)}"></script>
