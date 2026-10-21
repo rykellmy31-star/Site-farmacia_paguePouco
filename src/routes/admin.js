@@ -85,7 +85,29 @@ export function registrarRotasAdmin(app, db) {
   /* ============================ AUTENTICAÇÃO ============================ */
   app.get('/admin', (req, res) => {
     if (!req.adminUser) return void res.redirect('/admin/login');
+    if (!guard(req, res, 'dashboard.ver')) return;
     const ctx = ctxAdmin(req, db);
+    // Atendentes e operadores podem abrir o painel, mas não têm
+    // permissão para acessar faturamento, ticket médio ou rankings.
+    // Entregue apenas atalhos das áreas autorizadas, sem carregar métricas.
+    if (!can(req.adminUser, 'relatorios.ver')) {
+      const atalhos = [
+        ['pedidos.ver', '/admin/pedidos', 'Pedidos'],
+        ['clientes.ver', '/admin/clientes', 'Clientes'],
+        ['produtos.ver', '/admin/produtos', 'Produtos'],
+        ['estoque.ver', '/admin/estoque', 'Estoque'],
+        ['paginas.ver', '/admin/paginas', 'Páginas'],
+      ].filter(([permissao]) => can(req.adminUser, permissao));
+      return void res.html(paginaAdmin(ctx, {
+        titulo: 'Painel', ativo: 'dashboard',
+        conteudo: `<h1>Painel da loja</h1>
+          <p>Selecione uma área disponível para o seu perfil.</p>
+          <div class="linha" style="gap:12px;flex-wrap:wrap">
+          ${atalhos.map(([, url, nome]) =>
+            `<a class="botao secundario" href="${url}">${nome}</a>`).join('')}
+          </div>`,
+      }));
+    }
     const agora = new Date();
     const de = new Date(agora.getTime() - 30 * 86400000).toISOString();
     const m = metricas(db, { de });
