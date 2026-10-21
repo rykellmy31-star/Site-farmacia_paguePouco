@@ -140,7 +140,7 @@ export async function ensaiarRestauracaoCloudflare({ snapshot, manifest, mediaDi
       ok: true,
       colecoes: result.length,
       documentosRestaurados: documents - skipped,
-      sessoesDescartadas: skipped,
+      transitoriosDescartados: skipped,
       arquivos: manifest.files.length,
       bytes,
       isolado: true,
