@@ -172,3 +172,21 @@ test('webhook MP exige assinatura com segredo e verifica valor, moeda e vínculo
     globalThis.fetch = fetchOriginal;
   }
 });
+
+
+test('resultado incerto do checkout impede cancelamento e saída das reservas', () => {
+  const db = new DB();
+  db.collection('products').insert({
+    id: 'produto', nome: 'Teste', estoque: { quantidade: 8, reservado: 2 },
+  });
+  order(db, { id: 'incerto', qtd: 2 });
+  for (const fase of ['criacao_em_andamento', 'conciliacao_necessaria']) {
+    db.collection('orders').update('incerto', { pendenciaPagamento: fase });
+    const result = cancelarPedido(db, 'incerto');
+    assert.equal(result.ok, false, 'reserva não pode ser liberada na fase ' + fase);
+    assert.match(result.erro, /Pagamento aguardando conferência/);
+    assert.equal(db.collection('products').get('produto').estoque.reservado, 2);
+    assert.equal(db.collection('orders').get('incerto').statusFinanceiro, 'pendente');
+  }
+  assert.equal(db.collection('stockMovements').find(m => m.tipo === 'liberacao').length, 0);
+});
