@@ -106,7 +106,10 @@ test('alarme da Cloudflare reprograma usando função existente Pix+estornos', a
   const worker = await fs.readFile(path.join(base, 'src/cloudflare/worker.js'), 'utf8');
   assert.match(worker, /async programarAlarmeFinanceiro\(\)/);
   assert.doesNotMatch(worker, /programarAlarmePix/, 'não deve sobrar chamada ao nome antigo');
-  assert.equal([...worker.matchAll(/await this\.programarAlarmeFinanceiro\(\)/g)].length, 2,
-    'requisição e alarme devem agendar verificação recorrente');
+  assert.match(worker, /await this\.programarAlarmeFinanceiro\(\)/,
+    'requisições devem armar a próxima verificação quando houver pendências');
+  assert.match(worker, /reagendar: \(\) => this\.programarAlarmeFinanceiro\(\)/,
+    'alarme deve delegar o reagendamento à rotina testada sob falhas');
+  assert.match(worker, /executarAlarmeFinanceiro\(/);
   assert.match(worker, /temPixPendente\(this\.db\).*temEstornoPendente\(this\.db\)/);
 });
