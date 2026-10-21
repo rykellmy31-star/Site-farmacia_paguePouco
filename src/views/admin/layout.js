@@ -12,6 +12,7 @@ const MENU = [
   { id: 'midia', rotulo: 'Fotos e vídeos', href: '/admin/midia', perm: 'midia.ver', icone: '🖼️' },
   { separador: 'Vendas' },
   { id: 'pedidos', rotulo: 'Pedidos', href: '/admin/pedidos', perm: 'pedidos.ver', icone: '🧾' },
+  { id: 'vendedores', rotulo: 'Vendedores', href: '/admin/vendedores', perm: 'vendedores.ver', icone: '🏷️' },
   { id: 'clientes', rotulo: 'Clientes', href: '/admin/clientes', perm: 'clientes.ver', icone: '👥' },
   { id: 'promocoes', rotulo: 'Cupons e promoções', href: '/admin/promocoes', perm: 'promocoes.ver', icone: '🏷️' },
   { id: 'pagamentos', rotulo: 'Pagamentos', href: '/admin/pagamentos', perm: 'pagamentos.ver', icone: '💳' },
