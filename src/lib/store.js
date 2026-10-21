@@ -342,9 +342,17 @@ export class Store {
   async backup(destDir) {
     await this.flush();
     await fsp.mkdir(destDir, { recursive: true });
-    for (const name of this.collections.keys()) {
-      const src = this._snapPath(name);
-      if (fs.existsSync(src)) await fsp.copyFile(src, path.join(destDir, `${name}.json`));
+    // Copiar todos os snapshots, mesmo de coleções que não foram acessadas
+    // desde o início do processo; o código antigo omitía essas tabelas.
+    for (const entry of await fsp.readdir(this.dbDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      await fsp.copyFile(path.join(this.dbDir, entry.name), path.join(destDir, entry.name));
+    }
+    // Os uploads não ficam nos documentos JSON. Preservar originais e
+    // metadados lado a lado para uma restauração offline posterior.
+    const uploads = path.join(this.dataDir, 'uploads');
+    if (fs.existsSync(uploads)) {
+      await fsp.cp(uploads, path.join(destDir, 'uploads'), { recursive: true, force: false });
     }
     return destDir;
   }
