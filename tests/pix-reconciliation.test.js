@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
-import { reconciliarPix } from '../src/lib/payments/reconciliation.js';
+import {
+  reconciliarPix, temEstornoPendente, reconciliarEstornos,
+} from '../src/lib/payments/reconciliation.js';
 import { config } from '../src/config.js';
 
 function dbTeste({ expiraEm, status = 'pending', provider = 'internal', hasPayment = true } = {}) {
@@ -70,5 +72,130 @@ test('falha no provedor real preserva reserva e exige conciliação', async () =
   } finally {
     config.payments.mp.accessToken = oldToken;
     globalThis.fetch = oldFetch;
+  }
+});
+
+
+function dbEstorno({ provider = 'internal', status = 'refund_pending',
+  financeiro = 'estorno_solicitado', cancelar = true } = {}) {
+  const cols = new Map();
+  const db = { collection(name) {
+    if (!cols.has(name)) cols.set(name, new Collection({ _commit() {} }, name));
+    return cols.get(name);
+  } };
+  db.collection('products').insert({ id: 'p', nome: 'Produto', estoque: { quantidade: 8, reservado: 0 }, vendas: 2 });
+  db.collection('orders').insert({
+    id: 'o', codigo: 'PP123', statusFinanceiro: financeiro,
+    statusOperacional: 'em_separacao', metodoPagamento: 'pix',
+    pagamentoId: provider === 'mercadopago' ? 'mp_123' : 'pg',
+    totalCentavos: 2000, itens: [{ produtoId: 'p', quantidade: 2 }],
+    historico: [], cancelamentoPendenteEstorno: cancelar ?
+      { motivo: 'Cancelamento solicitado no painel.', por: 'Administrador' } : null,
+  });
+  db.collection('payments').insert({
+    id: provider === 'mercadopago' ? 'mp_123' : 'pg',
+    transacaoId: provider === 'mercadopago' ? '123' : null,
+    pedidoId: 'o', provedor: provider, metodo: 'pix', valorCentavos: 2000,
+    status, eventos: [],
+  });
+  return db;
+}
+
+test('estorno pendente não cancela pedido nem devolve mercadoria', async () => {
+  const db = dbEstorno();
+  assert.equal(temEstornoPendente(db), true);
+  const a = await reconciliarEstornos(db);
+  assert.equal(a.pendentes, 1);
+  assert.equal(a.confirmados, 0);
+  assert.equal(db.collection('orders').get('o').statusFinanceiro, 'estorno_solicitado');
+  assert.equal(db.collection('orders').get('o').statusOperacional, 'em_separacao');
+  assert.equal(db.collection('products').get('p').estoque.quantidade, 8);
+});
+
+test('estorno confirmado conclui cancelamento solicitado uma vez, sem reembolso duplicado', async () => {
+  const db = dbEstorno({ status: 'refunded' });
+  const primeiro = await reconciliarEstornos(db);
+  assert.equal(primeiro.confirmados, 1);
+  assert.equal(primeiro.cancelados, 1);
+  const order = db.collection('orders').get('o');
+  assert.equal(order.statusFinanceiro, 'estornado');
+  assert.equal(order.statusOperacional, 'cancelado');
+  assert.equal(order.cancelamentoPendenteEstorno, null);
+  assert.equal(db.collection('products').get('p').estoque.quantidade, 8);
+  const events = db.collection('payments').get('pg').eventos.length;
+  const second = await reconciliarEstornos(db);
+  assert.equal(second.confirmados + second.cancelados, 0);
+  assert.equal(db.collection('payments').get('pg').eventos.length, events);
+  assert.equal(temEstornoPendente(db), false);
+});
+
+test('estorno avulso confirmado não cancela automaticamente pedido', async () => {
+  const db = dbEstorno({ status: 'refunded', cancelar: false });
+  assert.equal((await reconciliarEstornos(db)).confirmados, 1);
+  assert.equal(db.collection('orders').get('o').statusFinanceiro, 'estornado');
+  assert.equal(db.collection('orders').get('o').statusOperacional, 'em_separacao');
+  assert.equal(temEstornoPendente(db), false);
+});
+
+test('webhook adiantou estado estornado: conciliação termina somente cancelamento pendente', async () => {
+  const db = dbEstorno({ status: 'refunded', financeiro: 'estornado' });
+  assert.equal(temEstornoPendente(db), true);
+  const a = await reconciliarEstornos(db);
+  assert.equal(a.confirmados, 0);
+  assert.equal(a.cancelados, 1);
+  assert.equal(db.collection('orders').get('o').statusOperacional, 'cancelado');
+});
+
+test('cobrança incompatível com pedido é preservada para conferência manual', async () => {
+  const db = dbEstorno({ status: 'refunded' });
+  db.collection('payments').update('pg', { valorCentavos: 1000 });
+  const a = await reconciliarEstornos(db);
+  assert.equal(a.erros, 1);
+  assert.equal(db.collection('orders').get('o').statusFinanceiro, 'estorno_solicitado');
+  assert.equal(db.collection('orders').get('o').statusOperacional, 'em_separacao');
+});
+
+test('estorno MP só confirma após consulta autenticada de pagamento com valor e vínculo válidos', async () => {
+  const db = dbEstorno({ provider: 'mercadopago' });
+  const fetchOriginal = globalThis.fetch;
+  const previous = config.payments.mp.accessToken;
+  let remoteStatus = 'approved';
+  config.payments.mp.accessToken = 'TOKEN_FICTICIO_AUDITORIA';
+  globalThis.fetch = async () => ({ ok: true, status: 200,
+    text: async () => JSON.stringify({
+      id: 123, external_reference: 'PP123', transaction_amount: 20,
+      currency_id: 'BRL', metadata: { pedido_id: 'o' }, status: remoteStatus,
+    }),
+  });
+  try {
+    let a = await reconciliarEstornos(db);
+    assert.equal(a.pendentes, 1);
+    assert.equal(db.collection('orders').get('o').statusFinanceiro, 'estorno_solicitado');
+    remoteStatus = 'refunded';
+    a = await reconciliarEstornos(db);
+    assert.equal(a.confirmados, 1);
+    assert.equal(a.cancelados, 1);
+    assert.equal(db.collection('orders').get('o').statusOperacional, 'cancelado');
+  } finally {
+    globalThis.fetch = fetchOriginal;
+    config.payments.mp.accessToken = previous;
+  }
+});
+
+test('falha de rede ao consultar estorno real mantém pedido pendente, sem cancelar', async () => {
+  const db = dbEstorno({ provider: 'mercadopago' });
+  const fetchOriginal = globalThis.fetch;
+  const previous = config.payments.mp.accessToken;
+  config.payments.mp.accessToken = 'TOKEN_FICTICIO_AUDITORIA';
+  globalThis.fetch = async () => { throw new Error('Provedor indisponível'); };
+  try {
+    const a = await reconciliarEstornos(db);
+    assert.equal(a.erros, 1);
+    assert.equal(db.collection('orders').get('o').statusFinanceiro, 'estorno_solicitado');
+    assert.equal(db.collection('products').get('p').estoque.quantidade, 8);
+    assert.equal(temEstornoPendente(db), true);
+  } finally {
+    globalThis.fetch = fetchOriginal;
+    config.payments.mp.accessToken = previous;
   }
 });
