@@ -80,7 +80,7 @@ export function avaliarAutomacaoInova(db, { agora = Date.now(), persistir = fals
   const problemas = [];
   if (habilitada && estoqueDesatualizado) problemas.push('estoque_desatualizado');
   if (habilitada && eanSemCorrespondencia) problemas.push('ean_incompleto');
-  if (habilitada && vendasParaConferir) problemas.push('vendas_sem_ean');
+  if (habilitada && vendasParaConferir) problemas.push('vendas_exigem_conferencia');
   const status = !habilitada ? 'aguardando_homologacao' :
     problemas.length ? 'atencao' : 'monitorando';
   const diagnostico = {
