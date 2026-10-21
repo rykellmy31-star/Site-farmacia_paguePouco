@@ -188,11 +188,20 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
         <div class="resumo-linha total"><span>Total</span><span>${money(pedido.totalCentavos)}</span></div>`,
     })}
 
-    ${!['cancelado', 'entregue'].includes(pedido.statusOperacional) ? `
+    ${pedido.cancelamentoPendenteEstorno ? `<div class="alerta" role="status">
+      Cancelamento solicitado. Aguardando confirmação do estorno pelo provedor antes de encerrar o pedido.
+      O sistema verificará automaticamente; não solicite outro reembolso.
+    </div>` : ''}
+    ${ctx.permissoes?.podeEditarPedidos &&
+       !['cancelado', 'entregue', 'enviado', 'saiu_para_entrega'].includes(pedido.statusOperacional) &&
+       !pedido.cancelamentoPendenteEstorno &&
+       (!['aprovado', 'estorno_solicitado'].includes(pedido.statusFinanceiro) || ctx.permissoes?.podeEstornar) ? `
     <div class="linha" style="gap:8px">
       <form method="post" action="/admin/api/pedidos/${e(pedido.id)}/cancelar" onsubmit="return confirm('Confirma o cancelamento deste pedido?')">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
-        <button class="botao perigo" type="submit">Cancelar pedido</button>
+        <button class="botao perigo" type="submit">
+          ${pedido.statusFinanceiro === 'estorno_solicitado' ? 'Cancelar após confirmação do estorno' : 'Cancelar pedido'}
+        </button>
       </form>
     </div>` : ''}`,
   });
