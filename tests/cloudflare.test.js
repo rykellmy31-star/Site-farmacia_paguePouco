@@ -217,8 +217,8 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(newProductPage.status, 200);
   const newProductHtml = await newProductPage.text();
   assert.match(newProductHtml, /id="formProduto" method="post" action="\/admin\/api\/produtos"/);
-  assert.match(newProductHtml, /js\/admin\.js\?v=admin-produtos-salvar-v2/);
-  const adminScript = await (await call('/js/admin.js?v=admin-produtos-salvar-v2')).text();
+  assert.match(newProductHtml, /js\/admin\.js\?v=admin-formularios-v3/);
+  const adminScript = await (await call('/js/admin.js?v=admin-formularios-v3')).text();
   assert.match(adminScript, /form\.id !== 'formProduto'/);
   assert.match(adminScript, /body: new FormData\(form\)/);
   const style = await (await call('/styles.css?v=admin-produtos-salvar-v2')).text();
@@ -263,6 +263,37 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(updatedProduct.precoCentavos, 1750);
   assert.equal(updatedProduct.imagens?.[0]?.url, media.url);
 
+  // Reproduz as operações que abriram JSON cru no navegador do lojista.
+  const stockPage = await call('/admin/estoque');
+  assert.equal(stockPage.status, 200);
+  assert.match(await stockPage.text(), /action="\/admin\/api\/estoque\/movimentar"/);
+  const stockChange = await call('/admin/api/estoque/movimentar', {
+    method: 'POST', body: new URLSearchParams({
+      _csrf: adminToken, produtoId: productCreated.id, tipo: 'entrada',
+      quantidade: '3', observacao: 'Reposição teste de formulário',
+    }),
+  });
+  assert.equal(stockChange.status, 200);
+  const stockResult = await stockChange.json();
+  assert.equal(stockResult.ok, true);
+  assert.equal(stockResult.saldo, 7, 'saldo precisa refletir a movimentação aplicada somente uma vez');
+
+  const promotionsPage = await call('/admin/promocoes');
+  assert.equal(promotionsPage.status, 200);
+  assert.match(await promotionsPage.text(), /action="\/admin\/api\/cupons"/);
+  const couponForm = new URLSearchParams({
+    _csrf: adminToken, codigo: 'REGRESSAOFORM2026', tipo: 'percentual',
+    valor: '10', ativo: '1', usoMaximo: '2', valorMinimo: '0',
+  });
+  const coupon = await call('/admin/api/cupons', { method: 'POST', body: couponForm });
+  assert.equal(coupon.status, 200);
+  assert.equal((await coupon.json()).ok, true);
+  const duplicate = await call('/admin/api/cupons', { method: 'POST', body: couponForm });
+  assert.equal(duplicate.status, 400, 'cupom duplicado precisa falhar, sem criar outro registro');
+  assert.match((await duplicate.json()).erro, /Já existe um cupom/);
+  assert.match(await (await call('/admin/promocoes?salvo=1')).text(),
+    /Operação concluída com sucesso/);
+
   await stop();
   await start();
   assert.equal((await call('/admin')).status, 200, 'sessão persiste após reinicialização');
@@ -280,4 +311,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(persistedProduct.nome, 'Produto editado com imagem', 'Edição de produto persiste após reiniciar.');
   assert.equal(persistedProduct.precoCentavos, 1750);
   assert.equal(persistedProduct.imagens?.[0]?.url, media.url, 'Imagem associada continua persistente.');
+  assert.equal(persistedProduct.estoque?.quantidade, 7, 'Movimentação de estoque persiste no SQLite.');
+  assert.equal(recovered.collections.coupons.filter(c => c.codigo === 'REGRESSAOFORM2026').length, 1,
+    'Cupom deve ser criado apenas uma vez e persistir após reinicialização.');
 });

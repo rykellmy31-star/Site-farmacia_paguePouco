@@ -139,6 +139,67 @@
     });
   });
 
+  // A API devolve JSON para aplicações; formulários do painel precisam
+  // mostrar o resultado na interface e voltar a uma tela HTML.
+  function destinoSeguroPainel(valor) {
+    if (!valor) return null;
+    try {
+      const url = new URL(valor, window.location.origin);
+      if (url.origin !== window.location.origin || !/^\/admin(?:\/|$)/.test(url.pathname)) return null;
+      return url.pathname + url.search + url.hash;
+    } catch {
+      return null;
+    }
+  }
+
+  function telaComAvisoDeSucesso() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('salvo', '1');
+    return url.pathname + url.search + url.hash;
+  }
+
+  function mensagemSalvamento(rota, dados) {
+    if (rota === '/admin/api/estoque/movimentar' && Number.isFinite(Number(dados.saldo))) {
+      return 'Movimentação registrada. Saldo atual: ' + Number(dados.saldo) + '.';
+    }
+    if (rota === '/admin/api/cupons') return 'Cupom criado com sucesso.';
+    if (rota === '/admin/api/produtos/importar') {
+      return 'Importação concluída: ' + Number(dados.criados || 0) + ' criados, ' +
+        Number(dados.atualizados || 0) + ' atualizados, ' + Number(dados.erros || 0) + ' erros.';
+    }
+    return 'Alterações salvas com sucesso.';
+  }
+
+  async function enviarFormularioAdmin(form) {
+    const rota = form.getAttribute('action');
+    const resposta = await fetch(rota, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': CFG.csrf, 'X-Requested-With': 'fetch' },
+      body: new FormData(form),
+    });
+    // Algumas rotas usam Post/Redirect/Get em vez de retornar JSON.
+    if (resposta.redirected) {
+      if (!resposta.ok) throw new Error('O servidor não conseguiu concluir a solicitação.');
+      const destino = destinoSeguroPainel(resposta.url);
+      if (!destino) throw new Error('O servidor retornou um endereço de destino inválido.');
+      window.location.assign(destino);
+      return;
+    }
+    const tipo = resposta.headers.get('content-type') || '';
+    const dados = tipo.includes('application/json') ? await resposta.json() : null;
+    if (!resposta.ok || dados?.ok !== true) {
+      const detalhes = dados?.erros && typeof dados.erros === 'object'
+        ? Object.values(dados.erros).join(' ') : '';
+      throw new Error(dados?.erro || detalhes || 'Não foi possível salvar. Recarregue a página e tente novamente.');
+    }
+    const destino = dados.url ? destinoSeguroPainel(dados.url) : telaComAvisoDeSucesso();
+    if (!destino) throw new Error('O servidor retornou um endereço inválido.');
+    const retorno = new URL(destino, window.location.origin);
+    retorno.searchParams.set('salvo', '1');
+    notificar(mensagemSalvamento(rota, dados));
+    setTimeout(() => window.location.assign(retorno.pathname + retorno.search + retorno.hash), 850);
+  }
+
   // sincroniza editores com os campos ocultos antes de enviar
   document.addEventListener('submit', (ev) => {
     const form = ev.target;
@@ -151,9 +212,28 @@
       $('#campoDescricao').value = edDesc.innerHTML;
     }
 
-    // Produtos são salvos pela API, não pela rota GET de edição.
+    // Todas as operações administrativas via formulário devem consumir
+    // o JSON da API e exibir uma tela útil, sem expor a resposta crua.
+    // Backup continua um POST nativo para permitir baixar o anexo JSON.
+    const acao = form.getAttribute('action') || '';
+    if (form.id !== 'formProduto') {
+      if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post' ||
+        !acao.startsWith('/admin/api/') || acao === '/admin/api/sistema/backup') return;
+      ev.preventDefault();
+      if (form.dataset.salvando === '1') return;
+      form.dataset.salvando = '1';
+      const botao = ev.submitter || form.querySelector('button[type="submit"]');
+      const titulo = botao?.textContent;
+      if (botao) { botao.disabled = true; botao.textContent = 'Salvando...'; }
+      enviarFormularioAdmin(form).catch((erro) => {
+        notificar(erro.message || 'Não foi possível salvar.', 'erro');
+        delete form.dataset.salvando;
+        if (botao) { botao.disabled = false; botao.textContent = titulo; }
+      });
+      return;
+    }
+    // Produtos usam confirmação de ID e redirecionamento específico.
     // Sem este envio controlado, o navegador acabava numa página 404 ou JSON.
-    if (form.id !== 'formProduto') return;
     ev.preventDefault();
     if (form.dataset.salvando === '1') return;
     form.dataset.salvando = '1';

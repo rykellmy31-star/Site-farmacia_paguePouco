@@ -78,12 +78,13 @@ ${headExtra}
   </nav>
   <main class="admin-conteudo">
     ${ctx.avisoLayout ? `<div class="alerta ${e(ctx.avisoLayout.tipo || 'info')}">${ctx.avisoLayout.texto}</div>` : ''}
+    ${ctx.req?.query?.has('salvo') ? '<div class="alerta sucesso mb-2" role="status">Operação concluída com sucesso. As alterações foram salvas.</div>' : ''}
     ${conteudo}
   </main>
 </div>
 <div class="notificacao" id="notificacaoAdmin" role="status"></div>
 <script>window.PP_ADMIN=${JSON.stringify({ csrf: ctx.csrf, role: usuario.role })};</script>
-<script src="/js/admin.js?v=admin-produtos-salvar-v2" defer></script>
+<script src="/js/admin.js?v=admin-formularios-v3" defer></script>
 ${corpoExtra}
 </body>
 </html>`;
