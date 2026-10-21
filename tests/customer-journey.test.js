@@ -295,6 +295,27 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(payment.simulado, true);
   assert.equal(data.products.find(p => p.id === produto.id).estoque.reservado, 2);
 
+  // Reserva é um compromisso com o cliente; movimentações manuais não
+  // podem consumir a quantidade prometida nem aceitar valores inválidos.
+  for (const [tipo, quantidade, expected] of [
+    ['saida', '9', 409], ['ajuste', '1', 409],
+    ['entrada', '-4', 400], ['entrada', '1.5', 400],
+    ['entrada', '0', 400], ['reserva', '1', 400],
+  ]) {
+    const resp = await admin.json('/admin/api/estoque/movimentar', {
+      produtoId: produto.id, tipo, quantidade,
+    });
+    assert.equal(resp.status, expected, 'Estoque deve recusar ' + tipo + ' x ' + quantidade);
+    assert.equal((await resp.json()).ok, false);
+  }
+  const rejectedTracking = await admin.json('/admin/api/pedidos/' + order.id + '/rastreio', {
+    codigo: 'PENDENTE', url: 'https://entrega.example/rastreio',
+  });
+  assert.equal(rejectedTracking.status, 400, 'pedido não pago não admite rastreio');
+  assert.equal((await rejectedTracking.json()).ok, false);
+  assert.equal((await snapshot()).products.find(p => p.id === produto.id).estoque.quantidade, 10,
+    'tentativas recusadas não podem alterar estoque');
+
   // Um visitante e outro cliente não podem ler a confirmação privada.
   const outsider = new Browser(origin);
   const blocked = await outsider.get(confirmationUrl);
@@ -353,4 +374,40 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   const clientOrders = await client.get('/conta/pedidos/' + order.codigo);
   assert.equal(clientOrders.status, 200);
   assert.match(await clientOrders.text(), new RegExp(order.codigo));
+
+  // Segurança do rastreamento e transições de entrega.
+  const invalidTracking = await admin.json('/admin/api/pedidos/' + order.id + '/rastreio', {
+    codigo: 'COD123', url: 'javascript:alert(1)',
+  });
+  assert.equal(invalidTracking.status, 400, 'link de rastreamento não pode executar JavaScript');
+  const insecureTracking = await admin.json('/admin/api/pedidos/' + order.id + '/rastreio', {
+    codigo: 'COD123', url: 'http://exemplo.com/rastreio',
+  });
+  assert.equal(insecureTracking.status, 400, 'rastreio deve ser HTTPS');
+  const validTracking = await admin.json('/admin/api/pedidos/' + order.id + '/rastreio', {
+    codigo: 'OBJ-123', transportadora: 'Teste Logístico',
+    url: 'https://entrega.example/objeto/123',
+  });
+  assert.equal(validTracking.status, 200);
+  assert.equal((await validTracking.json()).ok, true);
+  assert.match(await (await client.get('/conta/pedidos/' + order.codigo)).text(),
+    /https:\/\/entrega\.example\/objeto\/123/);
+
+  const alterar = (status) => admin.json('/admin/api/pedidos/' + order.id + '/status', { status });
+  const separacao = await alterar('em_separacao');
+  assert.equal(separacao.status, 200, 'etapa repetida é idempotente');
+  for (const status of ['preparando_envio', 'enviado', 'saiu_para_entrega', 'entregue']) {
+    const change = await alterar(status);
+    assert.equal(change.status, 200, 'etapa ' + status + ' deve funcionar');
+    assert.equal((await change.json()).ok, true);
+  }
+  for (const status of ['em_separacao', 'enviado', 'aguardando_pagamento']) {
+    const change = await alterar(status);
+    assert.equal(change.status, 400, 'não pode voltar de entregue para ' + status);
+    assert.equal((await change.json()).ok, false);
+  }
+  const finished = (await snapshot()).orders.find(p => p.id === order.id);
+  assert.equal(finished.statusOperacional, 'entregue');
+  const cancelledFinished = await admin.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
+  assert.equal(cancelledFinished.status, 409, 'entrega finalizada não pode ser cancelada pelo formulário');
 });
