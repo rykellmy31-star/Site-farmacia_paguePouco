@@ -77,7 +77,7 @@ const FAIXAS = [
 ];
 
 export function normalizeCep(cep) {
-  return String(cep ?? '').replace(/\D/g, '').padStart(8, '0').slice(0, 8);
+  return String(cep ?? '').replace(/\D/g, '');
 }
 
 export function isValidCep(cep) {
@@ -87,7 +87,7 @@ export function isValidCep(cep) {
 /** Retorna a UF correspondente ao CEP, ou null se fora das faixas conhecidas. */
 export function ufFromCep(cep) {
   const d = normalizeCep(cep);
-  if (!/^\d{8}$/.test(d)) return null;
+  if (!isValidCep(d)) return null;
   const n = Number(d);
   for (const [ini, fim, uf] of FAIXAS) {
     if (n >= Number(ini) && n <= Number(fim)) return uf;
@@ -103,7 +103,7 @@ export async function lookupCep(cep) {
   const d = normalizeCep(cep);
   const result = {
     cep: d,
-    valido: /^\d{8}$/.test(d),
+    valido: isValidCep(d),
     uf: null,
     ufNome: null,
     cidade: null,
