@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { config } from '../config.js';
 import { inovaAtiva } from '../lib/inovafarma-stock.js';
+import { diagnosticoInova, salvarConfiguracaoInova, armazenarCredencialInova, apagarCredencialInova } from '../lib/inovafarma-panel.js';
+import { telaIntegracaoInova } from '../views/admin/inovafarma.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
 import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
 import { paginaAdmin } from '../views/admin/layout.js';
@@ -339,6 +341,54 @@ export function registrarRotasAdmin(app, db) {
       cupons: db.collection('coupons').all().sort((a, b) => String(a.codigo).localeCompare(String(b.codigo))),
       categorias: db.collection('categories').all(),
     }));
+  });
+
+  /* ======================== INTEGRAÇÃO INOVAFARMA ======================= */
+  app.get('/admin/inovafarma', (req, res) => {
+    if (!guard(req, res, 'inovafarma.ver')) return;
+    const ctx = ctxAdmin(req, db);
+    res.set('Cache-Control', 'no-store');
+    res.html(telaIntegracaoInova(ctx, {
+      dados: diagnosticoInova(db),
+      erro: req.query.get('erro') || '',
+      salvo: req.query.get('salvo') || '',
+    }));
+  });
+
+  const guardInovaSuper = (req, res) => {
+    if (!req.adminUser) return void res.redirect('/admin/login'), false;
+    if (req.adminUser.role !== 'super_admin') {
+      res.status(403).html('403 — Somente Super Administrador pode alterar a integração InovaFarma.');
+      return false;
+    }
+    return true;
+  };
+  const falhaInova = (res, msg) => res.redirect('/admin/inovafarma?erro=' + encodeURIComponent(msg));
+  app.post('/admin/inovafarma/configuracao', (req, res) => {
+    if (!guardInovaSuper(req, res)) return;
+    const r = salvarConfiguracaoInova(db, {
+      urlConector: req.body.urlConector,
+      estabelecimento: req.body.estabelecimento,
+      intervaloMinutos: req.body.intervaloMinutos,
+    });
+    if (!r.ok) return void falhaInova(res, r.erro);
+    logAdmin(db, req.adminUser, 'salvou_configuracao_inova', 'integracao', 'inovafarma',
+      { status: 'aguardando_homologacao' }, req);
+    res.redirect('/admin/inovafarma?salvo=1');
+  });
+  app.post('/admin/inovafarma/credencial', { maxBodyBytes: 5 * 1024 }, (req, res) => {
+    if (!guardInovaSuper(req, res)) return;
+    const r = armazenarCredencialInova(db, req.body.credencial);
+    if (!r.ok) return void falhaInova(res, r.erro);
+    // O conteúdo e o tamanho da credencial jamais entram em auditoria.
+    logAdmin(db, req.adminUser, 'salvou_credencial_inova', 'integracao', 'inovafarma', {}, req);
+    res.redirect('/admin/inovafarma?salvo=credencial');
+  });
+  app.post('/admin/inovafarma/credencial/remover', (req, res) => {
+    if (!guardInovaSuper(req, res)) return;
+    apagarCredencialInova(db);
+    logAdmin(db, req.adminUser, 'removeu_credencial_inova', 'integracao', 'inovafarma', {}, req);
+    res.redirect('/admin/inovafarma?salvo=remocao');
   });
 
   /* ============================== VENDEDORES ============================ */
