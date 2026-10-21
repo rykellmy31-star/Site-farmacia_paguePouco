@@ -104,6 +104,25 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(adminLogin.headers.get('location'), '/admin');
   await admin.token('/admin/produtos/novo');
 
+  // Smoke test real do painel administrativo no Worker: cada área acessível
+  // ao superadministrador deve devolver HTML, nunca 404, 500 ou JSON cru.
+  const areasAdmin = [
+    '/admin', '/admin/produtos', '/admin/produtos/novo',
+    '/admin/produtos/importar', '/admin/categorias', '/admin/estoque',
+    '/admin/midia', '/admin/banners', '/admin/promocoes', '/admin/pedidos',
+    '/admin/clientes', '/admin/pagamentos', '/admin/relatorios', '/admin/fretes',
+    '/admin/whatsapp', '/admin/configuracoes', '/admin/aparencia',
+    '/admin/paginas', '/admin/paginas/nova', '/admin/usuarios',
+    '/admin/auditoria', '/admin/sistema',
+  ];
+  for (const route of areasAdmin) {
+    const response = await admin.get(route);
+    assert.equal(response.status, 200, 'Área do administrador indisponível: ' + route);
+    const html = await response.text();
+    assert.match(html, /<html/i, 'Área administrativa deve servir HTML: ' + route);
+    assert.match(html, /window.PP_ADMIN=/, 'Área deve publicar contexto de sessão: ' + route);
+  }
+
   // Cadastra produto não medicinal: sem liberar medicamentos sem responsável técnico.
   const novo = await admin.form('/admin/api/produtos', {
     nome: 'Sabonete Teste Jornada', sku: 'WORKER-JORNADA-001',
@@ -298,11 +317,27 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   // Aprovação duplicada não pode baixar o estoque duas vezes.
   const secondApproval = await admin.json('/admin/api/pedidos/' + order.id + '/simular-pagamento',
     { status: 'approved' });
-  assert.equal(secondApproval.status, 200);
+  assert.equal(secondApproval.status, 409, 'A API deve recusar simulação de pagamento finalizado.');
+  assert.equal((await secondApproval.json()).ok, false);
   const afterDuplicate = await snapshot();
   assert.equal(afterDuplicate.products.find(p => p.id === produto.id).estoque.quantidade, 8);
   assert.equal(afterDuplicate.orders.find(o => o.id === order.id).statusFinanceiro, 'aprovado');
   assert.equal(afterDuplicate.payments.find(p => p.id === payment.id).eventos.length,
     afterApproval.payments.find(p => p.id === payment.id).eventos.length,
     'notificações duplicadas não devem criar eventos financeiros duplicados');
+
+  // Painel de vendas: o pedido aprovado deve aparecer em relatórios e
+  // exportações sem permitir acesso anônimo aos dados.
+  for (const [url, tipo] of [
+    ['/admin/api/pedidos/exportar.csv', 'text/csv'],
+    ['/admin/api/produtos/exportar.csv', 'text/csv'],
+    ['/admin/api/relatorios/vendas.csv', 'text/csv'],
+  ]) {
+    const csv = await admin.get(url);
+    assert.equal(csv.status, 200, 'Exportação administrativa falhou: ' + url);
+    assert.match(csv.headers.get('content-type') || '', new RegExp(tipo));
+  }
+  const clientOrders = await client.get('/conta/pedidos/' + order.codigo);
+  assert.equal(clientOrders.status, 200);
+  assert.match(await clientOrders.text(), new RegExp(order.codigo));
 });

@@ -196,6 +196,16 @@ function deepMerge(target, source) {
 /** Garante que todas as chaves existam na base (executado na migração/seed). */
 export function ensureSettings(db) {
   const defaults = DEFAULT_SETTINGS();
+  // Migração não destrutiva: preserva configuração legada quando ainda não
+  // existe a chave utilizada pelo painel administrativo.
+  const legacy = db.collection('settings').get('payments');
+  if (legacy && !db.collection('settings').get('pagamentos')) {
+    const { id, ...value } = legacy;
+    db.collection('settings').insert({
+      id: 'pagamentos', ...defaults.pagamentos, ...value,
+      meios: { ...defaults.pagamentos.meios, ...(legacy.meios || {}) },
+    });
+  }
   for (const [key, value] of Object.entries(defaults)) {
     if (!db.collection('settings').get(key)) {
       db.collection('settings').insert({ id: key, ...value });

@@ -9,6 +9,7 @@ import { atualizarStatusFinanceiro, adicionarHistorico } from '../lib/orders.js'
 import { handleWebhook } from '../lib/payments/index.js';
 import { logSystem } from '../lib/audit.js';
 import { escapeHtml } from '../lib/security.js';
+import { can } from '../lib/permissions.js';
 
 function jaProcessado(db, chave) {
   if (!chave) return false;
@@ -36,6 +37,7 @@ export function registrarRotasWebhook(app, db) {
         headers: req.headers,
         body: corpo,
         rawBody: req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(corpo),
+        dataId: req.query.get('data.id') || req.query.get('id') || corpo?.data?.id,
       });
     } catch (err) {
       logSystem(db, 'error', `Webhook Mercado Pago: ${err.message}`);
@@ -50,7 +52,11 @@ export function registrarRotasWebhook(app, db) {
     if (jaProcessado(db, chave)) {
       return void res.json({ ok: true, duplicado: true });
     }
-    await aplicarResultado(db, resultado, 'mercadopago');
+    const aplicado = await aplicarResultado(db, resultado, 'mercadopago');
+    if (!aplicado.ok) {
+      logSystem(db, 'warn', `Conciliação pendente para webhook MP: ${aplicado.erro}`);
+      return void res.json({ ok: false, erro: aplicado.erro }, 409);
+    }
     registrarEvento(db, chave, 'mercadopago', corpo, resultado);
     res.json({ ok: true });
   });
@@ -73,13 +79,15 @@ export function registrarRotasWebhook(app, db) {
 
     const chave = `int:${resultado.idempotencyKey || corpo?.idempotencyKey || resultado.pagamentoId}:${resultado.status}`;
     if (jaProcessado(db, chave)) return void res.json({ ok: true, duplicado: true });
-    await aplicarResultado(db, resultado, 'internal');
+    const aplicado = await aplicarResultado(db, resultado, 'internal');
+    if (!aplicado.ok) return void res.json({ ok: false, erro: aplicado.erro }, 409);
     registrarEvento(db, chave, 'internal', corpo, resultado);
     res.json({ ok: true });
   });
 
   /* ---------------------- CONSULTA DE STATUS ----------------------- */
   app.get('/webhooks/status', (req, res) => {
+    if (!can(req.adminUser, 'auditoria.ver')) return void res.json({ ok: false, erro: 'Acesso restrito.' }, 403);
     const eventos = db.collection('webhookEvents')
       .all()
       .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
@@ -97,13 +105,32 @@ export function registrarRotasWebhook(app, db) {
 }
 
 async function aplicarResultado(db, resultado, provider) {
-  const { pedidoId, status } = resultado;
-  if (!pedidoId) return;
+  const { pedidoId, status, pagamentoId } = resultado;
+  if (!pedidoId || !pagamentoId) return { ok: false, erro: 'Pedido ou cobrança não identificados.' };
   const mapa = { approved: 'aprovado', rejected: 'recusado', cancelled: 'recusado', refunded: 'estornado', expired: 'expirado' };
   const novo = mapa[status];
-  if (!novo) return;
+  if (!novo) return { ok: true, ignorado: true };
   const pedido = db.collection('orders').get(pedidoId);
-  if (!pedido) return;
-  await atualizarStatusFinanceiro(db, pedidoId, novo, { obs: `Confirmação automática via webhook (${provider}).`, por: 'webhook' });
+  const pagamento = db.collection('payments').get(pagamentoId);
+  if (!pedido || !pagamento || pedido.pagamentoId !== pagamento.id ||
+      pagamento.pedidoId !== pedido.id || pagamento.provedor !== provider ||
+      Number(pagamento.valorCentavos) !== Number(pedido.totalCentavos)) {
+    return { ok: false, erro: 'Vínculo entre cobrança e pedido inconsistente.' };
+  }
+  // O provedor interno emite eventos assinados, mas mantém a cobrança pendente
+  // até o processamento; o MP já atualiza sua cobrança via consulta autenticada.
+  if (provider === 'internal' && status === 'refunded' && pedido.statusFinanceiro === 'aprovado') {
+    db.collection('payments').update(pagamento.id, { status: 'refunded', atualizadoEm: new Date().toISOString() });
+  }
+  const alteracao = atualizarStatusFinanceiro(db, pedidoId, novo,
+    { obs: `Confirmação via webhook (${provider}).`, por: 'webhook' });
+  if (!alteracao.ok) return alteracao;
+  if (provider === 'internal') {
+    db.collection('payments').update(pagamento.id, {
+      status, atualizadoEm: new Date().toISOString(),
+      eventos: [...(pagamento.eventos || []), { status, em: new Date().toISOString(), origem: 'webhook' }],
+    });
+  }
   logSystem(db, 'info', `Pedido ${pedido.codigo}: status financeiro → ${novo} (webhook ${provider}).`);
+  return { ok: true };
 }

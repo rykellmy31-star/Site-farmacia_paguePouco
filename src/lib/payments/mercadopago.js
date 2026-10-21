@@ -207,7 +207,16 @@ export async function getStatus({ db, payment, config }) {
   if (payment.metodo === 'checkout_pro') return { ok: true, status: payment.status, pagamento: payment };
   const res = await mpFetch(`/v1/payments/${mpId}`, { config });
   if (!res.ok) return { ok: false, erro: `Falha ao consultar pagamento: ${res.status}` };
-  const d = res.data;
+  const d = res.data || {};
+  const pedido = db.collection('orders').get(payment.pedidoId);
+  const valor = Math.round(Number(d.transaction_amount) * 100);
+  if (!pedido || pedido.pagamentoId !== payment.id ||
+      String(d.id) !== mpId || d.external_reference !== pedido.codigo ||
+      d.currency_id !== 'BRL' || !Number.isSafeInteger(valor) ||
+      valor !== Number(payment.valorCentavos) || valor !== Number(pedido.totalCentavos) ||
+      (d.metadata?.pedido_id && String(d.metadata.pedido_id) !== String(pedido.id))) {
+    return { ok: false, erro: 'Consulta retornou cobrança incompatível com o pedido. Conciliação necessária.' };
+  }
   const upd = db.collection('payments').update(payment.id, {
     status: d.status || payment.status,
     statusDetalhe: d.status_detail || null,
@@ -224,67 +233,79 @@ export async function getStatus({ db, payment, config }) {
  *  2) consulta autenticada à API (/v1/payments/{id}) — fonte autoritativa.
  * Se não houver credencial, recusa (não aprova nada às cegas).
  */
-export async function handleWebhook({ db, headers, body, config }) {
+export async function handleWebhook({ db, headers, body, dataId: queryDataId = null, config }) {
   const cfg = config?.payments?.mp || {};
-  if (!cfg.accessToken) {
-    return { ok: false, erro: 'Integração Mercado Pago desativada: credenciais ausentes.' };
-  }
+  if (!cfg.accessToken) return { ok: false, erro: 'Integração Mercado Pago sem credenciais.' };
   const rawSignature = headers?.['x-signature'] || headers?.['X-Signature'] || '';
   const requestId = headers?.['x-request-id'] || headers?.['X-Request-Id'] || '';
-  const dataId = body?.data?.id ? String(body.data.id) : '';
+  const dataId = String(queryDataId || body?.data?.id || '');
+  if (!/^\d{1,30}$/.test(dataId)) return { ok: false, erro: 'Identificador de pagamento inválido.' };
 
-  if (cfg.webhookSecret && rawSignature && dataId) {
-    const parts = Object.fromEntries(rawSignature.split(',').map((p) => p.split('=').map((s) => s.trim())));
-    const ts = parts.ts || '';
-    const v1 = parts.v1 || '';
-    const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  if (cfg.webhookSecret) {
+    // Assinatura é obrigatória quando o segredo existe.
+    if (!rawSignature || !requestId) return { ok: false, erro: 'Assinatura ou identificador de requisição ausente.' };
+    const pairs = rawSignature.split(',').map((p) => p.trim().split('='));
+    const values = Object.fromEntries(pairs.filter((p) => p.length === 2));
+    const ts = values.ts || '';
+    const v1 = values.v1 || '';
+    if (!/^\d{10,16}$/.test(ts) || !/^[0-9a-f]{64}$/i.test(v1)) {
+      return { ok: false, erro: 'Formato da assinatura inválido.' };
+    }
+    const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${ts};`;
     const expected = crypto.createHmac('sha256', cfg.webhookSecret).update(manifest).digest('hex');
-    const a = Buffer.from(String(v1));
-    const b = Buffer.from(expected);
+    const a = Buffer.from(v1.toLowerCase(), 'hex'), b = Buffer.from(expected, 'hex');
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      return { ok: false, erro: 'Assinatura do webhook inválida. Notificação recusada.' };
+      return { ok: false, erro: 'Assinatura do webhook inválida.' };
     }
   }
-
-  if (body?.type !== 'payment' && body?.topic !== 'payment' && body?.action && !String(body.action).startsWith('payment')) {
-    return { ok: false, erro: 'Notificação ignorada (não é evento de pagamento).' };
+  if (body?.type && body.type !== 'payment' || body?.action && !String(body.action).startsWith('payment.')) {
+    return { ok: false, erro: 'Tipo de notificação diferente de pagamento.' };
   }
-  if (!dataId) return { ok: false, erro: 'Notificação sem identificador de pagamento.' };
 
-  // Consulta autoritativa (não confiamos no corpo da notificação)
+  // A assinatura autentica a notificação, mas NÃO aprova pagamento.
   const res = await mpFetch(`/v1/payments/${dataId}`, { config });
-  if (!res.ok) return { ok: false, erro: `Falha ao consultar pagamento ${dataId}.` };
-  const externalRef = res.data?.external_reference;
-  const pedido = db.collection('orders').findOne((o) => o.codigo === externalRef) || null;
-  const pagamento = db.collection('payments').findOne((p) => p.id === `mp_${dataId}`) || null;
-  if (pagamento) {
-    db.collection('payments').update(pagamento.id, {
-      status: res.data.status,
-      statusDetalhe: res.data.status_detail || null,
-      atualizadoEm: nowISO(),
-      raw: res.data,
-      eventos: [...(pagamento.eventos || []), { status: res.data.status, em: nowISO(), origem: 'webhook' }],
-    });
+  if (!res.ok) return { ok: false, erro: 'Falha ao consultar cobrança no provedor.' };
+  const remoto = res.data || {};
+  const pagamento = db.collection('payments').get(`mp_${dataId}`);
+  if (!pagamento || pagamento.provedor !== 'mercadopago' || String(pagamento.transacaoId) !== dataId) {
+    return { ok: false, erro: 'Cobrança desconhecida; aguardando conciliação.' };
   }
-  return {
-    ok: true,
-    pagamentoId: pagamento?.id || `mp_${dataId}`,
-    pedidoId: pedido?.id || pagamento?.pedidoId || null,
-    status: res.data.status,
-    idempotencyKey: dataId,
-  };
+  const pedido = db.collection('orders').get(pagamento.pedidoId);
+  const valorRemoto = Math.round(Number(remoto.transaction_amount) * 100);
+  if (!pedido || pedido.pagamentoId !== pagamento.id ||
+      remoto.external_reference !== pedido.codigo ||
+      String(remoto.id) !== dataId ||
+      remoto.currency_id !== 'BRL' ||
+      !Number.isSafeInteger(valorRemoto) ||
+      valorRemoto !== Number(pedido.totalCentavos) ||
+      Number(pagamento.valorCentavos) !== Number(pedido.totalCentavos) ||
+      (remoto.metadata?.pedido_id && String(remoto.metadata.pedido_id) !== String(pedido.id))) {
+    return { ok: false, erro: 'Cobrança não corresponde ao pedido (identidade, valor ou moeda).' };
+  }
+  const status = String(remoto.status || '').toLowerCase();
+  db.collection('payments').update(pagamento.id, {
+    status, statusDetalhe: remoto.status_detail || null,
+    atualizadoEm: nowISO(), raw: remoto,
+    eventos: [...(pagamento.eventos || []), { status, em: nowISO(), origem: 'webhook' }],
+  });
+  return { ok: true, pagamentoId: pagamento.id, pedidoId: pedido.id, status, idempotencyKey: dataId };
 }
 
 export async function refund({ db, payment, amountCents, config }) {
+  if (payment.status !== 'approved') return { ok: false, erro: 'Somente cobranças aprovadas podem ser estornadas.' };
   const mpId = String(payment.id || '').replace(/^mp_/, '');
-  const body = amountCents ? { amount: Number((amountCents / 100).toFixed(2)) } : undefined;
-  const res = await mpFetch(`/v1/payments/${mpId}/refunds`, { method: 'POST', body, config });
-  if (!res.ok) return { ok: false, erro: `Estorno recusado: ${JSON.stringify(res.data?.message || res.data)}` };
-  db.collection('payments').update(payment.id, {
-    status: res.data.status === 'approved' ? 'refunded' : payment.status,
-    statusDetalhe: 'Estorno solicitado ao Mercado Pago.',
-    atualizadoEm: nowISO(),
-    eventos: [...(payment.eventos || []), { status: 'refunded', em: nowISO(), origem: 'painel' }],
+  const res = await mpFetch(`/v1/payments/${mpId}/refunds`, {
+    method: 'POST', body: undefined, idempotencyKey: `refund-${payment.id}`, config,
   });
-  return { ok: true, status: 'refunded', raw: res.data };
+  if (!res.ok) return { ok: false, erro: 'O provedor recusou o estorno. Consulte a conciliação.' };
+  const confirmado = res.data?.status === 'approved' &&
+    Math.round(Number(res.data?.amount) * 100) === Number(payment.valorCentavos);
+  const status = confirmado ? 'refunded' : 'refund_pending';
+  const atualizado = db.collection('payments').update(payment.id, {
+    status,
+    statusDetalhe: confirmado ? 'Estorno total confirmado pelo provedor.' : 'Solicitação de estorno recebida; confirmação pendente.',
+    atualizadoEm: nowISO(),
+    eventos: [...(payment.eventos || []), { status, em: nowISO(), origem: 'solicitacao-estorno' }],
+  });
+  return { ok: true, status, pagamento: atualizado };
 }
