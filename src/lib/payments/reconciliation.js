@@ -15,10 +15,11 @@ export function temPixPendente(db) {
     !!order.pagamentoId);
 }
 
-export async function reconciliarPix(db, { limit = 50 } = {}) {
+export async function reconciliarPix(db, { limit = 50, pedidoId = null } = {}) {
   const pendentes = db.collection('orders').find((order) =>
     order.metodoPagamento === 'pix' && order.statusFinanceiro === 'pendente' &&
-    !!order.pagamentoId).slice(0, Math.max(1, Math.min(100, limit)));
+    !!order.pagamentoId && (!pedidoId || order.id === pedidoId))
+    .slice(0, Math.max(1, Math.min(100, limit)));
   const resultado = { verificados: 0, atualizados: 0, pendentes: 0, erros: 0 };
   for (const pedido of pendentes) {
     const pagamento = db.collection('payments').get(pedido.pagamentoId);
@@ -55,6 +56,38 @@ export async function reconciliarPix(db, { limit = 50 } = {}) {
   return { ...resultado, conferidoEm: nowISO() };
 }
 
+
+/**
+ * Sincroniza UM Pix real quando o proprietário abre a tela de seu pedido.
+ * A rota já validou sessão e propriedade ANTES de chamar esta função.
+ * Nunca cria cobranças: consulta somente o GET autenticado do Mercado Pago.
+ * Um intervalo persistido no pagamento evita excesso de consultas e mantém
+ * a conciliação de Durable Object Alarms como mecanismo principal.
+ */
+export async function reconciliarPixAoConsultarPedido(db, pedidoId, {
+  agora = Date.now(), intervaloMs = 60_000,
+} = {}) {
+  const pedido = db.collection('orders').get(pedidoId);
+  if (!pedido || pedido.metodoPagamento !== 'pix' ||
+      pedido.statusFinanceiro !== 'pendente' || !pedido.pagamentoId) {
+    return { consultado: false, motivo: 'pedido_nao_pendente' };
+  }
+  const pagamento = db.collection('payments').get(pedido.pagamentoId);
+  if (!pagamento || pagamento.provedor !== 'mercadopago' ||
+      pagamento.metodo !== 'pix' || pagamento.pedidoId !== pedido.id) {
+    return { consultado: false, motivo: 'nao_e_pix_mercadopago' };
+  }
+  const ultima = Date.parse(pagamento.ultimaConsultaMercadoPagoEm || '');
+  const intervalo = Math.max(30_000, intervaloMs);
+  if (Number.isFinite(ultima) && agora - ultima >= 0 && agora - ultima < intervalo) {
+    return { consultado: false, motivo: 'intervalo_minimo' };
+  }
+  db.collection('payments').update(pagamento.id, {
+    ultimaConsultaMercadoPagoEm: new Date(agora).toISOString(),
+  });
+  const resultado = await reconciliarPix(db, { pedidoId: pedido.id, limit: 1 });
+  return { consultado: true, ...resultado };
+}
 
 /**
  * Estornos que dependem de confirmação externa são acompanhados da mesma
