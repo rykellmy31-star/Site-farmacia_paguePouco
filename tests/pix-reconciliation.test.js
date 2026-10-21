@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
 import {
   reconciliarPix, temEstornoPendente, reconciliarEstornos,
+  temCheckoutInterrompido, reconciliarCheckoutsInterrompidos,
 } from '../src/lib/payments/reconciliation.js';
 import { config } from '../src/config.js';
 
@@ -198,4 +199,80 @@ test('falha de rede ao consultar estorno real mantém pedido pendente, sem cance
     globalThis.fetch = fetchOriginal;
     config.payments.mp.accessToken = previous;
   }
+});
+
+
+function compraInterrompida({ idadeMinutos = 10, pagamento = null,
+  valorPagamento = 2000, fase = 'criacao_em_andamento' } = {}) {
+  const db = dbTeste({ hasPayment: false });
+  db.collection('orders').update('o', {
+    criadoEm: new Date(Date.now() - idadeMinutos * 60_000).toISOString(),
+    pendenciaPagamento: fase,
+    historico: [],
+  });
+  if (pagamento) {
+    db.collection('payments').insert({
+      id: 'pg', pedidoId: 'o', metodo: 'pix',
+      provedor: 'internal', valorCentavos: valorPagamento, status: pagamento,
+    });
+  }
+  return db;
+}
+
+test('checkout recente não é cancelado enquanto pode estar criando cobrança', () => {
+  const db = compraInterrompida({ idadeMinutos: 1 });
+  assert.equal(temCheckoutInterrompido(db), true);
+  const r = reconciliarCheckoutsInterrompidos(db);
+  assert.equal(r.recentes, 1);
+  assert.equal(db.collection('orders').get('o').pendenciaPagamento, 'criacao_em_andamento');
+  assert.equal(db.collection('products').get('p').estoque.reservado, 2);
+});
+
+test('checkout interrompido sem cobrança entra em conciliação, sem liberar reservas', () => {
+  const db = compraInterrompida();
+  assert.equal(temCheckoutInterrompido(db), true);
+  assert.equal(reconciliarCheckoutsInterrompidos(db).sinalizados, 1);
+  const o = db.collection('orders').get('o');
+  assert.equal(o.statusFinanceiro, 'pendente');
+  assert.equal(o.pendenciaPagamento, 'conciliacao_necessaria');
+  assert.equal(o.pagamentoId, null);
+  assert.equal(db.collection('products').get('p').estoque.reservado, 2);
+  assert.equal(db.collection('stockMovements').count(), 1);
+  assert.equal(temCheckoutInterrompido(db), false);
+  assert.equal(reconciliarCheckoutsInterrompidos(db).sinalizados, 0,
+    'repetição do alarme não duplica alerta de conciliação');
+});
+
+test('checkout interrompido vincula cobrança existente por identidade e valor', async () => {
+  const db = compraInterrompida({ pagamento: 'approved' });
+  const reconciliado = reconciliarCheckoutsInterrompidos(db);
+  assert.equal(reconciliado.recuperados, 1);
+  assert.equal(db.collection('orders').get('o').pagamentoId, 'pg');
+  assert.equal(db.collection('orders').get('o').pendenciaPagamento, null);
+  assert.equal(db.collection('orders').get('o').statusFinanceiro, 'pendente',
+    'vínculo local não comprova pagamento sem consulta ao provedor');
+  assert.equal((await reconciliarPix(db)).atualizados, 1);
+  assert.equal(db.collection('orders').get('o').statusFinanceiro, 'aprovado');
+  assert.equal(db.collection('products').get('p').estoque.quantidade, 8);
+  assert.equal(db.collection('products').get('p').estoque.reservado, 0);
+  assert.equal(reconciliarCheckoutsInterrompidos(db).recuperados, 0);
+});
+
+test('cobrança com valor incompatível nunca é associada automaticamente', () => {
+  const db = compraInterrompida({ pagamento: 'pending', valorPagamento: 100 });
+  const r = reconciliarCheckoutsInterrompidos(db);
+  assert.equal(r.recuperados, 0);
+  assert.equal(r.sinalizados, 1);
+  assert.equal(db.collection('orders').get('o').pagamentoId, null);
+  assert.equal(db.collection('products').get('p').estoque.reservado, 2);
+});
+
+test('duas cobranças ligadas ao mesmo pedido exigem revisão sem escolher ao acaso', () => {
+  const db = compraInterrompida({ pagamento: 'pending' });
+  db.collection('payments').insert({
+    id: 'pg2', pedidoId: 'o', metodo: 'pix',
+    provedor: 'internal', valorCentavos: 2000, status: 'pending',
+  });
+  assert.equal(reconciliarCheckoutsInterrompidos(db).sinalizados, 1);
+  assert.equal(db.collection('orders').get('o').pagamentoId, null);
 });
