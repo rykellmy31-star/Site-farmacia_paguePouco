@@ -462,7 +462,9 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   }
   const pedidoAtual = db.collection('orders').get(pedidoId);
   enfileirarAvisoPedido(db, pedidoAtual, 'financeiro', status);
-  if (mudouOperacional) enfileirarAvisoPedido(db, pedidoAtual, 'operacional', patch.statusOperacional);
+  if (mudouOperacional && ['recusado','expirado','estornado'].includes(status)) {
+    enfileirarAvisoPedido(db, pedidoAtual, 'operacional', patch.statusOperacional);
+  }
   return { ok: true, pedido: pedidoAtual };
 }
 
