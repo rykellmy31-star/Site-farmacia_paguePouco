@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { Collection } from '../src/lib/store.js';
 import { cancelarPedido, atualizarStatusFinanceiro, atualizarStatusOperacional } from '../src/lib/orders.js';
 import { getProviderInfo, paymentSettings, createPayment } from '../src/lib/payments/index.js';
-import { handleWebhook as webhookMP } from '../src/lib/payments/mercadopago.js';
+import { handleWebhook as webhookMP, getStatus as getStatusMP } from '../src/lib/payments/mercadopago.js';
 import { simulateApproval } from '../src/lib/payments/internal.js';
 import { config } from '../src/config.js';
 
@@ -83,6 +83,26 @@ test('pedido pago exige confirmação do estorno; sem devolução física autom�
   assert.equal(db.collection('products').get('produto').estoque.reservado, 0);
 });
 
+test('estorno solicitado mantém a venda não cancelável até confirmação do provedor', () => {
+  const db = new DB();
+  db.collection('products').insert({ id: 'produto', nome: 'Teste', estoque: { quantidade: 10, reservado: 1 } });
+  order(db, { id: 'pendente', qtd: 1, payment: 'pg' });
+  db.collection('payments').insert({ id: 'pg', pedidoId: 'pendente', status: 'approved',
+    provedor: 'internal', valorCentavos: 1050 });
+  assert.equal(atualizarStatusFinanceiro(db, 'pendente', 'aprovado').ok, true);
+  assert.equal(db.collection('products').get('produto').estoque.quantidade, 9);
+  db.collection('payments').update('pg', { status: 'refund_pending' });
+  assert.equal(atualizarStatusFinanceiro(db, 'pendente', 'estorno_solicitado').ok, true);
+  assert.equal(cancelarPedido(db, 'pendente').ok, false, 'não cancela se estorno ainda está pendente');
+  assert.equal(atualizarStatusFinanceiro(db, 'pendente', 'estornado').ok, false,
+    'não pode presumir que pedido foi reembolsado');
+  db.collection('payments').update('pg', { status: 'refunded' });
+  assert.equal(atualizarStatusFinanceiro(db, 'pendente', 'estornado').ok, true);
+  assert.equal(cancelarPedido(db, 'pendente').ok, true);
+  assert.equal(db.collection('products').get('produto').estoque.quantidade, 9,
+    'estorno financeiro não pode repor fisicamente produto vendido');
+});
+
 test('simulação não pode reaplicar aprovação já finalizada', async () => {
   const db = new DB();
   db.collection('payments').insert({ id: 'p1', status: 'pending', provedor: 'internal', eventos: [] });
@@ -140,6 +160,13 @@ test('webhook MP exige assinatura com segredo e verifica valor, moeda e vínculo
     const atrasadaDepois = await webhookMP({ db, headers, body: payload, dataId: '123', config: conf });
     assert.equal(atrasadaDepois.ok, true);
     assert.equal(atrasadaDepois.status, 'ignored');
+    assert.equal(db.collection('payments').get('mp_123').status, 'refunded');
+    const consultaAntiga = await getStatusMP({
+      db, payment: db.collection('payments').get('mp_123'), config: conf,
+    });
+    assert.equal(consultaAntiga.ok, true);
+    assert.equal(consultaAntiga.ignorado, true);
+    assert.equal(consultaAntiga.status, 'refunded');
     assert.equal(db.collection('payments').get('mp_123').status, 'refunded');
   } finally {
     globalThis.fetch = fetchOriginal;
