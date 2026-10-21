@@ -220,7 +220,8 @@ async function main() {
     await cli.get('/admin/login');
     const r = await cli.post('/admin/login', { form: { email, senha } });
     if (r.status !== 303 && r.status !== 302) throw new Error(`login admin falhou (${r.status})`);
-    // O token de visitante do login é substituído pelo token da sessão administrativa.
+    // Após autenticar, os POSTs administrativos usam o token da sessão
+    // administrativa. O token de visitante usado no login não é mais aceito.
     const painel = await cli.get('/admin');
     if (painel.status !== 200 || !cli.csrf) throw new Error('Não foi possível obter CSRF da sessão administrativa.');
     return r;
@@ -756,14 +757,15 @@ async function main() {
     return 'processado 1x, duplicata ignorada';
   });
 
-  await testar('Cancelamento de pedido devolve o estoque', async () => {
+  await testar('Cancelamento de pedido pago exige estorno sem entrada física automática', async () => {
     const r = await admin.post(`/admin/api/pedidos/${idPedido}/cancelar`, { json: {} });
     assert(r.json?.ok, r.json?.erro || 'falhou');
     const d = await admin.get(`/admin/pedidos/${idPedido}`);
-    assert(/cancelado/i.test(d.texto), 'pedido não consta como cancelado');
+    assert(/cancelado/i.test(d.texto), 'pedido não consta como cancelado após estorno confirmado');
     const historico = await admin.get('/admin/estoque');
-    assert(/cancelamento|libera/i.test(historico.texto), 'liberação do estoque não registrada');
-    return 'cancelado e estoque liberado/devolvido';
+    assert(!historico.texto.includes('cancelamento_pos_aprovacao'),
+      'cancelamento não pode devolver mercadoria sem confirmação física');
+    return 'cancelado após estorno confirmado, sem devolução física automática';
   });
 
   /* ========================== PAINEL ADMINISTRATIVO ==================== */
