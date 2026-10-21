@@ -150,7 +150,7 @@ ${urls.map((u) => `  <url><loc>${e(u)}</loc><lastmod>${hoje}</lastmod><changefre
 
   app.get('/manifest.webmanifest', (req, res) => {
     const s = db.collection('settings').get('empresa') || {};
-    res.json({
+    res.text(JSON.stringify({
       name: s.nomeFantasia || 'Farmácia Pague Pouco',
       short_name: 'Pague Pouco',
       start_url: '/',
@@ -158,7 +158,7 @@ ${urls.map((u) => `  <url><loc>${e(u)}</loc><lastmod>${hoje}</lastmod><changefre
       background_color: '#ffffff',
       theme_color: '#8b0000',
       icons: [{ src: '/img/favicon.svg?v=20261021-vermelho', sizes: 'any', type: 'image/svg+xml' }],
-    });
+    }), 200, 'application/manifest+json');
   });
 }
 
