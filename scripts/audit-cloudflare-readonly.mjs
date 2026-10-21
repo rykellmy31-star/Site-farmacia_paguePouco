@@ -5,10 +5,14 @@
  */
 const WORKER = 'site-farmacia-paguepouco';
 const ACCOUNT_FROM_DEPLOY = 'bd72cac5a83927b9fd935b34ad927dc7';
-const token = process.env.CLOUDFLARE_AUDIT_TOKEN ||
-  process.env.CLOUDFLARE_API_TOKEN || process.env.CF_API_TOKEN || '';
+const token = process.env.CLOUDFLARE_AUDIT_TOKEN || '';
 const declaredAccount = process.env.CLOUDFLARE_ACCOUNT_ID || '';
 const result = { worker: WORKER, method: 'GitHub Actions / API Cloudflare somente leitura' };
+if (!declaredAccount) {
+  result.status = 'SEM_CLOUDFLARE_ACCOUNT_ID_NESTE_REPOSITORIO';
+  console.log('CLOUDFLARE_AUDIT=' + JSON.stringify(result));
+  process.exit(0);
+}
 if (declaredAccount && declaredAccount !== ACCOUNT_FROM_DEPLOY) {
   result.status = 'CONTA_DIFERENTE_DA_DEPLOY';
   result.details = 'O Account ID cadastrado no repositório não corresponde ao Worker Builds publicado.';
