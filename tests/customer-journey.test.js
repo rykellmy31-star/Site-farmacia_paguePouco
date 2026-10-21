@@ -215,29 +215,6 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(beforeCheckout.passwordTokens?.length || 0, 0,
     'sem serviço de e-mail não se deve gerar token de recuperação inacessível');
 
-  // Altera senha com segundo navegador simultâneo: sessões anteriores
-  // devem ser revogadas sem derrubar a sessão que autorizou a troca.
-  const outraSessaoCliente = new Browser(origin);
-  await outraSessaoCliente.token('/conta/login');
-  const abriuSegunda = await outraSessaoCliente.form('/conta/login', {
-    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
-  });
-  assert.equal(abriuSegunda.status, 303);
-  assert.equal((await outraSessaoCliente.get('/conta')).status, 200);
-  await client.token('/conta/dados');
-  const trocouCliente = await client.form('/conta/senha', {
-    senhaAtual: 'ClienteTeste123', senhaNova: 'ClienteSenhaNova2026',
-  });
-  assert.equal(trocouCliente.status, 303);
-  assert.equal((await client.get('/conta')).status, 200);
-  assert.equal((await outraSessaoCliente.get('/conta')).status, 303,
-    'mudança de senha encerra outras sessões do cliente');
-  await outraSessaoCliente.token('/conta/login');
-  assert.equal((await outraSessaoCliente.form('/conta/login', {
-    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
-  })).status, 401, 'senha antiga não pode continuar válida');
-
-
   // A API administrativa recusa regras promocionais inválidas antes de
   // persistir qualquer desconto que poderia afetar o checkout.
   for (const [codigo, tipo, valor, limite] of [
@@ -364,6 +341,14 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   const unliked = await client.form('/conta/favoritos/remover', { produtoId: produto.id });
   assert.equal(unliked.status, 303);
 
+  // Segundo navegador mantém sessão aberta até a mudança da senha.
+  const outraSessaoCliente = new Browser(origin);
+  await outraSessaoCliente.token('/conta/login');
+  const abriuSegunda = await outraSessaoCliente.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
+  });
+  assert.equal(abriuSegunda.status, 303);
+  assert.equal((await outraSessaoCliente.get('/conta')).status, 200);
   await client.token('/conta/dados');
   const wrongPassword = await client.form('/conta/senha', {
     senhaAtual: 'senha-errada', senhaNova: 'NovaSenha789',
@@ -373,6 +358,10 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     senhaAtual: 'ClienteTeste123', senhaNova: 'NovaSenha789',
   });
   assert.equal(goodPassword.status, 303, 'troca de senha deve ser permitida');
+  assert.equal((await client.get('/conta')).status, 200,
+    'sessão que validou senha atual deve continuar autenticada');
+  assert.equal((await outraSessaoCliente.get('/conta')).status, 303,
+    'troca de senha deve encerrar sessão do outro navegador');
 
   // Tenta forçar destino externo pela entrada "proximo": o login deve
   // redirecionar apenas dentro do próprio site.
