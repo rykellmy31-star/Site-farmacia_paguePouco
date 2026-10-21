@@ -234,6 +234,10 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     descontoPixCentavos,
     acrescimoJurosCentavos,
     cupom: cupomAplicado,
+    // Controla devolução da utilização caso o pagamento seja recusado
+    // ou expire, sem alterar contabilização de pedidos antigos.
+    cupomUsoReservado: !!cupomAplicado,
+    cupomUsoLiberadoEm: null,
     freteCentavos,
     freteOpcao: {
       id: frete.opcao.id,
@@ -389,6 +393,18 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   if (status === 'recusado' || status === 'expirado') {
     const liberacao = liberarReserva(db, pedido);
     if (!liberacao.ok) return liberacao;
+
+    // A tentativa de pagamento não consumiu definitivamente a promoção:
+    // devolva o uso reservado para que o cliente possa tentar novamente.
+    // O indicador de liberação impede desconto duplicado, e pedidos antigos
+    // sem esse indicador continuam intactos (sem recontagem retroativa).
+    if (pedido.cupomUsoReservado === true && !pedido.cupomUsoLiberadoEm && pedido.cupom?.cupomId) {
+      const cupom = db.collection('coupons').get(pedido.cupom.cupomId);
+      if (cupom) db.collection('coupons').update(cupom.id, {
+        usos: Math.max(0, Number(cupom.usos || 0) - 1),
+      });
+      patch.cupomUsoLiberadoEm = nowISO();
+    }
   }
 
   const atualizado = db.collection('orders').update(pedidoId, patch);
