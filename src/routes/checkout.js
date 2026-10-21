@@ -263,19 +263,33 @@ export function registrarRotasCheckout(app, db) {
       cobranca = { ok: false, erro: 'Não foi possível determinar se o provedor registrou a cobrança.' };
     }
     if (!cobranca?.ok || !cobranca.pagamento) {
-      if (erroIndeterminado) {
+      if (erroIndeterminado || cobranca?.indeterminado) {
+        // Timeout, HTTP 5xx/429 e erros de transporte não confirmam recusa.
+        // Evite novo checkout automático: conserve a reserva e permita
+        // à equipe localizar a cobrança no provedor pelo código do pedido.
         db.collection('orders').update(pedido.id, {
           pendenciaPagamento: 'conciliacao_necessaria',
           historico: [...(pedido.historico || []), {
             tipo: 'financeiro', status: 'conciliacao_necessaria', em: new Date().toISOString(),
-            por: 'sistema', obs: 'Resposta indeterminada do provedor; reserva mantida até conciliação.',
+            por: 'sistema', obs: 'Resultado incerto do provedor; reserva mantida para conciliação manual.',
           }],
         });
         return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
       }
-      cancelarPedido(db, pedido.id, { motivo: 'Cobrança não criada; estoque liberado.', por: 'sistema' });
+      const cancelado = cancelarPedido(db, pedido.id, {
+        motivo: 'Cobrança não criada; estoque liberado.', por: 'sistema',
+      });
+      if (!cancelado.ok) {
+        // Nunca reabra o checkout caso a reserva ainda esteja comprometida.
+        db.collection('orders').update(pedido.id, {
+          pendenciaPagamento: 'conciliacao_necessaria',
+        });
+        return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
+      }
       // Restaura o carrinho original: a compra NÃO foi finalizada.
-      db.collection('carts').update(cart.id, { ...carrinhoOriginal, atualizadoEm: new Date().toISOString() });
+      db.collection('carts').update(cart.id, {
+        ...carrinhoOriginal, atualizadoEm: new Date().toISOString(),
+      });
       return void res.redirect('/checkout/pagamento?erro=' +
         encodeURIComponent(cobranca?.erro || 'Não foi possível iniciar o pagamento.'));
     }
