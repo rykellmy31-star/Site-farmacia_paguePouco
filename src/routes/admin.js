@@ -832,11 +832,19 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'pedidos.editar')) return;
     const pedido = db.collection('orders').get(req.params.id);
     if (!pedido) return void res.json({ ok: false, erro: 'Pedido não encontrado.' }, 404);
+    const rastreioUrl = cleanText(req.body.url, 300).trim();
+    if (rastreioUrl) {
+      let url;
+      try { url = new URL(rastreioUrl); } catch { /* endereço inválido */ }
+      if (!url || url.protocol !== 'https:' || !url.hostname || url.username || url.password) {
+        return void res.json({ ok: false, erro: 'O rastreamento exige um link HTTPS válido.' }, 400);
+      }
+    }
     const r = atualizarStatusOperacional(db, pedido.id, pedido.statusOperacional, {
       rastreio: {
         codigo: cleanText(req.body.codigo, 60),
         transportadora: cleanText(req.body.transportadora, 60),
-        url: cleanText(req.body.url, 300),
+        url: rastreioUrl,
         enviadoEm: req.body.codigo ? new Date().toISOString() : null,
       },
       obs: 'Rastreio atualizado.', por: req.adminUser.nome,
