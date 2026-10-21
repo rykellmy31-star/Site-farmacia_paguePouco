@@ -24,6 +24,20 @@ function exigirLoginCompra(req, res, db) {
   return true;
 }
 
+/**
+ * Um pedido registrado não deve manter a mesma cesta disponível para
+ * segundo checkout. A cesta original fica preservada para auditoria do
+ * pedido e a sessão recebe outra, vazia, mesmo se o provedor falhar.
+ */
+export function renovarCestaAposPedido(db, res, clienteId = null) {
+  const nova = db.collection('carts').insert({
+    id: `c_${uid()}`, clienteId, itens: [], cupom: null, frete: null,
+    criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+  });
+  attachCartCookie(res, nova.id);
+  return nova;
+}
+
 export function registrarRotasCheckout(app, db) {
   /* ----------------------------- CESTA ----------------------------- */
   app.get('/carrinho', (req, res) => {
@@ -290,6 +304,7 @@ export function registrarRotasCheckout(app, db) {
             por: 'sistema', obs: 'Resultado incerto do provedor; reserva mantida para conciliação manual.',
           }],
         });
+        renovarCestaAposPedido(db, res, req.user?.id || null);
         return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
       }
       const cancelado = cancelarCriacaoComRecusaDefinitiva(db, pedido.id);
@@ -298,6 +313,7 @@ export function registrarRotasCheckout(app, db) {
         db.collection('orders').update(pedido.id, {
           pendenciaPagamento: 'conciliacao_necessaria',
         });
+        renovarCestaAposPedido(db, res, req.user?.id || null);
         return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
       }
       // Restaura o carrinho original: a compra NÃO foi finalizada.
@@ -337,11 +353,7 @@ export function registrarRotasCheckout(app, db) {
     // Após o pedido, o cliente recebe uma CESTA NOVA (o carrinho anterior fica
     // vinculado ao pedido). Isso mantém a proteção contra duplicidade sem
     // impedir uma compra legítima em seguida.
-    const cestaNova = db.collection('carts').insert({
-      id: `c_${uid()}`, clienteId: req.user?.id || null, itens: [], cupom: null, frete: null,
-      criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
-    });
-    attachCartCookie(res, cestaNova.id);
+    renovarCestaAposPedido(db, res, req.user?.id || null);
 
     res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
   });
