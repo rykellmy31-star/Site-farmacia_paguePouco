@@ -26,6 +26,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Payment and Pix safety regressions (offline, mocked provider)
         run: node --test tests/payment-safety.test.js tests/pix-reconciliation.test.js tests/report-permissions.test.js
+      - name: Verify isolated backup restore and recurring Cloudflare alarms
+        run: node --test tests/restore-rehearsal.test.js
       - name: Existing integration tests (simulated payments only)
         run: npm test
       - name: Cloudflare component tests
