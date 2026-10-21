@@ -5,6 +5,7 @@ import { formatDateTime, formatDate, formatNumber } from '../../lib/format.js';
 import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, podeVender } from '../../lib/catalog.js';
 import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
+import { inovaAtiva } from '../../lib/inovafarma-stock.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -457,9 +458,10 @@ export function telaEstoque(ctx, { produtos, movimentacoes, alertas }) {
     ativo: 'estoque',
     conteudo: `
     <h1 class="mt-0">Controle de estoque</h1>
+    ${inovaAtiva() ? '<div class="alerta info"><strong>Estoque gerenciado pela InovaFarma.</strong> Altere os saldos apenas no ERP. O site bloqueia vendas quando o estoque estiver desatualizado.</div>' : ''}
     ${alertas.length ? `<div class="alerta aviso"><strong>${alertas.length} produto(s) abaixo do estoque mínimo.</strong></div>` : ''}
 
-    ${painel({
+    ${!inovaAtiva() ? painel({
       titulo: 'Movimentação manual',
       corpo: `<form method="post" action="/admin/api/estoque/movimentar">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
@@ -479,7 +481,7 @@ export function telaEstoque(ctx, { produtos, movimentacoes, alertas }) {
         ${campoAdmin({ nome: 'observacao', rotulo: 'Observação' })}
         <button class="botao" type="submit">Registrar movimentação</button>
       </form>`,
-    })}
+    }) : ''}
 
     ${painel({
       titulo: 'Situação atual',
