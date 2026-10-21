@@ -68,10 +68,10 @@ test('rastreamento repetido não duplica envio; avanço de entrega registra um a
   assert.equal(db.collection('mailOutbox').count(), 2);
 });
 
-test('recusa e cancelamento geram avisos distintos uma única vez', () => {
+test('recusa cancela automaticamente e emite avisos distintos uma única vez', () => {
   const db = pedidoTeste();
   assert.equal(atualizarStatusFinanceiro(db, 'pedido', 'recusado').ok, true);
-  assert.equal(cancelarPedido(db, 'pedido').ok, true);
+  assert.equal(db.collection('orders').get('pedido').statusOperacional, 'cancelado');
   assert.equal(cancelarPedido(db, 'pedido').ok, false);
   assert.deepEqual(db.collection('mailOutbox').all().map(x => x.meta.eventKey), [
     'pedido:pedido:financeiro:recusado',
