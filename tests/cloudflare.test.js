@@ -218,7 +218,8 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const range = await call(media.url, { headers: { Range: 'bytes=0-3' } });
   assert.equal(range.status, 206);
   assert.equal(await range.text(), '<svg');
-  const check = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: csrf }) });
+  const check = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: adminToken }) });
+  assert.equal(check.status, 200, 'A sessão administrativa e o token persistem após reiniciar.');
   const recovered = await check.json();
   assert.equal(recovered.collections.admins.length, 1, 'bootstrap não duplica usuários');
   assert.equal(recovered.collections.settings.find(x => x.id === 'seo')?.tituloPadrao, 'Teste de edição persistente', 'Edição de texto persiste após reiniciar o Worker.');
