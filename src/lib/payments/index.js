@@ -39,23 +39,24 @@ export const PROVIDERS = {
 };
 
 export function paymentSettings(db) {
-  const s = db.collection('settings').get('payments');
-  return s && typeof s === 'object' ? s : null;
+  // A chave utilizada pelo painel é "pagamentos"; "payments" é legado.
+  const canonical = db.collection('settings').get('pagamentos');
+  const legacy = db.collection('settings').get('payments');
+  const defaults = { provedor: config.payments.provider, meios: { pix: true, credit_card: true, debit_card: false } };
+  return { ...defaults, ...(legacy || {}), ...(canonical || {}), meios: {
+    ...defaults.meios, ...(legacy?.meios || {}), ...(canonical?.meios || {}),
+  } };
 }
 
 export function getProviderInfo(db) {
   const settings = paymentSettings(db) || {};
-  let id = (settings.provedor || config.payments.provider || 'internal').toLowerCase();
-  if (!PROVIDERS[id]) id = 'internal';
-  if (id === 'mercadopago' && !config.payments.mp.accessToken) {
-    return {
-      ...PROVIDERS.mercadopago,
-      configurado: false,
-      motivo: 'Credenciais do Mercado Pago não configuradas no servidor (.env). Operando com o provedor interno de testes.',
-      efetivo: 'internal',
-    };
-  }
-  return { ...PROVIDERS[id], configurado: id !== 'mercadopago' || !!config.payments.mp.accessToken, efetivo: id };
+  const id = String(settings.provedor || config.payments.provider || 'internal').toLowerCase();
+  if (!PROVIDERS[id]) return { ...PROVIDERS.internal, configurado: false, motivo: 'Provedor inválido.', efetivo: id };
+  const configurado = id !== 'mercadopago' || Boolean(config.payments.mp.accessToken);
+  return {
+    ...PROVIDERS[id], configurado, efetivo: id,
+    motivo: configurado ? null : 'Credenciais do Mercado Pago ausentes. Checkout bloqueado; nenhuma cobrança simulada será criada.',
+  };
 }
 
 export function enabledMethods(db) {
@@ -63,9 +64,10 @@ export function enabledMethods(db) {
   const list = settings.meios || {};
   const info = getProviderInfo(db);
   return {
-    pix: list.pix !== false,
-    credit_card: list.credit_card !== false,
-    debit_card: list.debit_card === true,
+    pix: info.configurado && list.pix !== false,
+    // Cartão real permanece bloqueado até a tokenização no navegador ser homologada.
+    credit_card: info.configurado && info.efetivo === 'internal' && list.credit_card !== false,
+    debit_card: info.configurado && info.efetivo === 'internal' && list.debit_card === true,
     provider: info.efetivo,
     real: info.efetivo === 'mercadopago' && info.configurado,
   };
@@ -110,27 +112,36 @@ function resolve(db) {
  * @returns {Promise<{ok:boolean, erro?:string, pagamento:object}>}
  */
 export async function createPayment(db, { order, method, payer, installments = 1, cardToken = null, issuerId = null, paymentMethodId = null, returnUrls = {} }) {
+  const info = getProviderInfo(db);
+  if (!info.configurado) return { ok: false, erro: info.motivo || 'Provedor não configurado.' };
+  if (!enabledMethods(db)[method]) return { ok: false, erro: 'Meio de pagamento indisponível ou não homologado.' };
   const provider = resolve(db);
   return provider.createPayment({ db, order, method, payer, installments, cardToken, issuerId, paymentMethodId, returnUrls, config });
 }
 
 /** Consulta o status de uma cobrança no provedor. */
 export async function getPaymentStatus(db, payment) {
-  const provider = resolve(db);
+  const provider = payment.provedor === 'mercadopago' ? mercadoPago : internalProvider;
   return provider.getStatus({ db, payment, config });
 }
 
 /** Processa notificação (webhook) do provedor. */
-export async function handleWebhook(db, { provider, headers, body, rawBody }) {
+export async function handleWebhook(db, { provider, headers, body, rawBody, dataId = null }) {
   const id = String(provider || '').toLowerCase();
-  if (id === 'mercadopago') return mercadoPago.handleWebhook({ db, headers, body, rawBody, config });
+  if (id === 'mercadopago') return mercadoPago.handleWebhook({ db, headers, body, rawBody, dataId, config });
   return internalProvider.handleWebhook({ db, headers, body, rawBody, config });
 }
 
 /** Solicita estorno (quando o provedor permitir). */
 export async function refundPayment(db, payment, amountCents = null) {
-  const provider = resolve(db);
-  return provider.refund({ db, payment, amountCents, config });
+  if (!payment) return { ok: false, erro: 'Pagamento inexistente.' };
+  if (amountCents != null && Number(amountCents) !== Number(payment.valorCentavos)) {
+    return { ok: false, erro: 'Estorno parcial exige conciliação própria; somente o estorno total está disponível.' };
+  }
+  const provider = payment.provedor === 'mercadopago' ? mercadoPago :
+    payment.provedor === 'internal' ? internalProvider : null;
+  if (!provider) return { ok: false, erro: 'Provedor do pagamento desconhecido.' };
+  return provider.refund({ db, payment, amountCents: null, config });
 }
 
 export function providerPublicInfo(db) {
