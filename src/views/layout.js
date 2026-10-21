@@ -4,7 +4,7 @@ import { config } from '../config.js';
  * barra de cookies e temas vindos das configurações do painel.
  */
 import { escapeHtml, sanitizeHtml } from '../lib/security.js';
-import { formatBRL } from '../lib/format.js';
+import { formatBRL, FUSO_LOJA } from '../lib/format.js';
 import { montarArvore } from '../lib/catalog.js';
 import { escapeHtml as e } from '../lib/security.js';
 
@@ -36,14 +36,20 @@ export function linkWhatsApp(whatsapp, extra = '') {
   return numero ? `https://wa.me/${numero}?text=${mensagem}` : '';
 }
 
-export function horarioAtendimentoAgora(whatsapp) {
+export function horarioAtendimentoAgora(whatsapp, agora = new Date()) {
   if (!whatsapp?.respeitarHorario) return { aberto: true, texto: '' };
-  const dias = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-  const hoje = dias[new Date().getDay()];
+  // O Worker usa UTC; consultar horário e dia útil no fuso real da loja.
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: FUSO_LOJA, weekday: 'long', hour: '2-digit', minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(agora);
+  const valor = tipo => partes.find(p => p.type === tipo)?.value || '';
+  const dias = { Sunday:'domingo', Monday:'segunda', Tuesday:'terca',
+    Wednesday:'quarta', Thursday:'quinta', Friday:'sexta', Saturday:'sabado' };
+  const hoje = dias[valor('weekday')];
   const cfg = (whatsapp.horarios || []).find((h) => h.dia === hoje);
   if (!cfg || !cfg.ativo) return { aberto: false, texto: whatsapp.mensagemIndisponivel || '' };
-  const agora = new Date();
-  const minutos = agora.getHours() * 60 + agora.getMinutes();
+  const minutos = Number(valor('hour')) * 60 + Number(valor('minute'));
   const [hi, mi] = String(cfg.inicio || '00:00').split(':').map(Number);
   const [hf, mf] = String(cfg.fim || '00:00').split(':').map(Number);
   const dentro = minutos >= hi * 60 + mi && minutos <= hf * 60 + mf;
