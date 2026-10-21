@@ -139,7 +139,13 @@ export async function createPayment({ db, order, method, payer, installments = 1
       config,
     });
     if (!pref.ok) {
-      return { ok: false, erro: `Mercado Pago recusou a preferência de pagamento: ${JSON.stringify(pref.data)}` };
+      return {
+        ok: false,
+        indeterminado: [408, 429].includes(pref.status) || pref.status >= 500,
+        erro: pref.status >= 500 || [408, 429].includes(pref.status)
+          ? 'Resposta temporariamente indisponível. Confira a situação antes de tentar outra compra.'
+          : 'O provedor não aceitou os dados do pagamento.',
+      };
     }
     const pagamento = payments.insert({
       id: `mp_pref_${pref.data.id}`,
@@ -164,7 +170,16 @@ export async function createPayment({ db, order, method, payer, installments = 1
 
   const res = await mpFetch(endpoint, { method: 'POST', body: payload, idempotencyKey, config });
   if (!res.ok) {
-    return { ok: false, erro: `Mercado Pago recusou a cobrança: ${JSON.stringify(res.data?.message || res.data)}` };
+    // Após receber HTTP 5xx, 408 ou 429, não há garantia de que o
+    // provedor não criou a cobrança. Não libere a reserva para vender
+    // o mesmo estoque ou aceitar uma segunda cobrança automaticamente.
+    const indeterminado = [408, 429].includes(res.status) || res.status >= 500;
+    return {
+      ok: false, indeterminado,
+      erro: indeterminado
+        ? 'Pagamento com confirmação pendente. Consulte seus pedidos antes de tentar novamente.'
+        : 'O provedor recusou a solicitação de pagamento. Revise os dados e tente novamente.',
+    };
   }
   const d = res.data;
   const poi = d.point_of_interaction || {};
