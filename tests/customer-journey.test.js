@@ -171,6 +171,19 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(cart.ok, true);
   assert.equal(cart.subtotal, 3980, 'preço deve vir do cadastro, nunca do navegador');
   assert.equal(cart.quantidade, 2);
+  for (const quantidade of [-1, 1.5, 0, 100]) {
+    const rejeitado = await client.json('/api/carrinho/adicionar', {
+      produtoId: produto.id, quantidade,
+    });
+    assert.equal(rejeitado.status, 400, 'quantidade inválida deve ser recusada na API: ' + quantidade);
+    assert.equal((await rejeitado.json()).ok, false);
+  }
+  const qtdFracionada = await client.json('/api/carrinho/atualizar', {
+    produtoId: produto.id, quantidade: 2.5,
+  });
+  assert.equal(qtdFracionada.status, 400, 'alteração fracionada deve ser recusada');
+  assert.equal((await (await client.get('/api/carrinho')).json()).quantidade, 2,
+    'tentativas inválidas não podem modificar o carrinho');
   const noLogin = await client.get('/checkout/endereco');
   assert.equal(noLogin.status, 303);
   assert.match(noLogin.headers.get('location'), /conta\/login/);
@@ -353,6 +366,25 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     telefone: '11999998888', cpf: '', senha: 'OutroCliente123', senha2: 'OutroCliente123',
   });
   assert.equal(secondSignUp.status, 303);
+  // Em computador compartilhado, um cookie antigo não pode transferir
+  // itens ou endereço do primeiro cliente para o segundo.
+  const beforeShare = await client.json('/api/carrinho/adicionar', {
+    produtoId: produto.id, quantidade: 1,
+  });
+  assert.equal(beforeShare.status, 200);
+  const cartIdOriginal = client.cookies.get('pp_cart');
+  secondCustomer.cookies.set('pp_cart', cartIdOriginal);
+  const cestaIsolada = await secondCustomer.get('/api/carrinho');
+  assert.equal(cestaIsolada.status, 200);
+  assert.equal((await cestaIsolada.json()).quantidade, 0,
+    'cliente B não deve receber itens do cliente A pelo cookie');
+  assert.notEqual(secondCustomer.cookies.get('pp_cart'), cartIdOriginal);
+  const firstCartPersisted = (await snapshot()).carts.find(c => c.id === cartIdOriginal);
+  assert.equal(firstCartPersisted.clienteId, (await snapshot()).customers.find(c =>
+    c.email === 'comprador-jornada@tests.example').id);
+  assert.equal(firstCartPersisted.itens.length, 1,
+    'teste de isolamento não deve apagar cesta pertencente ao cliente A');
+  assert.equal((await client.json('/api/carrinho/remover', { produtoId: produto.id })).status, 200);
   const forbiddenOrder = await secondCustomer.get('/conta/pedidos/' + order.codigo);
   assert.equal(forbiddenOrder.status, 303, 'cliente diferente não pode consultar pedido de outro');
   assert.equal(forbiddenOrder.headers.get('location'), '/conta/pedidos');
