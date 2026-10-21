@@ -480,4 +480,12 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(finished.statusOperacional, 'entregue');
   const cancelledFinished = await admin.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
   assert.equal(cancelledFinished.status, 409, 'entrega finalizada não pode ser cancelada pelo formulário');
+  assert.equal((await cancelledFinished.json()).ok, false);
+  const afterForbiddenCancellation = await snapshot();
+  assert.equal(afterForbiddenCancellation.payments.find(p => p.id === payment.id).status, 'approved',
+    'cancelamento de entrega finalizada NUNCA deve estornar a cobrança');
+  assert.equal(afterForbiddenCancellation.orders.find(p => p.id === order.id).statusFinanceiro, 'aprovado',
+    'pedido entregue mantém estado financeiro sem solicitação de reembolso');
+  assert.equal(afterForbiddenCancellation.products.find(p => p.id === produto.id).estoque.quantidade, 8,
+    'nenhuma tentativa de cancelamento mexe no estoque entregue');
 });
