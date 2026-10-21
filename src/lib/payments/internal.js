@@ -151,6 +151,7 @@ export async function simulateApproval(db, paymentId, { aprovado = true, origem 
   if (p.provedor !== 'internal') {
     return { ok: false, erro: 'Pagamentos reais não podem ser aprovados manualmente. Aguarde a confirmação do provedor.' };
   }
+  if (p.status !== STATUS.PENDING) return { ok: false, erro: 'Somente pagamentos pendentes podem ser simulados.' };
   const status = aprovado ? STATUS.APPROVED : STATUS.REJECTED;
   const upd = db.collection('payments').update(paymentId, {
     status,
