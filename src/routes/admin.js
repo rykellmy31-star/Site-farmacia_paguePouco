@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { config } from '../config.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
-import { createSession, destroySession, hashPassword, verifyPassword, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
+import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
 import { paginaAdmin } from '../views/admin/layout.js';
 import {
   telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias,
@@ -1359,9 +1359,18 @@ function registrarApi(app, db) {
     if (req.adminUser?.role !== 'super_admin') return void res.json({ ok: false, erro: 'Sem permissão.' }, 403);
     const u = db.collection('admins').get(req.params.id);
     if (!u) return void res.json({ ok: false, erro: 'Usuário não encontrado.' }, 404);
-    const nova = String(req.body.senha || '').trim() || `PP@${Math.random().toString(36).slice(2, 8)}`;
-    if (nova.length < 8) return void res.json({ ok: false, erro: 'A senha deve ter no mínimo 8 caracteres.' }, 400);
+    // Nunca crie senhas administrativas com Math.random(): exige
+    // entropia criptográfica mesmo quando o campo vem em branco.
+    const nova = String(req.body.senha || '').trim() || `${randomToken(18)}Aa1`;
+    if (nova.length < 8 || !/[A-Za-z]/.test(nova) || !/\d/.test(nova)) {
+      return void res.json({ ok: false, erro: 'A senha deve ter no mínimo 8 caracteres, letras e números.' }, 400);
+    }
     db.collection('admins').update(u.id, { senhaHash: hashPassword(nova), deveTrocarSenha: true });
+    // Mudança de senha invalida sessões anteriores para que acesso
+    // revogado não continue ativo após o reset administrativo.
+    for (const session of db.collection('sessions').find((s) => s.type === 'admin' && s.userId === u.id)) {
+      db.collection('sessions').remove(session.id);
+    }
     logAdmin(db, req.adminUser, 'redefiniu_senha_usuario', 'admin', u.id, { email: u.email }, req);
     res.json({ ok: true, senhaProvisoria: nova, aviso: 'Envie esta senha ao usuário por canal seguro e oriente a troca no primeiro acesso.' });
   });
