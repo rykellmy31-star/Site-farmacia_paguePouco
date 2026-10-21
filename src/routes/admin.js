@@ -129,7 +129,7 @@ export function registrarRotasAdmin(app, db) {
     res.html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       <title>Painel — Farmácia Pague Pouco</title><link rel="stylesheet" href="/styles.css?v=banners-inteiros-20261020">
-      <link rel="icon" href="/img/favicon.svg"></head>
+      <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho"></head>
       <body style="background:var(--fundo);display:flex;align-items:center;justify-content:center;min-height:100vh">
       <div style="width:100%;max-width:420px;padding:14px">
         <div class="pagina-conteudo">
@@ -189,7 +189,8 @@ export function registrarRotasAdmin(app, db) {
     res.html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       <title>Alterar senha — Farmácia Pague Pouco</title>
-      <link rel="stylesheet" href="/styles.css"></head>
+      <link rel="stylesheet" href="/styles.css">
+      <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho"></head>
       <body style="background:var(--fundo);display:flex;align-items:center;justify-content:center;min-height:100vh">
       <main class="pagina-conteudo" style="max-width:480px;width:100%">
         <h1>${obrigatoria ? 'Troca de senha obrigatória' : 'Alterar minha senha'}</h1>
