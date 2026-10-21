@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
-import { cancelarPedido, atualizarStatusFinanceiro } from '../src/lib/orders.js';
+import { cancelarPedido, atualizarStatusFinanceiro, cancelarCriacaoComRecusaDefinitiva } from '../src/lib/orders.js';
 import { createPayment as criarCobrancaMP } from '../src/lib/payments/mercadopago.js';
 
 class DB {
@@ -124,4 +124,55 @@ test('timeout ou falha de rede exigem conciliação, sem criar pagamento fictíc
   } finally {
     globalThis.fetch = fetchAntes;
   }
+});
+
+test('recusa comprovada libera reserva e cupom durante criação da cobrança', () => {
+  const db = tentativa();
+  db.collection('orders').update('pedido', { pendenciaPagamento: 'criacao_em_andamento' });
+  assert.equal(cancelarPedido(db, 'pedido').ok, false,
+    'cancelamento normal segue bloqueado enquanto a cobrança é incerta');
+  const r = cancelarCriacaoComRecusaDefinitiva(db, 'pedido');
+  assert.equal(r.ok, true);
+  assert.equal(db.collection('orders').get('pedido').statusFinanceiro, 'recusado');
+  assert.equal(db.collection('orders').get('pedido').statusOperacional, 'cancelado');
+  assert.equal(db.collection('products').get('p1').estoque.reservado, 0);
+  assert.equal(db.collection('coupons').get('cupom').usos, 0);
+  assert.ok(db.collection('orders').get('pedido').cupomUsoLiberadoEm);
+  assert.equal(cancelarCriacaoComRecusaDefinitiva(db, 'pedido').ok, false,
+    'segundo rollback não gera outra saída nem devolve cupom duas vezes');
+  assert.equal(db.collection('stockMovements').find(m => m.tipo === 'liberacao').length, 1);
+});
+
+test('recusa não permite liberar estoque se pagamento já foi registrado', () => {
+  const db = tentativa();
+  db.collection('orders').update('pedido', { pendenciaPagamento: 'criacao_em_andamento' });
+  db.collection('payments').insert({
+    id: 'pagamento', pedidoId: 'pedido', provedor: 'mercadopago',
+    status: 'pending', valorCentavos: 1900,
+  });
+  assert.equal(cancelarCriacaoComRecusaDefinitiva(db, 'pedido').ok, false);
+  assert.equal(db.collection('orders').get('pedido').pendenciaPagamento, 'criacao_em_andamento');
+  assert.equal(db.collection('orders').get('pedido').statusFinanceiro, 'pendente');
+  assert.equal(db.collection('products').get('p1').estoque.reservado, 2);
+  assert.equal(db.collection('coupons').get('cupom').usos, 1);
+});
+
+test('resultado financeiro indeterminado não executa rollback mesmo sem vínculo', () => {
+  const db = tentativa();
+  db.collection('orders').update('pedido', { pendenciaPagamento: 'conciliacao_necessaria' });
+  assert.equal(cancelarCriacaoComRecusaDefinitiva(db, 'pedido').ok, false);
+  assert.equal(cancelarPedido(db, 'pedido').ok, false);
+  assert.equal(db.collection('products').get('p1').estoque.reservado, 2);
+  assert.equal(db.collection('coupons').get('cupom').usos, 1);
+});
+
+test('inconsistência na reserva bloqueia rollback e mantém conciliação manual', () => {
+  const db = tentativa();
+  db.collection('orders').update('pedido', { pendenciaPagamento: 'criacao_em_andamento' });
+  db.collection('products').update('p1', { estoque: { quantidade: 10, reservado: 0 } });
+  const r = cancelarCriacaoComRecusaDefinitiva(db, 'pedido');
+  assert.equal(r.ok, false);
+  assert.equal(db.collection('orders').get('pedido').pendenciaPagamento, 'conciliacao_necessaria');
+  assert.equal(db.collection('orders').get('pedido').statusFinanceiro, 'pendente');
+  assert.equal(db.collection('coupons').get('cupom').usos, 1);
 });
