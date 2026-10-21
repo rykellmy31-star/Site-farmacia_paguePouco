@@ -143,6 +143,17 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(product.precoCentavos, 1990);
   assert.equal(product.estoque.quantidade, 10);
 
+  // Texto inserido por terceiros nunca vira fórmula executável ao exportar.
+  const csvProbe = await admin.form('/admin/api/produtos', {
+    nome: '=SUM(2,3) Produto Teste', sku: 'CSV-DEFESA-001',
+    preco: '1.00', quantidade: '0', classificacao: 'nao_aplicavel', ativo: '1',
+  });
+  assert.equal(csvProbe.status, 200);
+  const productCsv = await admin.get('/admin/api/produtos/exportar.csv');
+  assert.equal(productCsv.status, 200);
+  assert.ok((await productCsv.text()).includes('"\'=SUM(2,3) Produto Teste"'),
+    'exportação CSV deve neutralizar fórmulas em nomes cadastrados');
+
   const client = new Browser(origin);
   assert.equal((await client.get('/')).status, 200);
   const search = await client.get('/busca?q=Sabonete%20Teste%20Jornada');
