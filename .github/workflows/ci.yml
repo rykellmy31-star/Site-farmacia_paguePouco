@@ -24,6 +24,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Payment and Pix safety regressions (offline, mocked provider)
+        run: node --test tests/payment-safety.test.js tests/pix-reconciliation.test.js
       - name: Existing integration tests (simulated payments only)
         run: npm test
       - name: Cloudflare component tests
