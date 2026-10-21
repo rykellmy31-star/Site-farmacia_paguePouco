@@ -119,7 +119,7 @@ export function registrarRotasConta(app, db) {
     res.html(telaEsqueciSenha(ctx, {}));
   });
 
-  app.post('/conta/esqueci-senha', (req, res) => {
+  app.post('/conta/esqueci-senha', async (req, res) => {
     const ctx = criarContexto(req, db);
     const email = String(req.body.email || '').trim().toLowerCase();
     const cliente = clientes().findOne((c) => String(c.email || '').toLowerCase() === email);
@@ -132,18 +132,24 @@ export function registrarRotasConta(app, db) {
         criadoEm: new Date().toISOString(), ip: req.ip,
       });
       const link = `${config.publicBaseUrl}/conta/redefinir/${token}`;
-      sendMail(db, {
+      try {
+        await sendMail(db, {
         to: cliente.email,
         subject: 'Recuperação de senha — Farmácia Pague Pouco',
         html: `<p>Olá, ${escapeHtml(cliente.nome.split(' ')[0])}.</p>
           <p>Recebemos um pedido para redefinir sua senha. Use o link abaixo (válido por 2 horas):</p>
           <p><a href="${link}">${link}</a></p>
           <p>Se você não pediu a troca, ignore esta mensagem.</p>`,
-      }).catch(() => {});
+        });
+      } catch {
+        // A mensagem não foi gravada; não afirme entrega ao cliente.
+      }
       logCustomer(db, cliente.id, 'solicitou_recuperacao_senha', 'cliente', cliente.id, {}, req);
     }
     res.html(telaEsqueciSenha(ctx, {
-      mensagem: 'Se o e-mail estiver cadastrado, enviaremos um link de recuperação. Verifique também a caixa de spam.',
+      mensagem: config.mail.enabled
+        ? 'Se o e-mail estiver cadastrado, o link será enviado após o processamento. Verifique o spam.'
+        : 'O envio de e-mail ainda não está habilitado. Para recuperar seu acesso, procure o atendimento da farmácia.',
     }));
   });
 
@@ -209,7 +215,12 @@ export function registrarRotasConta(app, db) {
     const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
     if (!pedido) return void res.redirect('/conta/pedidos');
     const r = cancelarPedido(db, pedido.id, { motivo: cleanText(req.body.motivo, 300) || 'Cancelado pelo cliente.', por: req.user.nome });
-    logCustomer(db, req.user.id, 'cancelou_pedido', 'pedido', pedido.id, { motivo: req.body.motivo || '' }, req);
+    if (!r.ok) {
+      const ctx = criarContexto(req, db);
+      ctx.aviso = escapeHtml(r.erro || 'Não foi possível cancelar este pedido.');
+      return void res.html(telaPedidoDetalhe(ctx, { pedido: db.collection('orders').get(pedido.id) }), 409);
+    }
+    logCustomer(db, req.user.id, 'cancelou_pedido', 'pedido', pedido.id, { motivo: cleanText(req.body.motivo, 300) }, req);
     res.redirect(`/conta/pedidos/${pedido.codigo}`);
   });
 
