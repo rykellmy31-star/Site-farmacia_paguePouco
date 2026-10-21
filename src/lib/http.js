@@ -406,6 +406,9 @@ async function serveStatic(req, res, dir, prefix, opts = {}) {
   res.set('Cache-Control', cacheable ? `public, max-age=${opts.maxAge ?? 604800}` : 'no-cache');
   if (opts.download) res.set('Content-Disposition', 'attachment');
   res.set('Content-Length', stat.size);
+  // A resposta de arquivo é assumida pelo stream; o roteador NÃO deve
+  // chamar res.end() novamente enquanto a transferência acontece.
+  res._ended = true;
   res.raw.writeHead(200, res.headers);
   const stream = fs.createReadStream(filePath);
   stream.on('error', () => { try { res.raw.end(); } catch { /* conexão já fechada */ } });
