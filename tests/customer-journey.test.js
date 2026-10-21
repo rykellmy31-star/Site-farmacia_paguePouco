@@ -497,4 +497,43 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     'pedido entregue mantém estado financeiro sem solicitação de reembolso');
   assert.equal(afterForbiddenCancellation.products.find(p => p.id === produto.id).estoque.quantidade, 8,
     'nenhuma tentativa de cancelamento mexe no estoque entregue');
+
+  // Novo pedido simulado: cancelamento antes do envio só é concluído após
+  // estorno confirmado, sem repor automaticamente o produto no estoque.
+  await client.token('/checkout/endereco');
+  const addRefund = await client.json('/api/carrinho/adicionar', {
+    produtoId: produto.id, quantidade: 1,
+  });
+  assert.equal(addRefund.status, 200);
+  const freightRefund = await client.form('/checkout/endereco', {
+    nome: 'Comprador Jornada Teste', telefone: '11988887777',
+    cep: '01001000', logradouro: 'Rua de teste', numero: '55',
+    bairro: 'Centro', cidade: 'São Paulo', uf: 'SP',
+  });
+  assert.equal(freightRefund.status, 303);
+  await client.token('/checkout/pagamento');
+  const finishRefund = await client.form('/checkout/finalizar', { metodoPagamento: 'pix' });
+  assert.equal(finishRefund.status, 303, 'segunda compra simulada deve concluir');
+  const allOrders = (await snapshot()).orders;
+  const refundOrder = allOrders.find(p => p.cliente?.email === 'comprador-jornada@tests.example' && p.id !== order.id);
+  assert.ok(refundOrder);
+  const approveRefund = await admin.json('/admin/api/pedidos/' + refundOrder.id + '/simular-pagamento',
+    { status: 'approved' });
+  assert.equal(approveRefund.status, 200);
+  const cancelApproved = await admin.json('/admin/api/pedidos/' + refundOrder.id + '/cancelar', {});
+  assert.equal(cancelApproved.status, 200);
+  assert.equal((await cancelApproved.json()).ok, true);
+  const afterRefund = await snapshot();
+  const refunded = afterRefund.orders.find(p => p.id === refundOrder.id);
+  assert.equal(refunded.statusFinanceiro, 'estornado');
+  assert.equal(refunded.statusOperacional, 'cancelado');
+  const refundedPayment = afterRefund.payments.find(p => p.id === refunded.pagamentoId);
+  assert.equal(refundedPayment.status, 'refunded');
+  assert.equal(afterRefund.products.find(p => p.id === produto.id).estoque.quantidade, 7,
+    'reembolso não devolve fisicamente produto já baixado');
+  const cancelAgain = await admin.json('/admin/api/pedidos/' + refundOrder.id + '/cancelar', {});
+  assert.equal(cancelAgain.status, 409);
+  const afterRetry = await snapshot();
+  assert.equal(afterRetry.payments.find(p => p.id === refundedPayment.id).eventos.length,
+    refundedPayment.eventos.length, 'reenvio do cancelamento não duplica reembolso');
 });

@@ -192,6 +192,11 @@
         ? Object.values(dados.erros).join(' ') : '';
       throw new Error(dados?.erro || detalhes || 'Não foi possível salvar. Recarregue a página e tente novamente.');
     }
+    if (dados.aguardandoEstorno) {
+      // HTTP 202 = solicitação aceita, não equivale a cancelamento concluído.
+      notificar(dados.mensagem || 'Aguardando confirmação do estorno. Pedido ainda não cancelado.');
+      return 'pendente';
+    }
     const destino = dados.url ? destinoSeguroPainel(dados.url) : telaComAvisoDeSucesso();
     if (!destino) throw new Error('O servidor retornou um endereço inválido.');
     const retorno = new URL(destino, window.location.origin);
@@ -225,7 +230,12 @@
       const botao = ev.submitter || form.querySelector('button[type="submit"]');
       const titulo = botao?.textContent;
       if (botao) { botao.disabled = true; botao.textContent = 'Salvando...'; }
-      enviarFormularioAdmin(form).catch((erro) => {
+      enviarFormularioAdmin(form).then((estado) => {
+        if (estado === 'pendente') {
+          delete form.dataset.salvando;
+          if (botao) { botao.disabled = false; botao.textContent = titulo; }
+        }
+      }).catch((erro) => {
         notificar(erro.message || 'Não foi possível salvar.', 'erro');
         delete form.dataset.salvando;
         if (botao) { botao.disabled = false; botao.textContent = titulo; }
