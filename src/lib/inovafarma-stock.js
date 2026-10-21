@@ -51,10 +51,27 @@ export function vendasPendentesInova(db, limite = MAX_VENDAS) {
     .map(p => ({
       pedidoId: p.id,
       codigo: p.codigo,
+      // Contrato INTERNO de preparação, não representa payload oficial do ERP.
+      chaveIdempotencia: 'venda-online:' + p.codigo,
+      criadoEm: p.criadoEm,
+      vendedor: p.vendedor ? { codigoInova: String(p.vendedor.codigoInova), nome: p.vendedor.nome } : null,
+      valores: {
+        subtotalProdutosCentavos: p.subtotalCentavos,
+        descontoTotalCentavos: p.descontoCentavos,
+        freteCentavos: p.freteCentavos,
+        totalPagoCentavos: p.totalCentavos,
+        metodoPagamento: p.metodoPagamento,
+      },
       aprovadoEm: (p.historico || []).findLast(x => x.tipo === 'financeiro' && x.status === 'aprovado')?.em || p.atualizadoEm,
       itens: (p.itens || []).map(item => {
         const produto = db.collection('products').get(item.produtoId);
-        return { produtoId: item.produtoId, ean: produto?.ean || null, quantidade: Number(item.quantidade) };
+        return {
+          produtoId: item.produtoId,
+          ean: item.ean || produto?.ean || null,
+          quantidade: Number(item.quantidade),
+          precoUnitarioCentavos: Number(item.precoUnitarioCentavos || 0),
+          subtotalCentavos: Number(item.subtotalCentavos || 0),
+        };
       }),
     }));
 }
