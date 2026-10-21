@@ -171,7 +171,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const dashboard = await call('/admin');
   assert.equal(dashboard.status, 200);
   const dashboardHtml = await dashboard.text();
-  const adminCsrf = /window\\.PP_ADMIN=({[^<]+?});<\\/script>/.exec(dashboardHtml);
+  const adminCsrf = /window\.PP_ADMIN=({[^<]+?});<\/script>/.exec(dashboardHtml);
   assert.ok(adminCsrf, 'O painel precisa publicar o token CSRF para ações AJAX.');
   const adminToken = JSON.parse(adminCsrf[1]).csrf;
   assert.ok(adminToken, 'O token CSRF do administrador não pode ficar vazio.');
@@ -189,7 +189,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
     method: 'POST', body: new URLSearchParams({ _csrf: adminToken, tituloPadrao: 'Teste de edição persistente' }),
   });
   assert.equal(saved.status, 303);
-  assert.match(saved.headers.get('location'), /\\/admin\\/configuracoes/);
+  assert.match(saved.headers.get('location'), /\/admin\/configuracoes/);
   const loginAgain = await call('/admin/login');
   assert.equal(loginAgain.status, 303, 'Sessão administrativa ativa redireciona ao painel.');
   assert.equal(loginAgain.headers.get('location'), '/admin');
