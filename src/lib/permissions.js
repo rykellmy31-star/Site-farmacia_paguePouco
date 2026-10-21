@@ -19,7 +19,7 @@ export const ROLES = {
       'dashboard.ver', 'produtos.*', 'categorias.*', 'estoque.*', 'midia.*',
       'pedidos.*', 'clientes.ver', 'clientes.editar', 'fretes.*', 'pagamentos.ver',
       'pagamentos.estornar', 'whatsapp.*', 'banners.*', 'promocoes.*', 'paginas.*',
-      'relatorios.ver', 'configuracoes.*', 'auditoria.ver',
+      'relatorios.ver', 'configuracoes.*', 'auditoria.ver', 'vendedores.ver', 'vendedores.editar',
     ],
   },
   gerente: {
@@ -28,7 +28,7 @@ export const ROLES = {
     descricao: 'Gestão comercial: produtos, preços, promoções, pedidos e relatórios.',
     permissoes: [
       'dashboard.ver', 'produtos.*', 'categorias.*', 'estoque.*', 'midia.ver', 'midia.criar',
-      'pedidos.*', 'clientes.ver', 'promocoes.*', 'banners.*', 'relatorios.ver',
+      'pedidos.*', 'clientes.ver', 'promocoes.*', 'banners.*', 'relatorios.ver', 'vendedores.ver',
     ],
   },
   farmaceutico: {
