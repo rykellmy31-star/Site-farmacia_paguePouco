@@ -535,6 +535,24 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
     </div>
 
     ${painel({
+      titulo: 'Homologação financeira e conciliação automática',
+      corpo: `<p class="texto-pequeno">Indicadores internos sem valores de pagamentos, nomes de clientes
+        ou credenciais. O último ciclo registrado não comprova crédito bancário real.</p>
+        <p><strong>Última execução do alarme:</strong> ${stats.conciliacaoFinanceira?.ultimaExecucaoEm
+          ? formatDateTime(stats.conciliacaoFinanceira.ultimaExecucaoEm) : 'Ainda não registrada'}</p>
+        <p><strong>Resultado do último ciclo:</strong> ${e(stats.conciliacaoFinanceira?.situacao || 'Sem registro')}</p>
+        <div class="cartoes">
+          ${cartaoMetrica('Pix pendentes', stats.conciliacaoFinanceira?.pixPendentes || 0)}
+          ${cartaoMetrica('Estornos pendentes', stats.conciliacaoFinanceira?.estornosPendentes || 0)}
+          ${cartaoMetrica('Checkouts interrompidos', stats.conciliacaoFinanceira?.checkoutsInterrompidos || 0)}
+          ${cartaoMetrica('Pedidos para conferência', stats.conciliacaoFinanceira?.conferencias || 0)}
+        </div>
+        <p class="texto-pequeno">Se a conciliação mostrar pendências, confira os pagamentos no painel
+          antes de qualquer nova cobrança, cancelamento ou liberação de estoque.
+          Não há acionamento manual de cobrança nesta seção.</p>`
+    })}
+
+    ${painel({
       titulo: 'Backup dos dados',
       corpo: `<p class="texto-pequeno">${config.isCloudflare
         ? 'Baixe os cadastros, pedidos e configurações no JSON abaixo. Os arquivos de imagem/vídeo são exportados separadamente em suas versões originais; guarde tudo em local privado. Ainda não há restauração automática homologada.'
@@ -543,6 +561,11 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <button class="botao" type="submit">${config.isCloudflare ? "Baixar backup JSON" : "Gerar backup agora"}</button>
       </form>
+      ${config.isCloudflare ? `<p class="texto-pequeno"><strong>Homologação de recuperação:</strong> baixe também o manifesto e todos
+        os arquivos de mídia, guarde as cópias em local externo privado e faça o ensaio isolado
+        pelo script <code>node scripts/validate-cloudflare-backup.mjs</code>.
+        A exportação não é um backup automático nem comprova restauração real enquanto
+        você não concluir e validar esses downloads.</p>` : ''}
       ${config.isCloudflare ? `<hr style="margin:18px 0;border:0;border-top:1px solid var(--borda)">
         <h3>Backup dos arquivos de imagem e vídeo</h3>
         <p class="texto-pequeno">Arquivos armazenados: <strong>${stats.backupMidias?.total || 0}</strong>.

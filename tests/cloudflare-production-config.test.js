@@ -12,9 +12,9 @@ test('alarme financeiro sem Request usa domínio real e não hostname inválido'
 
 test('alarme reprograma conciliação de Pix, estornos e checkout pendente', () => {
   assert.match(worker, /async alarm\(\)/);
-  assert.match(worker, /pedidos:\s*\(\)\s*=>\s*reconciliarCheckoutsInterrompidos\(this\.db\)/);
-  assert.match(worker, /pix:\s*\(\)\s*=>\s*reconciliarPix\(this\.db\)/);
-  assert.match(worker, /estornos:\s*\(\)\s*=>\s*reconciliarEstornos\(this\.db\)/);
+  assert.match(worker, /pedidos:\s*observar\('pedidos',\s*\(\)\s*=>\s*reconciliarCheckoutsInterrompidos\(this\.db\)\)/);
+  assert.match(worker, /pix:\s*observar\('pix',\s*\(\)\s*=>\s*reconciliarPix\(this\.db\)\)/);
+  assert.match(worker, /estornos:\s*observar\('estornos',\s*\(\)\s*=>\s*reconciliarEstornos\(this\.db\)\)/);
   assert.match(worker, /reagendar:\s*\(\)\s*=>\s*this\.programarAlarmeFinanceiro\(\)/);
 });
 

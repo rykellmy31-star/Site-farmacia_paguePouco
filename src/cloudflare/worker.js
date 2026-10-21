@@ -11,6 +11,7 @@ import { CloudStore } from './store.js';
 import { RequestQueue } from './request-queue.js';
 import { adicionarCreditoDesenvolvedor } from '../lib/developer-credit.js';
 import { executarAlarmeFinanceiro } from '../lib/payments/alarm-runner.js';
+import { registrarCicloFinanceiro } from '../lib/payments/ops-health.js';
 import {
   reconciliarPix, temPixPendente, reconciliarEstornos, temEstornoPendente,
   temCheckoutInterrompido, reconciliarCheckoutsInterrompidos,
@@ -80,7 +81,8 @@ export class LojaDurableObject extends DurableObject {
       await this.programarAlarmeFinanceiro();
       return response;
     }).catch(err => {
-      console.error('[worker] falha ao atender requisição:', err.message);
+      // Erros externos podem carregar URLs e segredos: nunca registrar a mensagem bruta.
+      console.error('[worker] falha ao atender requisição (detalhes omitidos)');
       return new Response('Não foi possível processar a solicitação. Tente novamente.',
         { status: 500, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
     });
@@ -100,15 +102,31 @@ export class LojaDurableObject extends DurableObject {
       // PUBLIC_BASE_URL ainda não foi configurada na Cloudflare.
       configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://site.farmaciapaguepouco.app', this.secret);
       if (!this.app) this.app = createApplication(this.db);
+      const resultados = {};
+      const falhas = [];
+      const observar = (nome, funcao) => async () => {
+        try {
+          const r = await funcao();
+          resultados[nome] = r;
+          return r;
+        } catch (erro) {
+          falhas.push(nome); // Não persistir mensagens/headers do provedor.
+          throw erro;
+        }
+      };
       try {
         await executarAlarmeFinanceiro({
-          pedidos: () => reconciliarCheckoutsInterrompidos(this.db),
-          pix: () => reconciliarPix(this.db),
-          estornos: () => reconciliarEstornos(this.db),
-          persistir: () => this.db.flush(),
+          pedidos: observar('pedidos', () => reconciliarCheckoutsInterrompidos(this.db)),
+          pix: observar('pix', () => reconciliarPix(this.db)),
+          estornos: observar('estornos', () => reconciliarEstornos(this.db)),
+          persistir: async () => {
+            registrarCicloFinanceiro(this.db, { resultados, falhas });
+            await this.db.flush();
+          },
           reagendar: () => this.programarAlarmeFinanceiro(),
-          registrar: (fluxo, problema) =>
-            console.warn('[alarme financeiro]', fluxo, problema),
+          // O conteúdo do erro externo pode conter URLs/tokens: logar só fluxo.
+          registrar: (fluxo) =>
+            console.warn('[alarme financeiro] verificar fluxo:', fluxo),
         });
       } finally {
         // Monitoramento local periódico apenas após ativação homologada.
