@@ -10,6 +10,7 @@
  */
 import crypto from 'node:crypto';
 import { nowISO } from './store.js';
+import { pedidoOcultoDoCliente } from './order-visibility.js';
 import { inovaAtiva } from './inovafarma-stock.js';
 import { selecionarVendedorPedido } from './sellers.js';
 import { podeVender, precoVigenteCentavos, estoqueDisponivel } from './catalog.js';
@@ -586,7 +587,7 @@ export function cancelarCriacaoComRecusaDefinitiva(db, pedidoId) {
 
 export function pedidosDoCliente(db, clienteId) {
   return db.collection('orders')
-    .find((o) => o.clienteId === clienteId)
+    .find((o) => o.clienteId === clienteId && !pedidoOcultoDoCliente(o))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 
