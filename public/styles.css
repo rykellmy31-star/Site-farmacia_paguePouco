@@ -918,8 +918,14 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
 @media (min-width: 768px) {
   .compra-produto .botao-adicionar-cesta { flex: 0 0 auto; min-width: 0; }
   .produto .acoes .botao-adicionar-cesta {
-    width: auto; min-height: 38px; padding: 8px 11px;
+    width: auto; max-width: 100%; min-width: 0;
+    min-height: 38px; padding: 8px 11px;
     font-size: .8rem; border-radius: 8px;
+    white-space: normal;
+  }
+  /* 4 colunas entre 768 e 1099px não devem impor largura mínima aos cartões. */
+  .vitrine:not(.rolagem):not(.vitrine-banners) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .produto .acoes .botao-adicionar-cesta .icone-cesta,
   .produto .acoes .botao-adicionar-cesta .icone-cesta svg {
@@ -934,4 +940,10 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
   }
   .produto .acoes .botao-adicionar-cesta { width: 100%; font-size: .84rem; padding-inline: 7px; }
   .beneficio-entrega { font-size: .75rem; }
+}
+
+@media (min-width: 1100px) {
+  .vitrine:not(.rolagem):not(.vitrine-banners) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
