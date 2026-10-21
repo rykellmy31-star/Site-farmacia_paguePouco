@@ -27,6 +27,7 @@ const snapshot = () => ({
     orders: [{ id: 'pedido', codigo: 'PP-TESTE', statusFinanceiro: 'aprovado' }],
     sessions: [{ id: 'sessao-antiga', userId: 'admin', type: 'admin' }],
     passwordTokens: [{ id: 'token-antigo', clienteId: 'c1' }],
+    mailOutbox: [{ id: 'mensagem-antiga', html: 'https://example.test/redefinir/TOKEN-SECRETO' }],
   },
 });
 const manifest = () => ({
@@ -50,7 +51,7 @@ test('backup reabre documentos + mídias idênticos em armazenamento isolado', a
     snapshot: snapshot(), manifest: manifest(), mediaDir: root,
   });
   assert.deepEqual(result, {
-    ok: true, colecoes: 3, documentosRestaurados: 3, sessoesDescartadas: 2,
+    ok: true, colecoes: 3, documentosRestaurados: 3, transitoriosDescartados: 3,
     arquivos: 1, bytes: bytes.length, isolado: true, producaoAlterada: false,
   });
   assert.deepEqual(await fs.readFile(original), bytes, 'arquivos de origem nunca mudam');
@@ -99,7 +100,7 @@ test('sem mídia ainda permite ensaiar somente o banco sem diretório externo', 
   const result = await ensaiarRestauracaoCloudflare({ snapshot: snapshot(), manifest: manifestVazio });
   assert.equal(result.ok, true);
   assert.equal(result.arquivos, 0);
-  assert.equal(result.sessoesDescartadas, 2);
+  assert.equal(result.transitoriosDescartados, 3);
 });
 
 test('alarme da Cloudflare reprograma usando função existente Pix+estornos', async () => {
