@@ -444,6 +444,15 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
  * dinheiro e somente depois descobrir que a operação era proibida.
  * Devoluções pós-expedição exigem fluxo específico com conferência humana.
  */
+/**
+ * Pedido cujo resultado da cobrança não pode ser presumido.
+ * Filtro comum à fila operacional e à indicação visual do painel.
+ */
+export function pedidoPrecisaConferencia(pedido) {
+  return !!pedido && pedido.statusFinanceiro === 'pendente' &&
+    ['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento);
+}
+
 export function validarCancelamentoOperacional(pedido) {
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
   // Em criação interrompida/timeout a cobrança real pode existir e ainda
