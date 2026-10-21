@@ -228,7 +228,7 @@ export async function createPayment({ db, order, method, payer, installments = 1
     checkoutUrl: pagamento.checkoutUrl,
     simulado: false,
     pixSemCodigo,
-    instrucoes: method === 'pix ? 'Aponte a câmera do seu banco para o QR Code ou use o código "Pix Copia e Cola".' : null,
+    instrucoes: method === 'pix' ? 'Aponte a câmera do seu banco para o QR Code ou use o código "Pix Copia e Cola".' : null,
   };
 }
 
