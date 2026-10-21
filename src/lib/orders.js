@@ -14,6 +14,7 @@ import { podeVender, precoVigenteCentavos, estoqueDisponivel } from './catalog.j
 import { resolverFreteEscolhido } from './freight.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
 import { logSystem } from './audit.js';
+import { enfileirarAvisoPedido } from './order-notifications.js';
 import { installmentOptions } from './payments/index.js';
 
 export const STATUS_FINANCEIRO = {
@@ -412,7 +413,9 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
 
   const atualizado = db.collection('orders').update(pedidoId, patch);
   adicionarHistorico(db, atualizado, { tipo: 'financeiro', status, obs, por });
-  return { ok: true, pedido: db.collection('orders').get(pedidoId) };
+  const pedidoAtual = db.collection('orders').get(pedidoId);
+  enfileirarAvisoPedido(db, pedidoAtual, 'financeiro', status);
+  return { ok: true, pedido: pedidoAtual };
 }
 
 export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por = 'sistema', rastreio = null } = {}) {
@@ -435,7 +438,11 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
   if (status === 'entregue' && !pedido.entregueEm) patch.entregueEm = nowISO();
   db.collection('orders').update(pedidoId, patch);
   adicionarHistorico(db, db.collection('orders').get(pedidoId), { tipo: 'operacional', status, obs, por });
-  return { ok: true, pedido: db.collection('orders').get(pedidoId) };
+  const pedidoAtual = db.collection('orders').get(pedidoId);
+  if (status !== pedido.statusOperacional) {
+    enfileirarAvisoPedido(db, pedidoAtual, 'operacional', status);
+  }
+  return { ok: true, pedido: pedidoAtual };
 }
 
 /**
@@ -480,8 +487,10 @@ export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = 
   }
   db.collection('orders').update(pedidoId, { statusOperacional: 'cancelado', atualizadoEm: nowISO() });
   adicionarHistorico(db, db.collection('orders').get(pedidoId), { tipo: 'operacional', status: 'cancelado', obs: motivo, por });
+  const pedidoAtual = db.collection('orders').get(pedidoId);
+  enfileirarAvisoPedido(db, pedidoAtual, 'operacional', 'cancelado');
   // O cancelamento não representa uma devolução física de mercadoria.
-  return { ok: true, pedido: db.collection('orders').get(pedidoId) };
+  return { ok: true, pedido: pedidoAtual };
 }
 
 /**
