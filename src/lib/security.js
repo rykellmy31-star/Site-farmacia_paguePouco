@@ -145,8 +145,15 @@ export function rotateSessionCsrf(db, id) {
 /* ------------------------------------------------------------------ */
 /* CSRF                                                                */
 /* ------------------------------------------------------------------ */
+// O painel possui uma sessão separada da conta do cliente.
+// Nunca exponha ao painel um token CSRF vazio ou da sessão errada.
+function isAdminPath(req) {
+  return req.path === '/admin' || req.path?.startsWith('/admin/');
+}
+
 export function csrfToken(req) {
-  return (req.session && req.session.csrf) || req.cookies?.pp_csrf || '';
+  if (isAdminPath(req)) return req.adminSession?.csrf || req.cookies?.pp_csrf || '';
+  return req.session?.csrf || req.cookies?.pp_csrf || '';
 }
 
 export function csrfField(req) {
@@ -164,8 +171,13 @@ export function csrfOk(req) {
   if (req.method === 'GET' || req.method === 'HEAD') return true;
   const candidate = String(req.csrfFromBody || req.headers['x-csrf-token'] || '');
   if (!candidate) return false;
-  const esperados = [req.session?.csrf, req.cookies?.pp_csrf].filter(Boolean);
-  for (const esperado of esperados) {
+  // Depois de autenticar no painel, só o token ligado à sessão
+  // administrativa pode autorizar alterações. Cookie de visitante não basta.
+  const esperados = isAdminPath(req)
+    ? [req.adminSession?.csrf || req.cookies?.pp_csrf]
+    : [req.session?.csrf, req.cookies?.pp_csrf];
+  const validos = esperados.filter(Boolean);
+  for (const esperado of validos) {
     const a = Buffer.from(String(esperado));
     const b = Buffer.from(candidate);
     if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
