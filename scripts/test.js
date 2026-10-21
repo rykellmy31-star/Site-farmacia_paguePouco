@@ -515,6 +515,20 @@ async function main() {
     return casos.map(([c, u]) => `${c}→${u}`).join(', ');
   });
 
+  await testar('CEP incompleto e UF incorreta não permitem cotação nem preferência', async () => {
+    for (const cep of ['1234567', '010010000']) {
+      const consulta = await anon.get(`/api/cep/${cep}`);
+      assert(consulta.json?.valido === false && !consulta.json?.uf, 'CEP inválido identificado como válido: ' + cep);
+      const frete = await cliente.post('/api/frete', { json: { cep, uf: 'SP', cidade: 'São Paulo' } });
+      assert(frete.status === 400 && frete.json?.ok === false, 'frete aceitou CEP inválido: ' + cep);
+    }
+    const destino = await cliente.post('/api/frete', { json: { cep: '01001000', uf: 'BA', cidade: 'São Paulo' } });
+    assert(destino.json?.disponivel === false, 'frete aceitou UF divergente do CEP');
+    const preferencia = await cliente.post('/api/cep-sessao', { json: { cep: '1234567' } });
+    assert(preferencia.status === 400 && preferencia.json?.ok === false, 'sessão aceitou CEP inválido');
+    return 'CEPs incompletos rejeitados e UF verificada no servidor';
+  });
+
   await testar('Adicionar produto ao carrinho', async () => {
     const r = await cliente.post('/api/carrinho/adicionar', { json: { produtoId: idParacetamol, quantidade: 2 } });
     assert(r.json && r.json.ok, r.json?.erro || 'falhou');
