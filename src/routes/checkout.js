@@ -1,5 +1,6 @@
 /** routes/checkout.js — Carrinho, endereço/frete, pagamento e confirmação do pedido. */
 import { criarContexto } from './context.js';
+import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
 import { telaCarrinho, telaEndereco, telaPagamento, telaConfirmacao, telaCheckoutVazio } from '../views/checkout.js';
 import {
   getCart, calcularTotais, normalizeCart, aplicarCupom, removerCupom, clearCart, attachCartCookie,
@@ -374,13 +375,16 @@ export function registrarRotasCheckout(app, db) {
     res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
   });
 
-  app.get('/checkout/confirmacao/:codigo', (req, res) => {
+  app.get('/checkout/confirmacao/:codigo', async (req, res) => {
     if (!exigirLoginCompra(req, res, db)) return;
-    const ctx = criarContexto(req, db);
     const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
     if (!pedido) return void res.redirect('/conta/pedidos');
-    const pagamento = pedido.pagamentoId ? db.collection('payments').get(pedido.pagamentoId) : null;
-    res.html(telaConfirmacao(ctx, { pedido, pagamento }));
+    await reconciliarPixAoConsultarPedido(db, pedido.id);
+    const atualizado = db.collection('orders').get(pedido.id);
+    const pagamento = atualizado.pagamentoId ? db.collection('payments').get(atualizado.pagamentoId) : null;
+    const ctx = criarContexto(req, db);
+    res.set('Cache-Control', 'no-store');
+    res.html(telaConfirmacao(ctx, { pedido: atualizado, pagamento }));
   });
 
   /* ------------------------- FRETE (API CEP) ----------------------- */
