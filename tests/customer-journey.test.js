@@ -213,6 +213,40 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(myOrders.status, 200);
   assert.match(await myOrders.text(), /PP20/);
 
+  // Fluxos da área do cliente além da compra.
+  await client.token('/conta/favoritos');
+  const liked = await client.json('/conta/favoritos', { produtoId: produto.id });
+  assert.equal(liked.status, 200);
+  assert.ok((await liked.json()).favoritos.includes(produto.id));
+  assert.match(await (await client.get('/conta/favoritos')).text(), /Sabonete Teste Jornada/);
+  const unliked = await client.form('/conta/favoritos/remover', { produtoId: produto.id });
+  assert.equal(unliked.status, 303);
+
+  await client.token('/conta/dados');
+  const wrongPassword = await client.form('/conta/senha', {
+    senhaAtual: 'senha-errada', senhaNova: 'NovaSenha789',
+  });
+  assert.equal(wrongPassword.status, 400, 'senha atual errada não pode ser trocada');
+  const goodPassword = await client.form('/conta/senha', {
+    senhaAtual: 'ClienteTeste123', senhaNova: 'NovaSenha789',
+  });
+  assert.equal(goodPassword.status, 303, 'troca de senha deve ser permitida');
+
+  // Tenta forçar destino externo pela entrada "proximo": o login deve
+  // redirecionar apenas dentro do próprio site.
+  const secondLogin = new Browser(origin);
+  await secondLogin.token('/conta/login');
+  const failOld = await secondLogin.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
+  });
+  assert.equal(failOld.status, 401, 'senha antiga deixa de autenticar');
+  const relogin = await secondLogin.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'NovaSenha789',
+    proximo: '//exemplo-inseguro.invalid/painel',
+  });
+  assert.equal(relogin.status, 303);
+  assert.equal(relogin.headers.get('location'), '/conta', 'login nunca redireciona para domínio externo');
+
   const data = await snapshot();
   const order = data.orders.find(o => o.cliente?.email === 'comprador-jornada@tests.example');
   assert.ok(order, 'pedido deve ser gravado no SQLite');
@@ -234,6 +268,18 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   const blocked = await outsider.get(confirmationUrl);
   assert.equal(blocked.status, 303);
   assert.match(blocked.headers.get('location'), /conta\/login/);
+
+  const secondCustomer = new Browser(origin);
+  await secondCustomer.token('/conta/cadastro');
+  const secondSignUp = await secondCustomer.form('/conta/cadastro', {
+    nome: 'Outro Cliente de Teste', email: 'outro@tests.example',
+    telefone: '11999998888', cpf: '', senha: 'OutroCliente123', senha2: 'OutroCliente123',
+  });
+  assert.equal(secondSignUp.status, 303);
+  const forbiddenOrder = await secondCustomer.get('/conta/pedidos/' + order.codigo);
+  assert.equal(forbiddenOrder.status, 303, 'cliente diferente não pode consultar pedido de outro');
+  assert.equal(forbiddenOrder.headers.get('location'), '/conta/pedidos');
+
   const pendingInPanel = await admin.get('/admin/pedidos/' + order.id);
   assert.equal(pendingInPanel.status, 200);
   assert.match(await pendingInPanel.text(), new RegExp(order.codigo));
@@ -248,4 +294,15 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(approved.statusFinanceiro, 'aprovado');
   assert.equal(afterApproval.products.find(p => p.id === produto.id).estoque.quantidade, 8);
   assert.equal(afterApproval.products.find(p => p.id === produto.id).estoque.reservado, 0);
+
+  // Aprovação duplicada não pode baixar o estoque duas vezes.
+  const secondApproval = await admin.json('/admin/api/pedidos/' + order.id + '/simular-pagamento',
+    { status: 'approved' });
+  assert.equal(secondApproval.status, 200);
+  const afterDuplicate = await snapshot();
+  assert.equal(afterDuplicate.products.find(p => p.id === produto.id).estoque.quantidade, 8);
+  assert.equal(afterDuplicate.orders.find(o => o.id === order.id).statusFinanceiro, 'aprovado');
+  assert.equal(afterDuplicate.payments.find(p => p.id === payment.id).eventos.length,
+    afterApproval.payments.find(p => p.id === payment.id).eventos.length,
+    'notificações duplicadas não devem criar eventos financeiros duplicados');
 });
