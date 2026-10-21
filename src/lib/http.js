@@ -12,6 +12,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from '../config.js';
+import { adicionarCreditoDesenvolvedor } from './developer-credit.js';
 
 export const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -96,7 +97,7 @@ class Response {
     if (code != null) this.statusCode = code;
     this.headers['Content-Type'] = 'text/html; charset=utf-8';
     this.headers['X-Content-Type-Options'] = 'nosniff';
-    this.end(body);
+    this.end(adicionarCreditoDesenvolvedor(body));
   }
   json(data, code) {
     if (code != null) this.statusCode = code;
