@@ -11,6 +11,7 @@ import { RequestQueue } from './request-queue.js';
 import { executarAlarmeFinanceiro } from '../lib/payments/alarm-runner.js';
 import {
   reconciliarPix, temPixPendente, reconciliarEstornos, temEstornoPendente,
+  temCheckoutInterrompido, reconciliarCheckoutsInterrompidos,
 } from '../lib/payments/reconciliation.js';
 import initialData from '../../.cloudflare/seed.json';
 
@@ -83,7 +84,8 @@ export class LojaDurableObject extends DurableObject {
   }
   // Durable Object Alarms: Pix e estornos não dependem de visitas do cliente.
   async programarAlarmeFinanceiro() {
-    if (!temPixPendente(this.db) && !temEstornoPendente(this.db)) return;
+    if (!temPixPendente(this.db) && !temEstornoPendente(this.db) &&
+        !temCheckoutInterrompido(this.db)) return;
     const atual = await this.ctx.storage.getAlarm();
     if (atual == null) await this.ctx.storage.setAlarm(Date.now() + 5 * 60_000);
   }
@@ -94,6 +96,7 @@ export class LojaDurableObject extends DurableObject {
       configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://localhost.invalid', this.secret);
       if (!this.app) this.app = createApplication(this.db);
       await executarAlarmeFinanceiro({
+        pedidos: () => reconciliarCheckoutsInterrompidos(this.db),
         pix: () => reconciliarPix(this.db),
         estornos: () => reconciliarEstornos(this.db),
         persistir: () => this.db.flush(),

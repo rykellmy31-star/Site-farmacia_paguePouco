@@ -248,6 +248,19 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(purchase.status, 303);
   const confirmationUrl = purchase.headers.get('location');
   assert.match(confirmationUrl, /^\/checkout\/confirmacao\/PP/);
+
+  // Simula navegador repetindo POST depois de perder a resposta original
+  // (cookie antigo, cesta já esvaziada). Deve abrir o MESMO pedido.
+  const novaCesta = client.cookies.get('pp_cart');
+  client.cookies.set('pp_cart', cart.carrinhoId);
+  const envioRepetido = await client.form('/checkout/finalizar', { metodoPagamento: 'pix' });
+  assert.equal(envioRepetido.status, 303);
+  assert.equal(envioRepetido.headers.get('location'), confirmationUrl,
+    'resubmissão de compra registrada deve recuperar o pedido original');
+  assert.equal((await snapshot()).orders.length, 1,
+    'resubmissão não deve criar pedido ou cobrança duplicados');
+  client.cookies.set('pp_cart', novaCesta);
+
   const confirm = await client.get(confirmationUrl);
   assert.equal(confirm.status, 200);
   const confirmHtml = await confirm.text();

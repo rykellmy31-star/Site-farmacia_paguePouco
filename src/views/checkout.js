@@ -238,12 +238,12 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
     conteudo: `<div class="container">
       ${passosHtml('confirmacao')}
       <div class="pagina-conteudo texto-centro">
-        <h1>${pedido.pendenciaPagamento === 'conciliacao_necessaria' ? 'Pedido aguardando verificação de pagamento' : `${ICONES.check} Pedido registrado!`}</h1>
+        <h1>${['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? 'Pedido aguardando verificação de pagamento' : `${ICONES.check} Pedido registrado!`}</h1>
         <p class="negrito">Pedido <strong>${e(pedido.codigo)}</strong></p>
         <p>E-mail informado no pedido: <strong>${e(pedido.cliente?.email || '')}</strong>. O envio automático depende de um serviço de e-mail configurado.</p>
       </div>
 
-      ${pedido.pendenciaPagamento === 'conciliacao_necessaria' ? `
+      ${['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? `
       <div class="cartao mt-2" role="status">
         <h3>Pagamento em verificação — não faça outra tentativa agora</h3>
         <p>O provedor não confirmou se recebeu a solicitação. <strong>O pagamento ainda não está confirmado</strong> e o estoque está reservado temporariamente.</p>

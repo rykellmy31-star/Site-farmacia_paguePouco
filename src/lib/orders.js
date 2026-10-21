@@ -255,6 +255,9 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     endereco: { ...endereco },
     rastreio: { codigo: '', transportadora: '', url: '', enviadoEm: null },
     pagamentoId: null,
+    // Se o Worker reiniciar antes de associar o pagamento ao pedido, o
+    // reconciliador identifica esta etapa sem presumir recusa ou aprovação.
+    pendenciaPagamento: 'criacao_em_andamento',
     observacoes: '',
     historico: [{
       tipo: 'operacional', status: 'aguardando_pagamento', em: nowISO(),
@@ -443,6 +446,12 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
  */
 export function validarCancelamentoOperacional(pedido) {
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
+  // Em criação interrompida/timeout a cobrança real pode existir e ainda
+  // não estar vinculada. Não libere reserva nem cupom antes da conciliação.
+  if (pedido.statusFinanceiro === 'pendente' &&
+      ['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento)) {
+    return { ok: false, erro: 'Pagamento aguardando conferência. Não cancele antes de verificar a cobrança.' };
+  }
   if (['entregue', 'cancelado', 'enviado', 'saiu_para_entrega'].includes(pedido.statusOperacional)) {
     return { ok: false, erro: 'Pedido expedido, entregue ou cancelado exige outro fluxo.' };
   }

@@ -69,6 +69,14 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
       <a class="botao secundario" href="/admin/pedidos">Voltar</a>
     </div>
 
+    ${['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento) &&
+      pedido.statusFinanceiro === 'pendente' ? `<div class="alerta" role="alert">
+        <strong>Atenção: cobrança com resultado incerto.</strong> O pedido está reservado,
+        mas a cobrança não está confirmada. Conferir no provedor pelo código
+        ${e(pedido.codigo)} antes de qualquer cancelamento, liberação de estoque
+        ou nova tentativa. Não aprovar manualmente uma cobrança real.
+      </div>` : ''}
+
     <div class="cartoes">
       ${cartaoMetrica('Total', money(pedido.totalCentavos), `${(pedido.itens || []).reduce((a, i) => a + i.quantidade, 0)} itens`)}
       ${cartaoMetrica('Pagamento', STATUS_FINANCEIRO[pedido.statusFinanceiro]?.nome || pedido.statusFinanceiro)}
@@ -195,6 +203,8 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
     ${ctx.permissoes?.podeEditarPedidos &&
        !['cancelado', 'entregue', 'enviado', 'saiu_para_entrega'].includes(pedido.statusOperacional) &&
        !pedido.cancelamentoPendenteEstorno &&
+       !(pedido.statusFinanceiro === 'pendente' &&
+         ['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento)) &&
        (!['aprovado', 'estorno_solicitado'].includes(pedido.statusFinanceiro) || ctx.permissoes?.podeEstornar) ? `
     <div class="linha" style="gap:8px">
       <form method="post" action="/admin/api/pedidos/${e(pedido.id)}/cancelar" onsubmit="return confirm('Confirma o cancelamento deste pedido?')">

@@ -51,3 +51,28 @@ test('erro no reagendamento é propagado para não fingir que alarme funcionou',
     reagendar: async () => { throw new Error('Alarm storage offline'); },
   }), /Falhas na conciliação financeira/);
 });
+
+
+test('pedidos interrompidos são verificados antes de Pix sem bloquear estornos', async () => {
+  const executados = [];
+  await executarAlarmeFinanceiro({
+    pedidos: async () => { executados.push('pedidos'); return { sinalizados: 1 }; },
+    pix: async () => { executados.push('pix'); },
+    estornos: async () => { executados.push('estornos'); },
+    persistir: async () => { executados.push('persistir'); },
+    reagendar: async () => { executados.push('reagendar'); },
+  });
+  assert.deepEqual(executados, ['pedidos', 'pix', 'estornos', 'persistir', 'reagendar']);
+});
+
+test('erro ao recuperar checkout não interrompe conciliações nem reagendamento', async () => {
+  const executados = [];
+  await assert.rejects(executarAlarmeFinanceiro({
+    pedidos: async () => { executados.push('pedidos'); throw new Error('Recuperação falhou'); },
+    pix: async () => { executados.push('pix'); },
+    estornos: async () => { executados.push('estornos'); },
+    persistir: async () => { executados.push('persistir'); },
+    reagendar: async () => { executados.push('reagendar'); },
+  }), { name: 'AggregateError' });
+  assert.deepEqual(executados, ['pedidos', 'pix', 'estornos', 'persistir', 'reagendar']);
+});

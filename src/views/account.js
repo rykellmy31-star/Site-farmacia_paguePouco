@@ -204,6 +204,12 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
     ativo: 'pedidos',
     conteudo: `
       ${alertaHtml(ctx.aviso || '', 'info')}
+      ${['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento) &&
+        pedido.statusFinanceiro === 'pendente' ? `<div class="alerta info" role="status">
+        <strong>Pagamento em verificação.</strong> Seu pedido está registrado, mas a cobrança
+        ainda não foi confirmada. Não realize outra tentativa nem solicite cancelamento
+        até a conferência com o atendimento. Informe o código ${e(pedido.codigo)}.
+      </div>` : ''}
       <div class="painel">
         <header>
           <h3>Pedido ${e(pedido.codigo)}</h3>
@@ -276,7 +282,9 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
         </div>
       </div>
 
-      ${pedido.statusOperacional !== 'cancelado' && pedido.statusOperacional !== 'entregue' ? `
+      ${pedido.statusOperacional !== 'cancelado' && pedido.statusOperacional !== 'entregue' &&
+        !(['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento) &&
+          pedido.statusFinanceiro === 'pendente') ? `
       <div class="painel">
         <header><h3>Cancelar pedido</h3></header>
         <div class="corpo">
