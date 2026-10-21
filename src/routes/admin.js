@@ -26,7 +26,7 @@ import {
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
   registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro,
-  cancelarPedido, metricas, vendasPorDia, produtosMaisVendidos,
+  cancelarPedido, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
@@ -365,11 +365,19 @@ export function registrarRotasAdmin(app, db) {
         porCatMap.set(nome, c);
       }
     }
-    const dias = vendasPorDia(db, 30).filter((d) => d.data >= de && d.data <= ate);
+    const inicioMs = Date.parse(de + 'T00:00:00.000Z');
+    const fimMs = Date.parse(ate + 'T00:00:00.000Z');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate) ||
+        !Number.isFinite(inicioMs) || !Number.isFinite(fimMs) || inicioMs > fimMs ||
+        fimMs - inicioMs > 366 * 86400000) {
+      return void res.html('<h1>Período inválido</h1><p>Escolha datas válidas em um intervalo de até 366 dias.</p><a href="/admin/relatorios">Voltar aos relatórios</a>', 400);
+    }
+    const diasPeriodo = Math.round((fimMs - inicioMs) / 86400000) + 1;
+    const dias = vendasPorDia(db, diasPeriodo, new Date(fimMs));
     res.html(telaRelatorios(ctx, {
       metricas: metricas(db, { de: `${de}T00:00:00.000Z`, ate: `${ate}T23:59:59.999Z` }),
-      grafico: dias.length ? dias : vendasPorDia(db, 30),
-      topProdutos: produtosMaisVendidos(db, 10),
+      grafico: dias,
+      topProdutos: produtosMaisVendidos(db, 10, { de, ate }),
       porEstado: Array.from(porEstadoMap.values()).sort((a, b) => b.receitaCentavos - a.receitaCentavos),
       porCategoria: Array.from(porCatMap.values()).sort((a, b) => b.receitaCentavos - a.receitaCentavos),
       periodo: { de, ate },
@@ -903,10 +911,22 @@ function registrarApi(app, db) {
         pedido.statusOperacional === 'cancelado') {
       return void res.json({ ok: false, erro: 'Pedido ou transição incompatível com simulação.' }, 409);
     }
+    if (status === 'approved') {
+      // Rejeita ANTES de alterar o registro financeiro quando a reserva
+      // ou os itens não permitem concluir o pedido.
+      const preflight = validarReservaParaAprovacao(db, pedido.id);
+      if (!preflight.ok) return void res.json(preflight, 409);
+    }
     const r = await simulateApproval(db, pedido.pagamentoId, { aprovado: status === 'approved', origem: `painel:${req.adminUser.email}` });
     if (!r.ok) return void res.json(r, 400);
-    if (status === 'approved') await atualizarStatusFinanceiro(db, pedido.id, 'aprovado', { obs: 'Aprovado em ambiente de testes (simulação pelo painel).', por: req.adminUser.nome });
-    else await atualizarStatusFinanceiro(db, pedido.id, 'recusado', { obs: 'Recusado em ambiente de testes (simulação pelo painel).', por: req.adminUser.nome });
+    const resultado = atualizarStatusFinanceiro(db, pedido.id, status === 'approved' ? 'aprovado' : 'recusado', {
+      obs: status === 'approved' ? 'Aprovado em ambiente de testes (simulação pelo painel).' : 'Recusado em ambiente de testes (simulação pelo painel).',
+      por: req.adminUser.nome,
+    });
+    if (!resultado.ok) {
+      logAdmin(db, req.adminUser, 'simulacao_exige_conciliacao', 'pedido', pedido.id, { motivo: resultado.erro }, req);
+      return void res.json({ ok: false, erro: 'Cobrança e pedido exigem conciliação manual. ' + resultado.erro }, 409);
+    }
     logAdmin(db, req.adminUser, 'simulou_pagamento', 'pedido', pedido.id, { status }, req);
     res.json({ ok: true, status });
   });
