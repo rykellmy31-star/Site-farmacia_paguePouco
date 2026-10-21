@@ -26,7 +26,7 @@ import {
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
   registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro,
-  cancelarPedido, validarCancelamentoOperacional, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
+  cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
@@ -299,9 +299,7 @@ export function registrarRotasAdmin(app, db) {
     }
     if (filtros.financeiro) pedidos = pedidos.filter((p) => p.statusFinanceiro === filtros.financeiro);
     if (filtros.operacional) pedidos = pedidos.filter((p) => p.statusOperacional === filtros.operacional);
-    if (filtros.pendencia) pedidos = pedidos.filter((p) =>
-      p.statusFinanceiro === 'pendente' &&
-      ['criacao_em_andamento', 'conciliacao_necessaria'].includes(p.pendenciaPagamento));
+    if (filtros.pendencia) pedidos = pedidos.filter(pedidoPrecisaConferencia);
     if (filtros.periodo) {
       const dias = filtros.periodo === 'hoje' ? 1 : Number(filtros.periodo);
       const limite = new Date(Date.now() - (dias - 1) * 86400000).toISOString().slice(0, 10);
