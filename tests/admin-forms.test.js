@@ -132,6 +132,21 @@ test('cupom criado usa confirmação e recarrega a listagem, sem mostrar JSON ao
   assert.equal(ui.destinations[0], '/admin/promocoes?salvo=1');
 });
 
+test('estorno pendente informa que pedido NÃO foi cancelado e não finge sucesso', async () => {
+  const ui = browser({ path: '/admin/pedidos/123', responder: async () => json({
+    ok: true, aguardandoEstorno: true,
+    mensagem: 'Pedido não cancelado: aguardando confirmação do estorno pelo provedor.',
+  }, 202) });
+  const form = ui.form('/admin/api/pedidos/123/cancelar');
+  assert.equal(ui.submit(form).prevented, true);
+  assert.equal(form.button.disabled, true);
+  await flush();
+  assert.match(ui.toast.textContent, /Pedido não cancelado/);
+  assert.equal(form.button.disabled, false, 'pode consultar o estado sem reembolsar novamente');
+  assert.equal(form.button.textContent, 'Salvar');
+  assert.equal(ui.destinations.length, 0, 'não deve redirecionar para página com falso sucesso');
+});
+
 test('download de backup e formulários GET não são interceptados', () => {
   const ui = browser({ responder: () => { throw new Error('fetch não deveria acontecer'); } });
   assert.equal(ui.submit(ui.form('/admin/api/sistema/backup')).prevented, false);
