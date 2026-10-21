@@ -883,6 +883,13 @@ function registrarApi(app, db) {
     // seria recusado depois e o dinheiro já poderia ter sido devolvido.
     const preflight = validarCancelamentoOperacional(pedido);
     if (!preflight.ok) return void res.json(preflight, 409);
+    if (pedido.statusFinanceiro === 'estorno_solicitado') {
+      if (!guardApi(req, res, 'pagamentos.estornar')) return;
+      return void res.json({
+        ok: true, aguardandoEstorno: true,
+        mensagem: 'O estorno está pendente de confirmação. Nenhuma nova solicitação foi enviada.',
+      }, 202);
+    }
     if (pedido.statusFinanceiro === 'aprovado') {
       if (!guardApi(req, res, 'pagamentos.estornar')) return;
       const pagamento = db.collection('payments').get(pedido.pagamentoId);
@@ -896,6 +903,18 @@ function registrarApi(app, db) {
         { obs: 'Estorno solicitado antes do cancelamento.', por: req.adminUser.nome });
       if (!confirmacao.ok) return void res.json(confirmacao, 409);
       if (estorno.status !== 'refunded') {
+        // O alarme do Worker só cancela após confirmação do provedor.
+        // Sem esta intenção persistida, o estorno seria confirmado, porém
+        // o pedido continuaria em separação indefinidamente.
+        db.collection('orders').update(pedido.id, {
+          cancelamentoPendenteEstorno: {
+            solicitadoEm: new Date().toISOString(),
+            motivo: 'Cancelado pelo painel administrativo.',
+            por: req.adminUser.nome,
+          },
+        });
+        logAdmin(db, req.adminUser, 'aguardando_estorno_para_cancelar', 'pedido',
+          pedido.id, { codigo: pedido.codigo }, req);
         return void res.json({ ok: true, aguardandoEstorno: true,
           mensagem: 'Pedido não cancelado: aguardando confirmação do estorno pelo provedor.' }, 202);
       }
