@@ -87,7 +87,7 @@ export function receberCatalogoInova(db, dados) {
   return { ok: true, duplicado: false, recebidos: itens.length, novos, atualizados, ignorados };
 }
 
-export function listarCandidatosInova(db, { busca = '', situacao = '', pagina = 1 } = {}) {
+export function listarCandidatosInova(db, { busca = '', situacao = '', saldo = 'disponivel', pagina = 1 } = {}) {
   const q = String(busca || '').toLowerCase().slice(0,100).trim();
   const statuses = new Set(['aguardando_revisao','importado','vinculado','ignorado']);
   const filtro = statuses.has(situacao) ? situacao : '';
@@ -102,7 +102,8 @@ export function listarCandidatosInova(db, { busca = '', situacao = '', pagina = 
     const encontrados = porEAN.get(c.ean) || [];
     return { ...c, vinculoAtual: encontrados.length === 1 ? encontrados[0].id : null,
       conflitoEAN: encontrados.length > 1 };
-  }).filter(c => (!filtro || c.situacao === filtro) &&
+  }).filter(c => (saldo !== 'disponivel' || c.quantidade > 0) &&
+    (!filtro || c.situacao === filtro) &&
     (!q || c.nome.toLowerCase().includes(q) || c.ean.includes(q) ||
       String(c.codigoInterno||'').toLowerCase().includes(q)))
     .sort((a,b) => String(b.recebidoEm).localeCompare(String(a.recebidoEm)) ||
