@@ -166,7 +166,8 @@ export function reconciliarCheckoutsInterrompidos(db, { limit = 50, agora = Date
       Number(p.valorCentavos) === Number(pedido.totalCentavos));
     const inconsistentes = db.collection('payments').find(p =>
       p.pedidoId === pedido.id).length !== candidatos.length;
-    if (candidatos.length === 1 && !inconsistentes) {
+    if (candidatos.length === 1 && !inconsistentes &&
+        !['refunded', 'charged_back'].includes(candidatos[0].status)) {
       db.collection('orders').update(pedido.id, {
         pagamentoId: candidatos[0].id,
         pendenciaPagamento: null,
