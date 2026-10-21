@@ -5,6 +5,7 @@ import { Collection } from '../src/lib/store.js';
 import { config } from '../src/config.js';
 import { formatDateTime, formatDate, FUSO_LOJA } from '../src/lib/format.js';
 import { can } from '../src/lib/permissions.js';
+import { horarioAtendimentoAgora } from '../src/views/layout.js';
 import {
   validarEnderecoConector, salvarConfiguracaoInova, armazenarCredencialInova,
   estadoCredencialInova, apagarCredencialInova, diagnosticoInova,
@@ -33,6 +34,16 @@ test('exibe a hora exata em America/Bahia (-3), independente do fuso do servidor
     assert.equal(formatDate('2026-10-21'),'21/10/2026');
     assert.equal(formatDateTime('invalido'),'—');
   } finally { if(old === undefined)delete process.env.TZ; else process.env.TZ=old; }
+});
+
+test('horário do atendimento usa dia e hora da Bahia mesmo no Worker UTC',()=>{
+  const whatsapp={respeitarHorario:true,mensagemIndisponivel:'Fechado',horarios:[
+    {dia:'quarta',ativo:true,inicio:'14:00',fim:'15:00'},
+    {dia:'quinta',ativo:false,inicio:'00:00',fim:'00:00'},
+  ]};
+  assert.equal(horarioAtendimentoAgora(whatsapp,new Date('2026-10-21T17:21:00Z')).aberto,true);
+  assert.equal(horarioAtendimentoAgora(whatsapp,new Date('2026-10-21T19:21:00Z')).aberto,false);
+  assert.equal(horarioAtendimentoAgora(whatsapp,new Date('2026-10-22T01:21:00Z')).aberto,false);
 });
 
 test('só superadmin configura Inova; administrador visualiza status e operador não acessa',()=>{
