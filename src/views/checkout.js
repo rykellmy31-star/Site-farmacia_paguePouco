@@ -245,7 +245,12 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
     conteudo: `<div class="container">
       ${passosHtml('confirmacao')}
       <div class="pagina-conteudo texto-centro">
-        <h1>${['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? 'Pedido aguardando verificação de pagamento' : `${ICONES.check} Pedido registrado!`}</h1>
+        <h1 class="confirmacao-titulo">
+          <span class="confirmacao-icone" aria-hidden="true">${ICONES.check}</span>
+          <span>${pedido.statusFinanceiro === 'aprovado' ? 'Pagamento confirmado!' :
+            ['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento)
+              ? 'Pedido em verificação' : 'Pedido registrado!'}</span>
+        </h1>
         <p class="negrito">Pedido <strong>${e(pedido.codigo)}</strong></p>
         <p>E-mail informado no pedido: <strong>${e(pedido.cliente?.email || '')}</strong>. O envio automático depende de um serviço de e-mail configurado.</p>
       </div>
@@ -257,7 +262,7 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
         <p>Não tente pagar novamente até conferir a situação em <a href="/conta/pedidos/${e(pedido.codigo)}">Meus pedidos</a> ou entre em contato com o atendimento, informando o código <strong>${e(pedido.codigo)}</strong>.</p>
         <p class="texto-pequeno">A equipe verificará a cobrança antes de liberar o estoque ou concluir a venda.</p>
       </div>` : pagamento?.metodo === 'pix' && pedido.statusFinanceiro === 'pendente' ? `
-      <div class="cartao mt-2">
+      <div class="cartao mt-2" ${pagamento.provedor === 'mercadopago' ? 'data-pix-status-auto="true"' : ''}>
         <h3>Pague com Pix</h3>
         ${pagamento.simulado ? `<div class="simulado-aviso">
           <strong>Atenção — ambiente de testes:</strong> este código Pix é <strong>SIMULADO</strong> e não pode ser pago em
@@ -272,6 +277,10 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
           ${pagamento.pixExpiraEm ? `<p class="texto-pequeno texto-suave mb-0 mt-1">Expira em ${formatDateTime(pagamento.pixExpiraEm)}.</p>` : ''}
         </div>
         <p class="texto-pequeno texto-suave">Após o pagamento, a confirmação é automática e o pedido entra em separação.</p>
+        ${pagamento.provedor === 'mercadopago' ? `<p class="consulta-pix-info">
+          Já pagou? <a class="botao pequeno secundario" href="/checkout/confirmacao/${e(pedido.codigo)}">Atualizar situação do Pix</a>
+          <span class="texto-pequeno texto-suave">Consulta segura ao Mercado Pago, no máximo uma vez por minuto. Não gera nova cobrança.</span>
+        </p>` : ''}
       </div>` : `
       <div class="cartao mt-2">
         <h3>${pagamento?.metodo === 'pix' ? 'Pagamento Pix' : 'Pagamento com cartão'}</h3>

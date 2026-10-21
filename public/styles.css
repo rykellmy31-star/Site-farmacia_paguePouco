@@ -947,3 +947,46 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+/* Confirmação de pedido: limitar o SVG inline ao tamanho de um selo discreto. */
+.confirmacao-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: clamp(1.1rem, 2.6vw, 1.45rem);
+  line-height: 1.25;
+  margin: 0 0 12px;
+}
+.confirmacao-icone {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  background: var(--primaria-clara);
+  color: var(--primaria-escura);
+}
+.confirmacao-icone svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+  max-width: 19px;
+  max-height: 19px;
+  flex: none;
+}
+.consulta-pix-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+.consulta-pix-info .botao { min-height: 38px; font-size: .8rem; padding: 7px 12px; }
+@media(max-width: 767px) {
+  .confirmacao-icone { width: 28px; height: 28px; flex-basis: 28px; }
+  .confirmacao-titulo { gap: 7px; }
+}
