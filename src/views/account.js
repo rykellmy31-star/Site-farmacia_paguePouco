@@ -221,6 +221,10 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
             <div><span class="rotulo">Entrega</span>${etiquetaStatus(pedido.statusOperacional)}</div>
             <div><span class="rotulo">Forma</span>${e(String(pedido.metodoPagamento || '').replace('credit_card', 'Cartão de crédito').replace('debit_card', 'Cartão de débito').replace('pix', 'Pix'))}</div>
           </div>
+          ${pagamento?.provedor === 'mercadopago' && pedido.statusFinanceiro === 'pendente' ? `<p class="consulta-pix-info" role="status">
+            Se você já pagou, <a class="botao pequeno secundario" href="/conta/pedidos/${e(pedido.codigo)}">Atualizar situação do Pix</a>
+            <span class="texto-pequeno texto-suave">O banco é consultado de forma segura, no máximo uma vez por minuto. Não gera outra cobrança.</span>
+          </p>` : ''}
           ${pagamento?.pixCodigo && pedido.statusFinanceiro === 'pendente' ? `
           <div class="pix-caixa mt-2">
             <strong>Pix para pagamento</strong>
