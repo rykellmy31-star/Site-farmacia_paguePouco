@@ -5,7 +5,7 @@ import {
   etiquetaStatus, graficoBarras, paginacaoAdmin, money,
 } from './layout.js';
 import { formatDateTime, formatDate, formatCep, formatDoc, formatPhone } from '../../lib/format.js';
-import { STATUS_FINANCEIRO, STATUS_OPERACIONAL } from '../../lib/orders.js';
+import { STATUS_FINANCEIRO, STATUS_OPERACIONAL, pedidoPrecisaConferencia } from '../../lib/orders.js';
 import { mapStatus } from '../../lib/payments/internal.js';
 
 /* =============================== PEDIDOS =============================== */
@@ -50,8 +50,7 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros })
           <td>${(p.itens || []).reduce((a, i) => a + i.quantidade, 0)}</td>
           <td>${money(p.totalCentavos)}</td>
           <td>${etiquetaStatus(p.statusFinanceiro)}
-            ${p.statusFinanceiro === 'pendente' &&
-              ['criacao_em_andamento', 'conciliacao_necessaria'].includes(p.pendenciaPagamento)
+            ${pedidoPrecisaConferencia(p)
               ? '<div class="texto-pequeno"><strong>Conferir cobrança</strong></div>' : ''}
           </td>
           <td>${etiquetaStatus(p.statusOperacional)}</td>
