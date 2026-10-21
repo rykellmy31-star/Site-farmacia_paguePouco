@@ -1,0 +1,36 @@
+name: CI - revisao sem deploy
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Security regressions (offline, mocked payment API)
+        run: node --test tests/payment-safety.test.js
+      - name: Existing integration tests (simulated payments only)
+        run: npm test
+      - name: Cloudflare component tests
+        run: npm run test:cloudflare
+      - name: Build Cloudflare assets
+        run: npm run build
+      - name: Verify Worker compilation without publishing
+        run: npm run check:cloudflare
