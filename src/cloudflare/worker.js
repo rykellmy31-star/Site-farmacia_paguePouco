@@ -95,7 +95,9 @@ export class LojaDurableObject extends DurableObject {
   async alarm() {
     return this.queue.run(async () => {
       await this.ready;
-      configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://localhost.invalid', this.secret);
+      // Alarmes não possuem Request/Origin. Usar o domínio oficial enquanto
+      // PUBLIC_BASE_URL ainda não foi configurada na Cloudflare.
+      configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://site.farmaciapaguepouco.app', this.secret);
       if (!this.app) this.app = createApplication(this.db);
       await executarAlarmeFinanceiro({
         pedidos: () => reconciliarCheckoutsInterrompidos(this.db),
