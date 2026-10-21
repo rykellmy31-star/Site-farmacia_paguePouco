@@ -118,6 +118,29 @@ test('webhook MP exige assinatura com segredo e verifica valor, moeda e vínculo
     assert.equal((await webhookMP({ db, headers, body: payload, dataId: '123', config: conf })).ok, false);
     remote = { ...remote, transaction_amount: 10.50, currency_id: 'USD' };
     assert.equal((await webhookMP({ db, headers, body: payload, dataId: '123', config: conf })).ok, false);
+
+    // Notificação atrasada "approved" pode chegar enquanto um estorno
+    // está pendente ou até depois de já confirmado. Não pode voltar a
+    // marcar a cobrança como aprovada nem reabrir a venda.
+    remote = { ...remote, currency_id: 'BRL', status: 'approved' };
+    db.collection('orders').update('o1', { statusFinanceiro: 'estorno_solicitado' });
+    db.collection('payments').update('mp_123', { status: 'refund_pending' });
+    const atrasadaPendente = await webhookMP({ db, headers, body: payload, dataId: '123', config: conf });
+    assert.equal(atrasadaPendente.ok, true);
+    assert.equal(atrasadaPendente.status, 'ignored');
+    assert.equal(db.collection('payments').get('mp_123').status, 'refund_pending');
+
+    remote = { ...remote, status: 'refunded' };
+    const confirmada = await webhookMP({ db, headers, body: payload, dataId: '123', config: conf });
+    assert.equal(confirmada.ok, true);
+    assert.equal(confirmada.status, 'refunded');
+    assert.equal(db.collection('payments').get('mp_123').status, 'refunded');
+    db.collection('orders').update('o1', { statusFinanceiro: 'estornado' });
+    remote = { ...remote, status: 'approved' };
+    const atrasadaDepois = await webhookMP({ db, headers, body: payload, dataId: '123', config: conf });
+    assert.equal(atrasadaDepois.ok, true);
+    assert.equal(atrasadaDepois.status, 'ignored');
+    assert.equal(db.collection('payments').get('mp_123').status, 'refunded');
   } finally {
     globalThis.fetch = fetchOriginal;
   }
