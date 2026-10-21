@@ -307,7 +307,7 @@ export function registrarRotasAdmin(app, db) {
     const eans=Array.isArray(eansRaw)?eansRaw:eansRaw?[eansRaw]:[];
     const acao=String(req.body.acao||'');
     if (!['importar','ignorar'].includes(acao) || eans.length===0 || eans.length>50 ||
-        eans.some(e=>!new RegExp('^[0-9]{8,14} ||
+        eans.some(e => !/^[0-9]{8,14}$/.test(String(e))) ||
         new Set(eans).size !== eans.length)
       return void res.status(400).html('Seleção inválida. Escolha de 1 a 50 EANs distintos.');
     const resultados=[];
