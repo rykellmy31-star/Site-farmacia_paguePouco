@@ -262,7 +262,7 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
         <p>Não tente pagar novamente até conferir a situação em <a href="/conta/pedidos/${e(pedido.codigo)}">Meus pedidos</a> ou entre em contato com o atendimento, informando o código <strong>${e(pedido.codigo)}</strong>.</p>
         <p class="texto-pequeno">A equipe verificará a cobrança antes de liberar o estoque ou concluir a venda.</p>
       </div>` : pagamento?.metodo === 'pix' && pedido.statusFinanceiro === 'pendente' ? `
-      <div class="cartao mt-2">
+      <div class="cartao mt-2" ${pagamento.provedor === 'mercadopago' ? 'data-pix-status-auto="true"' : ''}>
         <h3>Pague com Pix</h3>
         ${pagamento.simulado ? `<div class="simulado-aviso">
           <strong>Atenção — ambiente de testes:</strong> este código Pix é <strong>SIMULADO</strong> e não pode ser pago em
