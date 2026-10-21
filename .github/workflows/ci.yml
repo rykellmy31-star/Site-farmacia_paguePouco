@@ -28,6 +28,8 @@ jobs:
         run: node --test tests/payment-safety.test.js tests/pix-reconciliation.test.js tests/report-permissions.test.js tests/checkout-recovery.test.js tests/cart-integrity.test.js tests/admin-reconciliation-queue.test.js tests/order-notifications.test.js tests/customer-addresses.test.js tests/coupon-policy.test.js tests/session-security.test.js tests/cep-freight.test.js tests/developer-credit.test.js tests/branding-favicon.test.js tests/mercadopago-credentials.test.js tests/mercadopago-pix-diagnostics.test.js tests/compact-purchase-ui.test.js tests/cloudflare-production-config.test.js
       - name: Verify isolated backup restore and recurring Cloudflare alarms
         run: node --test tests/restore-rehearsal.test.js tests/financial-alarm.test.js
+      - name: INOVAFARMA stock connector safety tests
+        run: node --test tests/inovafarma-stock.test.js
       - name: Existing integration tests (simulated payments only)
         run: npm test
       - name: Real browser responsive checks (320px to 1440px)
