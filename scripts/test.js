@@ -753,14 +753,15 @@ async function main() {
     return 'processado 1x, duplicata ignorada';
   });
 
-  await testar('Cancelamento de pedido devolve o estoque', async () => {
+  await testar('Cancelamento de pedido pago exige estorno sem entrada física automática', async () => {
     const r = await admin.post(`/admin/api/pedidos/${idPedido}/cancelar`, { json: {} });
     assert(r.json?.ok, r.json?.erro || 'falhou');
     const d = await admin.get(`/admin/pedidos/${idPedido}`);
-    assert(/cancelado/i.test(d.texto), 'pedido não consta como cancelado');
+    assert(/cancelado/i.test(d.texto), 'pedido não consta como cancelado após estorno confirmado');
     const historico = await admin.get('/admin/estoque');
-    assert(/cancelamento|libera/i.test(historico.texto), 'liberação do estoque não registrada');
-    return 'cancelado e estoque liberado/devolvido';
+    assert(!historico.texto.includes('cancelamento_pos_aprovacao'),
+      'cancelamento não pode devolver mercadoria sem confirmação física');
+    return 'cancelado após estorno confirmado, sem devolução física automática';
   });
 
   /* ========================== PAINEL ADMINISTRATIVO ==================== */
