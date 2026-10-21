@@ -193,7 +193,7 @@ async function main() {
 
   console.log('→ Preparando banco temporário...');
   await rodar('scripts/migrate.js');
-  await rodar('scripts/seed.js');
+  await rodar('scripts/seed.js', { NODE_ENV: 'test' });
 
   console.log(`→ Subindo servidor em ${BASE} ...`);
   let servidor = iniciarServidor();
