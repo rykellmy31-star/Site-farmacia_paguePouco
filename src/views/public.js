@@ -71,10 +71,11 @@ function secaoEntregas(settings) {
       <div class="linha coluna" style="gap:6px">
         <h2 class="mb-0">${e(home.entregaTitulo || 'Entregas para todo o Brasil')}</h2>
         <p class="mb-0">${e(home.entregaTexto || '')}</p>
-        <p class="mb-0 texto-pequeno">
-          ${ICONES.caminhao} Frete fixo por estado • ${ICONES.cadeado} Compra segura •
-          <a href="/pagina/entregas-e-fretes">Como calculamos o frete</a>
-        </p>
+        <div class="beneficios-entrega" aria-label="Benefícios de entrega e compra">
+          <span class="beneficio-entrega">${ICONES.caminhao} Frete fixo por estado</span>
+          <span class="beneficio-entrega">${ICONES.cadeado} Compra segura</span>
+          <a class="beneficio-entrega beneficio-link" href="/pagina/entregas-e-fretes">Como calculamos o frete</a>
+        </div>
       </div>
     </div>
   </section>`;
@@ -339,14 +340,15 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
           </div>
 
           ${venda.ok && disponivel > 0 ? `
-          <div class="linha centro" style="gap:10px;flex-wrap:wrap">
+          <div class="linha centro compra-produto">
             <div class="quantidade">
               <button type="button" data-qtd="-1" aria-label="Diminuir quantidade">−</button>
               <input type="number" id="quantidadeProduto" value="1" min="1" max="${Math.min(99, disponivel)}" aria-label="Quantidade">
               <button type="button" data-qtd="1" aria-label="Aumentar quantidade">+</button>
             </div>
-            <button class="botao destaque cresce" data-adicionar-carrinho="${e(produto.id)}" data-quantidade-input="quantidadeProduto">
-              ${ICONES.carrinho} Adicionar à cesta
+            <button type="button" class="botao destaque botao-adicionar-cesta" data-adicionar-carrinho="${e(produto.id)}" data-quantidade-input="quantidadeProduto">
+              <span class="icone-cesta" aria-hidden="true">${ICONES.carrinho}</span>
+              <span>Adicionar à cesta</span>
             </button>
           </div>
           <p class="texto-pequeno texto-suave mt-1">${disponivel} unidade(s) disponível(eis).</p>` : `

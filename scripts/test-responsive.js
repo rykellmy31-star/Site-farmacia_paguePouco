@@ -13,6 +13,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { paginaPublica } from '../src/views/layout.js';
 import { paginaAdmin } from '../src/views/admin/layout.js';
+import { produtoPage } from '../src/views/public.js';
+import { cartaoProduto } from '../src/views/partials.js';
 
 const raiz = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const chrome = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium',
@@ -22,9 +24,12 @@ assert(chrome, 'Chrome/Chromium ausente; instalar para testar responsividade rea
 const settings = { empresa: {nomeFantasia:'Farmácia Pague Pouco'},
   tema: {logoUrl:'/img/logo-pague-pouco.png',logoAltura:58}, seo:{}, whatsapp:{}, cookies:{} };
 const db = {collection:()=>({all:()=>[]})};
-const cards = ('<article class="produto"><a class="foto"><img src="/img/produto-sem-foto.svg"></a>' +
-  '<h3 class="nome">Produto exemplo 500mg</h3><span class="preco">R$ 12,90</span>' +
-  '<div class="acoes"><button class="botao bloquinho">Adicionar à cesta</button></div></article>').repeat(8);
+const product = { id:'produto-cesta-teste', slug:'produto-cesta-teste',
+  nome:'Absorvente noturno com abas — 24 unidades', ativo:true,
+  marca:'Higiene Total', imagens:[], precoCentavos:1990,
+  precoPromocionalCentavos:190, estoque:{quantidade:5,reservado:0},
+  sanitario:{classificacao:'nao_aplicavel'}, descricao:'Produto de teste visual.' };
+const cards = Array.from({length:8}, () => cartaoProduto(product)).join('');
 const conteudo = '<div class="container"><h1>Buscar produtos</h1><p>36 produtos encontrados</p>' +
   '<form class="filtros"><div class="linha centro entre" style="flex-wrap:wrap;gap:10px">' +
   '<div class="linha centro ordenacao-campo" style="gap:8px">' +
@@ -38,6 +43,9 @@ const storefront = paginaPublica({db,settings,req:{pathname:'/busca'},arvore:[
   {id:'1',slug:'medicamentos',nome:'Medicamentos isentos de prescrição',filhas:[]},
   {id:'2',slug:'higiene',nome:'Higiene pessoal',filhas:[]}
 ],termoBusca:'paracetamol',cartCount:1,csrf:'teste'}, {titulo:'Busca',conteudo});
+const productDetail = produtoPage({db,settings,req:{pathname:'/produto/produto-cesta-teste'},
+  arvore:[],cartCount:1,csrf:'teste'}, {produto:product,categoria:null,relacionados:[],
+  configLoja:{}});
 const linhas = ('<tr><td>Pedido exemplo</td><td>Produto com descrição completa</td>' +
   '<td>R$ 19,90</td><td>Em análise</td></tr>').repeat(8);
 const adminPage = paginaAdmin({db,settings,req:{query:new URLSearchParams()},
@@ -62,7 +70,7 @@ const servidor = http.createServer(async(req,res)=>{
     res.end(await fsp.readFile(path.join(raiz,'public/img',nome)));return;
   }
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
-  res.end(rota==='/admin'?adminPage:storefront);
+  res.end(rota==='/admin'?adminPage:rota==='/produto-teste'?productDetail:storefront);
 });
 
 const expression='(() => {' +
@@ -75,7 +83,9 @@ const expression='(() => {' +
   'scroll:document.documentElement.scrollWidth,search:rect(get(".busca")),suggestion:rect(lista),' +
   'mobileNav:visible(get(".menu-mobile")),desktopNav:visible(get(".menu-departamentos")),' +
   'sort:rect(get(".ordenacao-campo select")),icon:rect(get(".cartao h3 svg")),' +
-  'table:rect(get(".tabela-rolagem"))});})()';
+  'table:rect(get(".tabela-rolagem")),buy:rect(get(".compra-produto .botao-adicionar-cesta")),' +
+  'buyIcon:rect(get(".compra-produto .icone-cesta svg")),catalogBuy:rect(get(".produto .acoes .botao-adicionar-cesta")),' +
+  'catalogIcon:rect(get(".produto .acoes .icone-cesta svg"))});})()';
 
 const dir=await fsp.mkdtemp(path.join(os.tmpdir(),'pague-pouco-cdp-'));
 let proc, socket;
@@ -111,11 +121,11 @@ try{
   });
   await cd('Page.enable');await cd('Runtime.enable');
   const host='http://127.0.0.1:'+servidor.address().port;
-  for(const area of ['publica','admin']){
+  for(const area of ['publica','produto','admin']){
     for(const width of [320,375,390,430,768,1024,1440]){
       await cd('Emulation.setDeviceMetricsOverride',{
         width,height:880,deviceScaleFactor:1,mobile:width<768});
-      await cd('Page.navigate',{url:host+(area==='admin'?'/admin':'/')});
+      await cd('Page.navigate',{url:host+(area==='admin'?'/admin':area==='produto'?'/produto-teste':'/')});
       let value;
       for(let k=0;k<40;k++){
         await delay(80);
@@ -130,6 +140,11 @@ try{
       assert(value.scroll<=value.client+2,label+': overflow horizontal '+JSON.stringify(value));
       if(area==='publica'){
         assert(value.search&&value.suggestion,label+': faltam componentes');
+        assert(value.catalogBuy&&value.catalogIcon,label+': botão dos cartões ausente');
+        assert(value.catalogIcon.width>=15&&value.catalogIcon.width<=19,
+          label+': ícone do catálogo ficou gigante '+JSON.stringify(value));
+        if(width>=768)assert(value.catalogBuy.width<=220,
+          label+': botão de catálogo muito largo '+JSON.stringify(value));
         assert(value.suggestion.width>=value.search.width-2,label+': sugestão estreita');
         assert(value.icon&&value.icon.width<=26,label+': SVG de pagamento gigante');
         if(width<768){
@@ -141,13 +156,24 @@ try{
           assert(!value.mobileNav&&value.desktopNav,label+': navegação desktop incorreta');
           assert(value.search.width>=150,label+': busca estreita no desktop');
         }
+      }else if(area==='produto'){
+        assert(value.buy&&value.buyIcon,label+': CTA do produto ausente');
+        assert(value.buyIcon.width>=15&&value.buyIcon.width<=19&&value.buyIcon.height<=19,
+          label+': carrinho gigante '+JSON.stringify(value));
+        if(width>=768) {
+          assert(value.buy.width<220,label+': botão de desktop ocupa largura excessiva '+JSON.stringify(value));
+        } else {
+          // Mobile mantém o botão largo para facilitar o toque, sem recorte.
+          assert(value.buy.width<=value.client+2 && value.buy.left>=0,
+            label+': botão mobile ultrapassa a tela '+JSON.stringify(value));
+        }
       }else{
         assert(value.table&&value.table.width>100,label+': tabela administrativa indisponível');
       }
       console.log('✓ '+label+' sem corte horizontal');
     }
   }
-  console.log('LAYOUT RESPONSIVO: 14/14 viewports aprovadas');
+  console.log('LAYOUT RESPONSIVO: 21/21 viewports aprovadas — mobile, desktop e produto');
 }finally{
   try{socket?.close();}catch{}
   if(proc)proc.kill('SIGKILL');
