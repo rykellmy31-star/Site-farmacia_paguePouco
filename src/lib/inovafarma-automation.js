@@ -69,12 +69,14 @@ export function avaliarAutomacaoInova(db, { agora = Date.now(), persistir = fals
   const eanSemCorrespondencia = produtos.filter(p=>!/^\d{8,14}$/.test(String(p.ean||''))).length;
   const pedidos = db.collection('orders').all();
   const vendasAguardando = pedidos.filter(p => p.inovaEnvioPendente === true &&
-    !p.inovaConfirmadoEm).length;
+    !p.inovaConfirmadoEm && p.statusFinanceiro === 'aprovado' &&
+    p.statusOperacional !== 'cancelado').length;
   const vendasConfirmadas = pedidos.filter(p => !!p.inovaConfirmadoEm).length;
   const vendasParaConferir = pedidos.filter(p => p.inovaEnvioPendente === true &&
-    !p.inovaConfirmadoEm && (p.itens || []).some(it =>
+    !p.inovaConfirmadoEm && (p.statusFinanceiro !== 'aprovado' ||
+    p.statusOperacional === 'cancelado' || (p.itens || []).some(it =>
       !/^\d{8,14}$/.test(String(it.ean ||
-        db.collection('products').get(it.produtoId)?.ean || '')))).length;
+        db.collection('products').get(it.produtoId)?.ean || ''))))).length;
   const problemas = [];
   if (habilitada && estoqueDesatualizado) problemas.push('estoque_desatualizado');
   if (habilitada && eanSemCorrespondencia) problemas.push('ean_incompleto');
