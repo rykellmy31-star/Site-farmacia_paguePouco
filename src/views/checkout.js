@@ -162,6 +162,13 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
           <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
           <div class="cartao">
             <h3>${ICONES.cadeado} Como você quer pagar?</h3>
+            ${infoPag.real && formasPagamento.pix ? `<div class="campo">
+              <label for="cpfPix">CPF do pagador (obrigatório para gerar o Pix)</label>
+              <input id="cpfPix" type="text" name="cpfPix" inputmode="numeric" autocomplete="off"
+                maxlength="14" required value="${e(ctx.usuario?.cpf || '')}"
+                placeholder="000.000.000-00" aria-describedby="cpfPixAjuda">
+              <span id="cpfPixAjuda" class="dica">Necessário para identificar o pagador na API Mercado Pago. Não será salvo como número de cartão.</span>
+            </div>` : ''}
 
             ${formasPagamento.pix ? `<label class="opcao-pagamento selecionada">
               <input type="radio" name="metodoPagamento" value="pix" checked>

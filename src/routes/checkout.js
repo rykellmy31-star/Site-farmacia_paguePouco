@@ -256,6 +256,14 @@ export function registrarRotasCheckout(app, db) {
       return void res.redirect('/checkout/pagamento?erro=' + encodeURIComponent('Forma de pagamento indisponível.'));
     }
 
+    // O CPF é opcional no cadastro, mas obrigatório na API Pix. Validar ANTES
+    // da criação do pedido para não reservar e cancelar estoque desnecessariamente.
+    const cpfPix = onlyDigits(req.body.cpfPix || req.user?.cpf || '');
+    if (metodo === 'pix' && formas.real && !v.cpf(cpfPix)) {
+      return void res.redirect('/checkout/pagamento?erro=' +
+        encodeURIComponent('Informe um CPF válido para gerar o Pix com o Mercado Pago.'));
+    }
+
     const parcelas = Math.max(1, Number(req.body.parcelas) || 1);
     const carrinhoOriginal = { itens: [...(cart.itens || [])], cupom: cart.cupom, frete: cart.frete };
     const resultado = await criarPedido(db, {
@@ -282,7 +290,7 @@ export function registrarRotasCheckout(app, db) {
     try { cobranca = await createPayment(db, {
       order: pedido,
       method: metodo,
-      payer: { nome: pedido.cliente?.nome, email: pedido.cliente?.email, cpf: req.user?.cpf },
+      payer: { nome: pedido.cliente?.nome, email: pedido.cliente?.email, cpf: cpfPix || req.user?.cpf },
       installments: parcelas,
       cardToken: req.body.cardToken || null,
       paymentMethodId: req.body.paymentMethodId || null,
@@ -307,6 +315,11 @@ export function registrarRotasCheckout(app, db) {
         renovarCestaAposPedido(db, res, req.user?.id || null);
         return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
       }
+      // Guardar apenas código HTTP/causa conhecida, nunca resposta bruta do MP,
+      // credenciais ou dados pessoais do pagador.
+      if (cobranca?.diagnostico) db.collection('orders').update(pedido.id, {
+        falhaPagamento: cobranca.diagnostico,
+      });
       const cancelado = cancelarCriacaoComRecusaDefinitiva(db, pedido.id);
       if (!cancelado.ok) {
         // Nunca reabra o checkout caso a reserva ainda esteja comprometida.
@@ -327,14 +340,17 @@ export function registrarRotasCheckout(app, db) {
     if (cobranca && cobranca.ok && cobranca.pagamento) {
       const pagamentoId = cobranca.pagamento.id;
       db.collection('orders').update(pedido.id, {
-        pagamentoId, pendenciaPagamento: null,
+        pagamentoId, pendenciaPagamento: cobranca.pixSemCodigo ? 'conciliacao_necessaria' : null,
       });
       pedido.pagamentoId = pagamentoId;
     }
     db.collection('orders').update(pedido.id, {
       historico: [...(pedido.historico || []), {
         tipo: 'financeiro', status: 'pendente', em: new Date().toISOString(), por: 'sistema',
-        obs: cobranca?.ok ? 'Cobrança criada no provedor de pagamento.' : `Falha ao criar cobrança: ${cobranca?.erro || 'erro desconhecido'}`,
+        obs: cobranca?.pixSemCodigo
+          ? 'Mercado Pago aceitou a cobrança, mas não forneceu código Pix. Conferência necessária.'
+          : cobranca?.ok ? 'Cobrança criada no provedor de pagamento.'
+          : 'Falha de cobrança; verificação necessária.',
       }],
     });
 

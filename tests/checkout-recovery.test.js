@@ -83,7 +83,7 @@ async function respostaProvedor(status) {
   try {
     const resultado = await criarCobrancaMP({
       db, order: { id: 'pedido', codigo: 'PP-AUDITORIA', totalCentavos: 1980 },
-      method: 'pix', payer: { nome: 'Teste', email: 'teste@example.invalid' },
+      method: 'pix', payer: { nome: 'Teste', email: 'teste@example.invalid', cpf: '12345678909' },
       config: { payments: { mp: { accessToken: 'TOKEN_FICTICIO_NAO_PUBLICAR' } } },
       returnUrls: { notificationUrl: 'https://site.example.invalid/webhooks/mercadopago' },
     });
@@ -118,7 +118,7 @@ test('timeout ou falha de rede exigem conciliação, sem criar pagamento fictíc
   try {
     await assert.rejects(criarCobrancaMP({
       db, order: { id: 'p', codigo: 'PP-REDE', totalCentavos: 1000 },
-      method: 'pix', payer: { email: 'teste@example.invalid' },
+      method: 'pix', payer: { email: 'teste@example.invalid', cpf: '12345678909' },
       config: { payments: { mp: { accessToken: 'TOKEN_FICTICIO_NAO_PUBLICAR' } } },
     }), /Timeout simulado/);
     assert.equal(db.collection('payments').count(), 0);

@@ -114,7 +114,7 @@ test('cobrança Pix usa Access Token decifrado apenas no backend (API simulada)'
   };
   const res=await createPayment(db,{
     order:{id:'order-sim',codigo:'PP-TESTE',totalCentavos:4200},
-    method:'pix',payer:{email:'cliente@example.com',nome:'Teste Cliente'},
+    method:'pix',payer:{email:'cliente@example.com',nome:'Teste Cliente',cpf:'12345678909'},
     returnUrls:{notificationUrl:'https://test.example/webhooks/mercadopago'},
   });
   assert.equal(res.ok,true);
