@@ -233,17 +233,23 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
 
 export function telaConfirmacao(ctx, { pedido, pagamento }) {
   return paginaPublica(ctx, {
-    titulo: `Pedido ${pedido.codigo} confirmado`,
+    titulo: `Pedido ${pedido.codigo} registrado`,
     semIndex: true,
     conteudo: `<div class="container">
       ${passosHtml('confirmacao')}
       <div class="pagina-conteudo texto-centro">
-        <h1>${ICONES.check} Pedido registrado!</h1>
+        <h1>${pedido.pendenciaPagamento === 'conciliacao_necessaria' ? 'Pedido aguardando verificação de pagamento' : `${ICONES.check} Pedido registrado!`}</h1>
         <p class="negrito">Pedido <strong>${e(pedido.codigo)}</strong></p>
         <p>E-mail informado no pedido: <strong>${e(pedido.cliente?.email || '')}</strong>. O envio automático depende de um serviço de e-mail configurado.</p>
       </div>
 
-      ${pagamento?.metodo === 'pix' && pedido.statusFinanceiro === 'pendente' ? `
+      ${pedido.pendenciaPagamento === 'conciliacao_necessaria' ? `
+      <div class="cartao mt-2" role="status">
+        <h3>Pagamento em verificação — não faça outra tentativa agora</h3>
+        <p>O provedor não confirmou se recebeu a solicitação. <strong>O pagamento ainda não está confirmado</strong> e o estoque está reservado temporariamente.</p>
+        <p>Não tente pagar novamente até conferir a situação em <a href="/conta/pedidos/${e(pedido.codigo)}">Meus pedidos</a> ou entre em contato com o atendimento, informando o código <strong>${e(pedido.codigo)}</strong>.</p>
+        <p class="texto-pequeno">A equipe verificará a cobrança antes de liberar o estoque ou concluir a venda.</p>
+      </div>` : pagamento?.metodo === 'pix' && pedido.statusFinanceiro === 'pendente' ? `
       <div class="cartao mt-2">
         <h3>Pague com Pix</h3>
         ${pagamento.simulado ? `<div class="simulado-aviso">
@@ -263,7 +269,7 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
       <div class="cartao mt-2">
         <h3>${pagamento?.metodo === 'pix' ? 'Pagamento Pix' : 'Pagamento com cartão'}</h3>
         <p>Status atual: <strong>${e(String(pedido.statusFinanceiro || ''))}</strong>.</p>
-        <p class="texto-pequeno texto-suave mb-0">Você receberá a atualização por e-mail assim que o pagamento for confirmado.</p>
+        <p class="texto-pequeno texto-suave mb-0">Acompanhe o status em Meus pedidos. O envio de atualizações por e-mail depende da configuração do serviço de entrega.</p>
       </div>`}
 
       <div class="cartao">
