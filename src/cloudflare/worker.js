@@ -97,7 +97,7 @@ export class LojaDurableObject extends DurableObject {
       const estornos = await reconciliarEstornos(this.db);
       if (estornos.erros) console.warn('[estornos] casos exigindo conciliação:', estornos.erros);
       await this.db.flush();
-      await this.programarAlarmePix();
+      await this.programarAlarmeFinanceiro();
     });
   }
 }
