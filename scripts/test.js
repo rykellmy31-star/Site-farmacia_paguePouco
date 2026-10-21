@@ -744,7 +744,7 @@ async function main() {
       assert(resposta.location.includes('/checkout/pagamento?erro='),
         'CPF inválido não bloqueou checkout antes do pedido: ' + resposta.location);
       const carrinhoDepois = await cliente.get('/api/carrinho');
-      assert.equal(carrinhoDepois.json.itens.length, carrinhoAntes.json.itens.length,
+      assert(carrinhoDepois.json.itens.length === carrinhoAntes.json.itens.length,
         'carrinho foi alterado apesar de dados Pix inválidos');
     } finally {
       await admin.post('/admin/api/config/pagamentos', { form: {
