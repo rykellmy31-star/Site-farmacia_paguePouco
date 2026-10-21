@@ -16,6 +16,7 @@
  */
 import crypto from 'node:crypto';
 import { nowISO } from '../store.js';
+import { diagnosticarFalhaPix } from './diagnostics.js';
 
 const API = 'https://api.mercadopago.com';
 
@@ -77,6 +78,9 @@ export async function createPayment({ db, order, method, payer, installments = 1
   const notificationUrl = returnUrls.notificationUrl || '';
   const valor = Number((order.totalCentavos / 100).toFixed(2));
 
+  if (method === 'pix' && !/^[0-9]{11}$/.test(String(payer?.cpf || '').replace(/\\D/g, ''))) {
+    return { ok: false, erro: 'Informe um CPF válido no pagamento para gerar o Pix.' };
+  }
   const payerPayload = {
     email: payer?.email || '',
     first_name: (payer?.nome || 'Cliente').split(' ')[0],
@@ -174,15 +178,24 @@ export async function createPayment({ db, order, method, payer, installments = 1
     // provedor não criou a cobrança. Não libere a reserva para vender
     // o mesmo estoque ou aceitar uma segunda cobrança automaticamente.
     const indeterminado = [408, 429].includes(res.status) || res.status >= 500;
+    const diagnostico = indeterminado ? null : diagnosticarFalhaPix(res.status, res.data);
     return {
-      ok: false, indeterminado,
+      ok: false, indeterminado, diagnostico,
       erro: indeterminado
         ? 'Pagamento com confirmação pendente. Consulte seus pedidos antes de tentar novamente.'
-        : 'O provedor recusou a solicitação de pagamento. Revise os dados e tente novamente.',
+        : diagnostico.motivo,
     };
   }
   const d = res.data;
+  // Um 2xx sem identificador válido não prova que a cobrança falhou;
+  // não cancele o pedido e não crie outra cobrança automaticamente.
+  if (!d || !/^\\d{1,30}$/.test(String(d.id ?? ''))) {
+    return { ok: false, indeterminado: true,
+      erro: 'O provedor confirmou a solicitação sem devolver a identificação. Conciliação necessária.' };
+  }
   const poi = d.point_of_interaction || {};
+  const pixSemCodigo = method === 'pix' && !poi.transaction_data?.qr_code &&
+    !['approved','refunded'].includes(String(d.status || '').toLowerCase());
   const pagamento = payments.insert({
     id: `mp_${d.id}`,
     pedidoId: order.id,
@@ -197,6 +210,7 @@ export async function createPayment({ db, order, method, payer, installments = 1
     pixCodigo: poi.transaction_data?.qr_code || null,
     pixQrBase64: poi.transaction_data?.qr_code_base64 || null,
     pixExpiraEm: d.date_of_expiration || null,
+    pixSemCodigo,
     transacaoId: d.id ? String(d.id) : null,
     bandeira: d.payment_method_id || null,
     ultimosDigitos: d.card?.last_four_digits || null,
@@ -213,7 +227,8 @@ export async function createPayment({ db, order, method, payer, installments = 1
     pagamento,
     checkoutUrl: pagamento.checkoutUrl,
     simulado: false,
-    instrucoes: method === 'pix' ? 'Aponte a câmera do seu banco para o QR Code ou use o código "Pix Copia e Cola".' : null,
+    pixSemCodigo,
+    instrucoes: method === 'pix ? 'Aponte a câmera do seu banco para o QR Code ou use o código "Pix Copia e Cola".' : null,
   };
 }
 
