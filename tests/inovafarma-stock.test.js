@@ -57,7 +57,7 @@ test('INOVAFARMA: saldo remoto menos reservas e vendas não refletidas', () => {
   assert.equal(estoqueInovaDisponivel(p, Date.now() + 16 * 60_000), 0);
   assert.equal(vendasPendentesInova(db).length, 1);
   assert.deepEqual(vendasPendentesInova(db)[0].itens, [
-    { produtoId: 'produto-1', ean: EAN, quantidade: 3 },
+    { produtoId: 'produto-1', ean: EAN, quantidade: 3, precoUnitarioCentavos: 0, subtotalCentavos: 0 },
   ]);
 });
 

@@ -9,7 +9,7 @@ import { STATUS_FINANCEIRO, STATUS_OPERACIONAL, pedidoPrecisaConferencia } from 
 import { mapStatus } from '../../lib/payments/internal.js';
 
 /* =============================== PEDIDOS =============================== */
-export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros }) {
+export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, vendedores = [] }) {
   return paginaAdmin(ctx, {
     titulo: 'Pedidos',
     ativo: 'pedidos',
@@ -18,6 +18,10 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros })
     ${painel({
       corpo: `<form class="barra-ferramentas" method="get" action="/admin/pedidos" style="margin:0">
         <input type="text" name="q" placeholder="Código, nome, e-mail ou CPF" value="${e(filtros.q || '')}">
+        <select name="vendedor" aria-label="Filtrar por vendedor">
+          <option value="">Todos os vendedores</option>
+          ${vendedores.map(v => `<option value="${e(v.id)}" ${filtros.vendedor === v.id ? 'selected' : ''}>${e(v.nome)} — ${e(v.codigoInova)}</option>`).join('')}
+        </select>
         <select name="financeiro">
           <option value="">Pagamento: todos</option>
           ${Object.values(STATUS_FINANCEIRO).map((s) => `<option value="${e(s.id)}" ${filtros.financeiro === s.id ? 'selected' : ''}>${e(s.nome)}</option>`).join('')}
@@ -43,10 +47,11 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros })
     ${painel({
       semPadding: true,
       corpo: tabelaAdmin({
-        colunas: ['Pedido', 'Cliente', 'Itens', 'Total', 'Pagamento', 'Entrega', 'Data', ''],
+        colunas: ['Pedido', 'Cliente', 'Vendedor', 'Itens', 'Total', 'Pagamento', 'Entrega', 'Data', ''],
         linhas: pedidos.map((p) => `<tr>
           <td><strong>${e(p.codigo)}</strong></td>
           <td>${e(p.cliente?.nome || '—')}<br><span class="texto-pequeno texto-suave">${e(p.cliente?.email || '')}</span></td>
+          <td>${e(p.vendedor?.nome || 'Atendimento geral')}</td>
           <td>${(p.itens || []).reduce((a, i) => a + i.quantidade, 0)}</td>
           <td>${money(p.totalCentavos)}</td>
           <td>${etiquetaStatus(p.statusFinanceiro)}
@@ -91,6 +96,12 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
       Código: ${e(pedido.falhaPagamento.codigo || 'não informado')}.
       Confira credenciais, dados do pagador e habilitação do Pix antes de uma nova tentativa.
     </div>` : ''}
+
+    ${painel({ titulo: 'Vendedor responsável', corpo: pedido.vendedor
+      ? `<p><strong>Nome:</strong> ${e(pedido.vendedor.nome)}</p>
+         <p><strong>Código InovaFarma:</strong> <code>${e(pedido.vendedor.codigoInova)}</code></p>
+         <p class="texto-pequeno texto-suave">Registro histórico da compra. Não será modificado por edições futuras no vendedor.</p>`
+      : '<p>Atendimento geral — nenhum vendedor selecionado no pedido.</p>' })}
 
     <div class="cartoes">
       ${cartaoMetrica('Total', money(pedido.totalCentavos), `${(pedido.itens || []).reduce((a, i) => a + i.quantidade, 0)} itens`)}

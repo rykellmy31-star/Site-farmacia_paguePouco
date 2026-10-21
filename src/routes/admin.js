@@ -40,6 +40,8 @@ import { estadoCredenciaisMercadoPago, salvarCredenciaisMercadoPago, removerCred
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
 import { revogarSessoes } from '../lib/session-revocation.js';
+import { cadastrarVendedor, editarVendedor, metricasVendedores } from '../lib/sellers.js';
+import { telaVendedores } from '../views/admin/sellers.js';
 import { validarNovoCupom } from '../lib/coupon-validation.js';
 
 const CARTAO_403 = (req) => ({
@@ -81,6 +83,7 @@ function ctxAdmin(req, db) {
       podeEditarPedidos: can(req.adminUser, 'pedidos.editar'),
       podeEstornar: can(req.adminUser, 'pagamentos.estornar'),
       podeSimularPagamento: can(req.adminUser, 'pagamentos.estornar') || req.adminUser?.role === 'super_admin',
+      podeEditarVendedores: can(req.adminUser, 'vendedores.editar'),
     },
   };
 }
@@ -338,6 +341,72 @@ export function registrarRotasAdmin(app, db) {
     }));
   });
 
+  /* ============================== VENDEDORES ============================ */
+  app.get('/admin/vendedores', (req, res) => {
+    if (!guard(req, res, 'vendedores.ver')) return;
+    const q = String(req.query.get('q') || '').slice(0,120).trim().toLowerCase();
+    const situacao = String(req.query.get('situacao') || '');
+    const todos = db.collection('sellers').all();
+    const vendedores = todos.filter(v =>
+      (!q || String(v.nome).toLowerCase().includes(q) ||
+        String(v.codigoInova).toLowerCase().includes(q)) &&
+      (!['ativo', 'inativo'].includes(situacao) ||
+        v.ativo === (situacao === 'ativo')))
+      .sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const editId = req.query.get('editar');
+    const editando = can(req.adminUser, 'vendedores.editar') && editId
+      ? db.collection('sellers').get(editId) : null;
+    res.set('Cache-Control', 'no-store');
+    res.html(telaVendedores(ctxAdmin(req, db), {
+      vendedores, editando, filtros: { q, situacao },
+      metricas: metricasVendedores(db),
+      erro: req.query.get('erro') || '', salvo: req.query.get('salvo') || '',
+    }));
+  });
+  const erroVendedor = (res, msg) => res.redirect('/admin/vendedores?erro=' + encodeURIComponent(msg) + '#cadastro');
+
+  app.post('/admin/vendedores', (req, res) => {
+    if (!guard(req, res, 'vendedores.editar')) return;
+    const resultado = cadastrarVendedor(db, {
+      nome: req.body.nome, codigoInova: req.body.codigoInova, ativo: req.body.ativo === '1',
+    });
+    if (!resultado.ok) return void erroVendedor(res, resultado.erro);
+    logAdmin(db, req.adminUser, 'criou_vendedor', 'vendedor', resultado.vendedor.id,
+      { nome: resultado.vendedor.nome, codigoInova: resultado.vendedor.codigoInova }, req);
+    res.redirect('/admin/vendedores?salvo=1');
+  });
+
+  app.post('/admin/vendedores/:id', (req, res) => {
+    if (!guard(req, res, 'vendedores.editar')) return;
+    const anterior = db.collection('sellers').get(req.params.id);
+    if (!anterior) return void res.status(404).html('Vendedor não encontrado.');
+    const resultado = editarVendedor(db, anterior.id, {
+      nome: req.body.nome, codigoInova: req.body.codigoInova, ativo: req.body.ativo === '1',
+    });
+    if (!resultado.ok) return void erroVendedor(res, resultado.erro);
+    logAdmin(db, req.adminUser, 'editou_vendedor', 'vendedor', anterior.id, {
+      antes: { nome: anterior.nome, codigoInova: anterior.codigoInova, ativo: anterior.ativo },
+      depois: { nome: resultado.vendedor.nome, codigoInova: resultado.vendedor.codigoInova, ativo: resultado.vendedor.ativo },
+    }, req);
+    res.redirect('/admin/vendedores?salvo=1');
+  });
+
+  app.post('/admin/vendedores/:id/situacao', (req, res) => {
+    if (!guard(req, res, 'vendedores.editar')) return;
+    const anterior = db.collection('sellers').get(req.params.id);
+    if (!anterior) return void res.status(404).html('Vendedor não encontrado.');
+    if (!['0','1'].includes(String(req.body.ativo))) {
+      return void res.status(400).html('Situação inválida.');
+    }
+    const ativo = req.body.ativo === '1';
+    if (anterior.ativo !== ativo) {
+      db.collection('sellers').update(anterior.id, { ativo, atualizadoEm: new Date().toISOString() });
+      logAdmin(db, req.adminUser, ativo ? 'ativou_vendedor' : 'desativou_vendedor',
+        'vendedor', anterior.id, { nome: anterior.nome, codigoInova: anterior.codigoInova }, req);
+    }
+    res.redirect('/admin/vendedores?salvo=1');
+  });
+
   /* =============================== PEDIDOS ============================== */
   app.get('/admin/pedidos', (req, res) => {
     if (!guard(req, res, 'pedidos.ver')) return;
@@ -348,12 +417,14 @@ export function registrarRotasAdmin(app, db) {
       operacional: req.query.get('operacional') || '',
       periodo: req.query.get('periodo') || '',
       pendencia: req.query.get('pendencia') === '1' ? '1' : '',
+      vendedor: req.query.get('vendedor') || '',
     };
     let pedidos = db.collection('orders').all();
     if (filtros.q) {
       const b = String(filtros.q).toLowerCase();
       pedidos = pedidos.filter((p) => [p.codigo, p.cliente?.nome, p.cliente?.email, p.cliente?.cpf].some((f) => String(f || '').toLowerCase().includes(b)));
     }
+    if (filtros.vendedor) pedidos = pedidos.filter((p) => p.vendedor?.id === filtros.vendedor);
     if (filtros.financeiro) pedidos = pedidos.filter((p) => p.statusFinanceiro === filtros.financeiro);
     if (filtros.operacional) pedidos = pedidos.filter((p) => p.statusOperacional === filtros.operacional);
     if (filtros.pendencia) pedidos = pedidos.filter(pedidoPrecisaConferencia);
@@ -366,7 +437,7 @@ export function registrarRotasAdmin(app, db) {
     const total = pedidos.length;
     const pagina = Number(req.query.get('pagina')) || 1;
     const porPagina = 25;
-    res.html(telaPedidos(ctx, { pedidos: pedidos.slice((pagina - 1) * porPagina, pagina * porPagina), total, pagina, porPagina, filtros }));
+    res.html(telaPedidos(ctx, { pedidos: pedidos.slice((pagina - 1) * porPagina, pagina * porPagina), total, pagina, porPagina, filtros, vendedores: db.collection('sellers').all() }));
   });
 
   app.get('/admin/pedidos/:id', (req, res) => {

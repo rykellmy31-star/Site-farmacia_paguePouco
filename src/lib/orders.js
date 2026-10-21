@@ -11,6 +11,7 @@
 import crypto from 'node:crypto';
 import { nowISO } from './store.js';
 import { inovaAtiva } from './inovafarma-stock.js';
+import { selecionarVendedorPedido } from './sellers.js';
 import { podeVender, precoVigenteCentavos, estoqueDisponivel } from './catalog.js';
 import { resolverFreteEscolhido } from './freight.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
@@ -107,12 +108,15 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
  * Cria o pedido a partir do carrinho, REVALIDANDO tudo no servidor.
  * @returns {{ok:boolean, erro?:string, pedido?:object, avisos?:string[]}}
  */
-export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cupomCodigo = null, req = null }) {
+export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cupomCodigo = null, vendedorId = null, req = null }) {
   const avisos = [];
   const loja = db.collection('settings').get('loja') || {};
   if (loja.lojaAberta === false) return { ok: false, erro: 'A loja está fechada para novos pedidos.' };
   if (!cart || !(cart.itens || []).length) return { ok: false, erro: 'Carrinho vazio.' };
   if (!endereco?.cep) return { ok: false, erro: 'Informe o CEP de entrega.' };
+  // Conferir o ID interno no servidor antes de qualquer reserva de estoque.
+  const vendedorValidado = selecionarVendedorPedido(db, vendedorId);
+  if (!vendedorValidado.ok) return vendedorValidado;
 
   // 1) Revalida cada item contra o cadastro atual
   const itens = [];
@@ -227,6 +231,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
   const pedido = db.collection('orders').insert({
     codigo,
     carrinhoId: cart.id,
+    vendedor: vendedorValidado.vendedor ? { ...vendedorValidado.vendedor } : null,
     clienteId: cliente?.id || null,
     cliente: {
       nome: cliente?.nome || endereco.nome || '',

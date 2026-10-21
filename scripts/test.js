@@ -245,6 +245,7 @@ async function main() {
   let codigoPedido = '';
   let idPedido = '';
   let idPagamento = '';
+  let vendedorTesteId = '';
   let idNovoProduto = '';
   let idPendenteCriado = '';
   let idNovaCategoria = '';
@@ -739,6 +740,51 @@ async function main() {
     return 'ok';
   });
 
+  await testar('Vendedores: cadastrar, deduplicar e filtrar no painel', async () => {
+    const cadastro=await admin.post('/admin/vendedores', {form:{
+      nome:'Vendedor Teste de Integração',codigoInova:'00125',ativo:'1',
+    }});
+    assert([302,303].includes(cadastro.status) && cadastro.location.includes('salvo=1'),
+      'não cadastrou vendedor: '+cadastro.location);
+    const painel=await admin.get('/admin/vendedores');
+    assert(painel.status===200 && painel.texto.includes('00125') &&
+      painel.texto.includes('Vendedor Teste de Integração'), 'vendedor não aparece');
+    const m=/\/admin\/vendedores\?editar=([a-z0-9]+)#cadastro/.exec(painel.texto);
+    assert(m,'ID de vendedor não encontrado');vendedorTesteId=m[1];
+    const duplicado=await admin.post('/admin/vendedores',{form:{
+      nome:'Outro vendedor',codigoInova:'00125',ativo:'1',
+    }});
+    assert(duplicado.location.includes('erro='), 'código duplicado aceito');
+    const filtro=await admin.get('/admin/vendedores?q=00125&situacao=ativo');
+    assert(filtro.texto.includes('Vendedor Teste de Integração'),'filtro de vendedores falhou');
+    const semPermissao=await atendente.get('/admin/vendedores');
+    assert(semPermissao.status===403 || [302,303].includes(semPermissao.status),
+      'acesso não autorizado a vendedores permitido');
+    return 'nome, código 00125, duplicidade, filtro e proteção de acesso';
+  });
+
+  await testar('Vendedores: checkout valida vendedor ativo e preserva carrinho', async () => {
+    const p=await cliente.get('/checkout/pagamento');
+    assert(p.texto.includes('SELECIONE SEU VENDEDOR') &&
+      p.texto.includes('Vendedor Teste de Integração'), 'seletor checkout ausente');
+    const invalido=await cliente.post('/checkout/finalizar', {form:{
+      metodoPagamento:'pix',vendedorId:'vendedor-inexistente',
+    }});
+    assert(invalido.location.includes('/checkout/pagamento?erro='),
+      'vendedor manipulado passou pelo checkout: '+invalido.location);
+    const desligar=await admin.post('/admin/vendedores/'+vendedorTesteId+'/situacao',
+      {form:{ativo:'0'}});
+    assert([302,303].includes(desligar.status),'não desativou vendedor');
+    const p2=await cliente.get('/checkout/pagamento');
+    assert(p2.texto.includes('Atendimento geral') &&
+      !p2.texto.includes('name="vendedorId"'), 'vendedor inativo ainda aparece');
+    const inativo=await cliente.post('/checkout/finalizar', {form:{
+      metodoPagamento:'pix',vendedorId:vendedorTesteId,
+    }});
+    assert(inativo.location.includes('/checkout/pagamento?erro='), 'vendedor inativo aceito');
+    return 'seleção obrigatória, IDs falsos/inativos rejeitados; atendimento geral sem vendedores';
+  });
+
   await testar('Mercado Pago exige CPF antes de criar pedido ou chamar API', async () => {
     const cred = await admin.post('/admin/api/mercadopago/credenciais', { form: {
       accessToken: 'TEST-token-ficticio-sem-acesso-externo-12345678', ambiente: 'testes',
@@ -775,12 +821,20 @@ async function main() {
     return 'pedido não criado, carrinho intacto e nenhuma cobrança realizada';
   });
 
+  await testar('Vendedores: ativar para vincular à venda e manter código textual', async () => {
+    const r=await admin.post('/admin/vendedores/'+vendedorTesteId+'/situacao',{form:{ativo:'1'}});
+    assert([302,303].includes(r.status),'não reativou vendedor');
+    const pagina=await cliente.get('/checkout/pagamento');
+    assert(pagina.texto.includes('value="'+vendedorTesteId+'"'), 'seletor não atualizado');
+    return 'vendedor ativo na finalização';
+  });
+
   await testar('Finalização cria o pedido, reserva estoque e gera cobrança Pix', async () => {
     const antes = await cliente.get('/api/carrinho');
     const itensAntes = antes.json.itens.length;
     assert(itensAntes > 0, 'carrinho vazio');
     const r = await cliente.post('/checkout/finalizar', {
-      form: { metodoPagamento: 'pix', parcelas: '1' },
+      form: { metodoPagamento: 'pix', parcelas: '1', vendedorId: vendedorTesteId },
     });
     assert(r.status === 303 || r.status === 302, `status ${r.status}`);
     const m = /confirmacao\/(PP\d+)/.exec(r.location);
@@ -789,6 +843,8 @@ async function main() {
     const conf = await cliente.get(`/checkout/confirmacao/${codigoPedido}`);
     assert(conf.status === 200, `status ${conf.status}`);
     assert(conf.texto.includes('Pedido registrado'), 'confirmação não exibida');
+    assert(conf.texto.includes('Vendedor Teste de Integração') && !conf.texto.includes('00125'),
+      'confirmação não preserva nome ou expõe código Inova');
     assert(conf.texto.includes('PIX-SIMULADO'), 'código Pix simulado ausente');
     assert(/ambiente de testes/i.test(conf.texto), 'aviso de ambiente de testes ausente');
     return `pedido ${codigoPedido}`;
@@ -811,6 +867,13 @@ async function main() {
     const detalhe = await admin.get(`/admin/pedidos/${idPedido}`);
     assert(detalhe.texto.includes(codigoPedido), 'detalhe do pedido não carregou');
     assert(/Aguardando pagamento|pendente/i.test(detalhe.texto), 'status inicial incorreto');
+    assert(detalhe.texto.includes('Vendedor responsável') &&
+      detalhe.texto.includes('00125'), 'operador não consegue consultar código do vendedor');
+    const filtro=await admin.get('/admin/pedidos?vendedor='+vendedorTesteId);
+    assert(filtro.texto.includes(codigoPedido), 'filtro de pedidos por vendedor falhou');
+    await admin.post('/admin/vendedores/'+vendedorTesteId+'/situacao',{form:{ativo:'0'}});
+    const antigo=await admin.get('/admin/pedidos/'+idPedido);
+    assert(antigo.texto.includes('00125'), 'vendedor histórico mudou após desativação');
     return 'reserva registrada';
   });
 
