@@ -114,10 +114,15 @@ const limiteLogin = rateLimitMiddleware('login', config.rateLimit.loginMax);
 const limiteCheckout = rateLimitMiddleware('checkout', config.rateLimit.checkoutMax);
 app.use(async (req, res) => {
   const p = req.path;
-  if (p === '/conta/login' || p === '/conta/cadastro' || p === '/conta/esqueci-senha' || p === '/admin/login') {
+  // Limite tentativas de ENVIO, não visualizações GET do formulário.
+  // A regra anterior bloqueava clientes apenas por navegar entre login,
+  // cadastro e checkout, mesmo sem tentar autenticar ou finalizar.
+  if (req.method === 'POST' &&
+    (p === '/conta/login' || p === '/conta/cadastro' ||
+      p === '/conta/esqueci-senha' || p === '/admin/login')) {
     return limiteLogin(req, res);
   }
-  if (p.startsWith('/checkout') || p === '/api/frete') {
+  if (req.method === 'POST' && (p.startsWith('/checkout') || p === '/api/frete')) {
     return limiteCheckout(req, res);
   }
 });

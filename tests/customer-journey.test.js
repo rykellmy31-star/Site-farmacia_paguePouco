@@ -1,0 +1,308 @@
+/**
+ * Jornada de compra real no Worker local, sem cobranças, e-mails externos
+ * ou alterações na loja de produção. Dados descartáveis por execução.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { once } from 'node:events';
+import os from 'node:os';
+import path from 'node:path';
+import net from 'node:net';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+class Browser {
+  constructor(origin) {
+    this.origin = origin;
+    this.cookies = new Map();
+    this.csrf = null;
+  }
+  async request(url, opts = {}) {
+    const headers = { Cookie: [...this.cookies].map(([k, v]) => k + '=' + v).join('; '), ...opts.headers };
+    const response = await fetch(this.origin + url, { ...opts, redirect: 'manual', headers });
+    for (const c of response.headers.getSetCookie()) {
+      const part = c.split(';')[0];
+      const pos = part.indexOf('=');
+      if (pos > 0) this.cookies.set(part.slice(0, pos), part.slice(pos + 1));
+    }
+    return response;
+  }
+  async get(url) { return this.request(url); }
+  async token(url) {
+    const page = await this.get(url);
+    assert.equal(page.status, 200, 'GET ' + url + ' precisa abrir');
+    const html = await page.text();
+    const m = /name="_csrf"\s+value="([^"]+)"/.exec(html) || /"csrf":"([^"]+)"/.exec(html);
+    assert.ok(m?.[1], 'CSRF deve estar no HTML de ' + url);
+    this.csrf = m[1];
+    return html;
+  }
+  async form(url, obj, token = this.csrf) {
+    return this.request(url, {
+      method: 'POST',
+      body: new URLSearchParams({ _csrf: token || '', ...obj }),
+    });
+  }
+  async json(url, body) {
+    return this.request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': this.csrf },
+      body: JSON.stringify(body),
+    });
+  }
+}
+
+test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e painel de vendas', { timeout: 180000 }, async t => {
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'pague-pouco-journey-'));
+  const socket = net.createServer();
+  socket.listen(0, '127.0.0.1');
+  await once(socket, 'listening');
+  const port = socket.address().port;
+  await new Promise(resolve => socket.close(resolve));
+  const origin = 'http://127.0.0.1:' + port;
+  let child, logs = '';
+  async function stop() {
+    if (!child || child.exitCode !== null) return;
+    const p = child;
+    const exited = once(p, 'exit');
+    p.kill('SIGTERM');
+    const timeout = setTimeout(() => p.kill('SIGKILL'), 5000);
+    try { await exited; } finally { clearTimeout(timeout); }
+    child = null;
+  }
+  t.after(async () => { await stop(); await rm(folder, { recursive: true, force: true }); });
+  child = spawn(process.execPath, [
+    path.join(root, 'node_modules/wrangler/bin/wrangler.js'),
+    'dev', '--local', '--ip', '127.0.0.1', '--port', String(port),
+    '--persist-to', folder,
+    '--var', 'ADMIN_EMAIL:auditoria@tests.example',
+    '--var', 'ADMIN_PASSWORD:SomenteTeste-Worker-2026',
+  ], { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', BROWSER: 'none' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stdout.on('data', s => { logs = (logs + s).slice(-12000); });
+  child.stderr.on('data', s => { logs = (logs + s).slice(-12000); });
+  let started = false;
+  for (let i = 0; i < 140; i++) {
+    if (child.exitCode !== null) throw new Error('Worker encerrou: ' + logs);
+    try {
+      const res = await fetch(origin + '/__health', { signal: AbortSignal.timeout(1500) });
+      if (res.ok) { started = true; break; }
+    } catch {}
+    await pause(200);
+  }
+  assert.ok(started, 'Worker não iniciou: ' + logs);
+
+  const admin = new Browser(origin);
+  await admin.token('/admin/login');
+  const adminLogin = await admin.form('/admin/login', {
+    email: 'auditoria@tests.example', senha: 'SomenteTeste-Worker-2026',
+  });
+  assert.equal(adminLogin.status, 303);
+  assert.equal(adminLogin.headers.get('location'), '/admin');
+  await admin.token('/admin/produtos/novo');
+
+  // Cadastra produto não medicinal: sem liberar medicamentos sem responsável técnico.
+  const novo = await admin.form('/admin/api/produtos', {
+    nome: 'Sabonete Teste Jornada', sku: 'WORKER-JORNADA-001',
+    preco: '19.90', quantidade: '10', estoqueMinimo: '1',
+    classificacao: 'nao_aplicavel', ativo: '1',
+  });
+  assert.equal(novo.status, 200);
+  const produto = await novo.json();
+  assert.equal(produto.ok, true);
+  assert.ok(produto.id);
+
+  const snapshot = async () => {
+    const response = await admin.form('/admin/api/sistema/backup', {});
+    assert.equal(response.status, 200);
+    return (await response.json()).collections;
+  };
+  const product = (await snapshot()).products.find(p => p.id === produto.id);
+  assert.equal(product.precoCentavos, 1990);
+  assert.equal(product.estoque.quantidade, 10);
+
+  const client = new Browser(origin);
+  assert.equal((await client.get('/')).status, 200);
+  const search = await client.get('/busca?q=Sabonete%20Teste%20Jornada');
+  assert.equal(search.status, 200);
+  assert.match(await search.text(), /Sabonete Teste Jornada/);
+  const detail = await client.get('/produto/' + product.slug);
+  assert.equal(detail.status, 200);
+  assert.match(await detail.text(), /Sabonete Teste Jornada/);
+  await client.token('/conta/cadastro');
+  const add = await client.json('/api/carrinho/adicionar', {
+    produtoId: produto.id, quantidade: 2, precoUnitarioCentavos: 1,
+  });
+  assert.equal(add.status, 200);
+  const cart = await add.json();
+  assert.equal(cart.ok, true);
+  assert.equal(cart.subtotal, 3980, 'preço deve vir do cadastro, nunca do navegador');
+  assert.equal(cart.quantidade, 2);
+  const noLogin = await client.get('/checkout/endereco');
+  assert.equal(noLogin.status, 303);
+  assert.match(noLogin.headers.get('location'), /conta\/login/);
+
+  // Registro de cliente e preservação de carrinho após autenticação.
+  const signUp = await client.form('/conta/cadastro', {
+    nome: 'Comprador Jornada Teste',
+    email: 'comprador-jornada@tests.example',
+    telefone: '11988887777', cpf: '',
+    senha: 'ClienteTeste123', senha2: 'ClienteTeste123',
+  });
+  assert.equal(signUp.status, 303);
+  assert.equal(signUp.headers.get('location'), '/conta');
+  assert.ok(client.cookies.get('pp_sess') || client.cookies.get('pp_session'));
+  await client.token('/conta/enderecos');
+  const afterRegistration = await client.get('/api/carrinho');
+  assert.equal(afterRegistration.status, 200);
+  assert.equal((await afterRegistration.json()).quantidade, 2, 'carrinho preservado ao cadastrar');
+
+  // Promoção restrita deve respeitar as categorias, nunca descontar
+  // produtos que não participam da promoção.
+  const restricted = await admin.form('/admin/api/cupons', {
+    codigo: 'TESTECATEGORIAVAZIA', tipo: 'percentual',
+    valor: '50', ativo: '1', categoriasPermitidas: 'categoria-inexistente',
+  });
+  assert.equal(restricted.status, 200);
+  const ineligible = await client.json('/api/carrinho/cupom', { codigo: 'TESTECATEGORIAVAZIA' });
+  assert.equal(ineligible.status, 400, 'cupom não deve descontar categoria não elegível');
+  assert.equal((await ineligible.json()).ok, false);
+
+  const couponAdmin = await admin.form('/admin/api/cupons', {
+    codigo: 'TESTEJORNADA10', tipo: 'percentual',
+    valor: '10', ativo: '1', usoMaximo: '1',
+  });
+  assert.equal(couponAdmin.status, 200);
+  const couponClient = await client.json('/api/carrinho/cupom', { codigo: 'TESTEJORNADA10' });
+  assert.equal(couponClient.status, 200);
+  const applied = await couponClient.json();
+  assert.equal(applied.ok, true);
+  assert.equal(applied.desconto, 398, 'cupom de 10% deve aplicar sobre R$ 39,80');
+
+  const address = await client.form('/conta/enderecos', {
+    nome: 'Comprador Jornada Teste', apelido: 'Casa',
+    cep: '01001000', logradouro: 'Rua de teste', numero: '55',
+    bairro: 'Centro', cidade: 'São Paulo', uf: 'SP', padrao: '1',
+  });
+  assert.equal(address.status, 303, 'cliente pode salvar endereço');
+  const addressPage = await client.get('/conta/enderecos');
+  assert.match(await addressPage.text(), /Rua de teste/);
+  await client.token('/checkout/endereco');
+  const frete = await client.form('/checkout/endereco', {
+    nome: 'Comprador Jornada Teste', telefone: '11988887777',
+    cep: '01001000', logradouro: 'Rua de teste', numero: '55',
+    bairro: 'Centro', cidade: 'São Paulo', uf: 'SP',
+  });
+  assert.equal(frete.status, 303, 'frete deve ser calculado no servidor');
+  assert.equal(frete.headers.get('location'), '/checkout/pagamento');
+
+  const paymentPage = await client.token('/checkout/pagamento');
+  assert.match(paymentPage, /value="pix"/);
+  const purchase = await client.form('/checkout/finalizar', { metodoPagamento: 'pix' });
+  assert.equal(purchase.status, 303);
+  const confirmationUrl = purchase.headers.get('location');
+  assert.match(confirmationUrl, /^\/checkout\/confirmacao\/PP/);
+  const confirm = await client.get(confirmationUrl);
+  assert.equal(confirm.status, 200);
+  const confirmHtml = await confirm.text();
+  assert.match(confirmHtml, /PIX-SIMULADO|simulad/i, 'nenhum Pix cobrável deve ser gerado');
+  const myOrders = await client.get('/conta/pedidos');
+  assert.equal(myOrders.status, 200);
+  assert.match(await myOrders.text(), /PP20/);
+
+  // Fluxos da área do cliente além da compra.
+  await client.token('/conta/favoritos');
+  const liked = await client.json('/conta/favoritos', { produtoId: produto.id });
+  assert.equal(liked.status, 200);
+  assert.ok((await liked.json()).favoritos.includes(produto.id));
+  assert.match(await (await client.get('/conta/favoritos')).text(), /Sabonete Teste Jornada/);
+  const unliked = await client.form('/conta/favoritos/remover', { produtoId: produto.id });
+  assert.equal(unliked.status, 303);
+
+  await client.token('/conta/dados');
+  const wrongPassword = await client.form('/conta/senha', {
+    senhaAtual: 'senha-errada', senhaNova: 'NovaSenha789',
+  });
+  assert.equal(wrongPassword.status, 400, 'senha atual errada não pode ser trocada');
+  const goodPassword = await client.form('/conta/senha', {
+    senhaAtual: 'ClienteTeste123', senhaNova: 'NovaSenha789',
+  });
+  assert.equal(goodPassword.status, 303, 'troca de senha deve ser permitida');
+
+  // Tenta forçar destino externo pela entrada "proximo": o login deve
+  // redirecionar apenas dentro do próprio site.
+  const secondLogin = new Browser(origin);
+  await secondLogin.token('/conta/login');
+  const failOld = await secondLogin.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
+  });
+  assert.equal(failOld.status, 401, 'senha antiga deixa de autenticar');
+  const relogin = await secondLogin.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'NovaSenha789',
+    proximo: '//exemplo-inseguro.invalid/painel',
+  });
+  assert.equal(relogin.status, 303);
+  assert.equal(relogin.headers.get('location'), '/conta', 'login nunca redireciona para domínio externo');
+
+  const data = await snapshot();
+  const order = data.orders.find(o => o.cliente?.email === 'comprador-jornada@tests.example');
+  assert.ok(order, 'pedido deve ser gravado no SQLite');
+  assert.equal(order.statusFinanceiro, 'pendente', 'checkout do cliente nunca aprova pagamento sozinho');
+  assert.equal(order.itens[0].precoUnitarioCentavos, 1990);
+  assert.equal(order.itens[0].quantidade, 2);
+  assert.equal(order.descontoCentavos, 398, 'pedido deve preservar desconto válido calculado no servidor');
+  assert.equal(data.coupons.find(c => c.codigo === 'TESTEJORNADA10').usos, 1);
+  assert.equal(order.pagamentoId != null, true);
+  const payment = data.payments.find(p => p.id === order.pagamentoId);
+  assert.ok(payment);
+  assert.equal(payment.provedor, 'internal');
+  assert.equal(payment.status, 'pending');
+  assert.equal(payment.simulado, true);
+  assert.equal(data.products.find(p => p.id === produto.id).estoque.reservado, 2);
+
+  // Um visitante e outro cliente não podem ler a confirmação privada.
+  const outsider = new Browser(origin);
+  const blocked = await outsider.get(confirmationUrl);
+  assert.equal(blocked.status, 303);
+  assert.match(blocked.headers.get('location'), /conta\/login/);
+
+  const secondCustomer = new Browser(origin);
+  await secondCustomer.token('/conta/cadastro');
+  const secondSignUp = await secondCustomer.form('/conta/cadastro', {
+    nome: 'Outro Cliente de Teste', email: 'outro@tests.example',
+    telefone: '11999998888', cpf: '', senha: 'OutroCliente123', senha2: 'OutroCliente123',
+  });
+  assert.equal(secondSignUp.status, 303);
+  const forbiddenOrder = await secondCustomer.get('/conta/pedidos/' + order.codigo);
+  assert.equal(forbiddenOrder.status, 303, 'cliente diferente não pode consultar pedido de outro');
+  assert.equal(forbiddenOrder.headers.get('location'), '/conta/pedidos');
+
+  const pendingInPanel = await admin.get('/admin/pedidos/' + order.id);
+  assert.equal(pendingInPanel.status, 200);
+  assert.match(await pendingInPanel.text(), new RegExp(order.codigo));
+
+  // Somente simulação pelo administrador — sem transação financeira real.
+  const simulated = await admin.json('/admin/api/pedidos/' + order.id + '/simular-pagamento',
+    { status: 'approved' });
+  assert.equal(simulated.status, 200);
+  assert.equal((await simulated.json()).ok, true);
+  const afterApproval = await snapshot();
+  const approved = afterApproval.orders.find(o => o.id === order.id);
+  assert.equal(approved.statusFinanceiro, 'aprovado');
+  assert.equal(afterApproval.products.find(p => p.id === produto.id).estoque.quantidade, 8);
+  assert.equal(afterApproval.products.find(p => p.id === produto.id).estoque.reservado, 0);
+
+  // Aprovação duplicada não pode baixar o estoque duas vezes.
+  const secondApproval = await admin.json('/admin/api/pedidos/' + order.id + '/simular-pagamento',
+    { status: 'approved' });
+  assert.equal(secondApproval.status, 200);
+  const afterDuplicate = await snapshot();
+  assert.equal(afterDuplicate.products.find(p => p.id === produto.id).estoque.quantidade, 8);
+  assert.equal(afterDuplicate.orders.find(o => o.id === order.id).statusFinanceiro, 'aprovado');
+  assert.equal(afterDuplicate.payments.find(p => p.id === payment.id).eventos.length,
+    afterApproval.payments.find(p => p.id === payment.id).eventos.length,
+    'notificações duplicadas não devem criar eventos financeiros duplicados');
+});

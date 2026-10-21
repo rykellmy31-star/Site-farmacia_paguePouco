@@ -50,7 +50,11 @@ export function registrarRotasConta(app, db) {
     db.collection('customers').update(cliente.id, { ultimoAcesso: new Date().toISOString() });
     logSystemLogin(db, req, email, true);
     res.cookie(config.sessionCookie, sessionId, { maxAge: config.sessionTTLHours * 3600, path: '/' });
-    res.redirect(String(req.body.proximo || '/conta').startsWith('/') ? String(req.body.proximo || '/conta') : '/conta');
+    const proximo = String(req.body.proximo || '/conta');
+    // Impede redirecionamento para URLs externas via caminhos "//host".
+    // Não permite barras invertidas ou caracteres de controle no destino.
+    res.redirect(/^\/(?!\/)/.test(proximo) && !/[\\\r\n\0]/.test(proximo)
+      ? proximo : '/conta');
   });
 
   /* ---------------------------- CADASTRO --------------------------- */

@@ -561,14 +561,17 @@ function registrarApi(app, db) {
     if (!cleanText(req.body.nome, 200)) return void res.json({ ok: false, erro: 'Informe o nome do produto.' }, 400);
     const dados = lerProdutoDoForm(req.body);
     dados.slug = slugUnicoProduto(db, dados.nome);
-    dados.estoque = { quantidade: Number(req.body.quantidade) || 0, minimo: Number(req.body.estoqueMinimo) || 5, reservado: 0 };
+    const quantidadeInicial = Math.max(0, Number(req.body.quantidade) || 0);
+    // Estoque inicia zerado; a movimentação abaixo faz a única entrada
+    // e grava o histórico. Inicializar com quantidadeInicial duplicava o saldo.
+    dados.estoque = { quantidade: 0, minimo: Number(req.body.estoqueMinimo) || 5, reservado: 0 };
     dados.vendas = 0;
     dados.relacionados = [];
     dados.criadoEm = new Date().toISOString();
     const produto = db.collection('products').insert(dados);
-    if (dados.estoque.quantidade > 0) {
+    if (quantidadeInicial > 0) {
       registrarMovimentoEstoque(db, {
-        produtoId: produto.id, tipo: 'entrada', quantidade: dados.estoque.quantidade,
+        produtoId: produto.id, tipo: 'entrada', quantidade: quantidadeInicial,
         origem: 'cadastro_inicial', usuarioId: req.adminUser.id, observacao: 'Estoque inicial no cadastro',
       });
     }

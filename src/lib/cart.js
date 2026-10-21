@@ -143,7 +143,14 @@ export function validarCupom(db, codigo, { subtotalCentavos, clienteId = null, i
   const itensElegiveis = catsPermitidas.length
     ? itens.filter((i) => catsPermitidas.includes(String(i.categoriaId)))
     : itens;
-  const base = itensElegiveis.reduce((acc, i) => acc + i.precoUnitarioCentavos * i.quantidade, 0) || subtotalCentavos;
+  if (catsPermitidas.length && !itensElegiveis.length) {
+    return { ok: false, erro: 'Este cupom não se aplica aos produtos do carrinho.' };
+  }
+  // Sem itens da categoria permitida, NUNCA use o subtotal inteiro como
+  // base de desconto (permitia aplicar promoção a itens não elegíveis).
+  const base = catsPermitidas.length
+    ? itensElegiveis.reduce((acc, i) => acc + i.precoUnitarioCentavos * i.quantidade, 0)
+    : subtotalCentavos;
 
   if (cupom.tipo === 'percentual') {
     desconto = Math.round((base * Number(cupom.valor || 0)) / 100);
