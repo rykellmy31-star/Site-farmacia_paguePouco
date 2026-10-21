@@ -326,7 +326,7 @@ export function telaCliente(ctx, { cliente, pedidos, enderecos }) {
 }
 
 /* ============================== PAGAMENTOS ============================== */
-export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, configPag, credenciais = null, urlWebhook = '' }) {
+export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, configPag, credenciais = null, urlWebhook = '', falhas = [] }) {
   return paginaAdmin(ctx, {
     titulo: 'Pagamentos',
     ativo: 'pagamentos',
@@ -336,7 +336,10 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
     ${painel({
       titulo: 'Situação da integração',
       corpo: `<div class="cartoes">
-          ${cartaoMetrica('Provedor configurado', provedor.nome, provedor.real ? 'Operação real' : 'Ambiente de testes')}
+          ${cartaoMetrica('Provedor configurado', provedor.nome,
+            !provedor.configurado ? 'Integração incompleta' :
+            provedor.provider === 'internal' ? 'Simulação interna' :
+            provedor.sandbox ? 'Credenciais de teste (sem dinheiro real)' : 'Credenciais de produção')}
           ${cartaoMetrica('Cobranças registradas', metricas.total)}
           ${cartaoMetrica('Aprovadas', metricas.aprovadas)}
           ${cartaoMetrica('Pendentes', metricas.pendentes)}
@@ -420,6 +423,22 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
         pelo provedor e não estão incluídas nos valores de frete. Consulte o painel do Mercado Pago para conhecer as taxas vigentes.
       </div>`,
     })}
+
+    ${credenciais ? painel({
+      titulo: 'Tentativas de cobrança que não foram concluídas',
+      corpo: `<p class="texto-pequeno texto-suave">Aqui aparecem os pedidos cancelados por falha de cobrança, mesmo quando nenhuma transação foi criada. Para falhas anteriores a este diagnóstico, o motivo detalhado não pode ser recuperado sem os logs originais.</p>
+        ${tabelaAdmin({
+          colunas: ['Pedido', 'Resultado', 'Status HTTP', 'Código', ''],
+          linhas: falhas.map(p => `<tr>
+            <td>${e(p.codigo)}</td>
+            <td>${e(p.falhaPagamento?.motivo || 'Falha antiga: motivo exato não registrado')}</td>
+            <td>${e(String(p.falhaPagamento?.httpStatus || '—'))}</td>
+            <td>${e(p.falhaPagamento?.codigo || '—')}</td>
+            <td><a href="/admin/pedidos/${e(p.id)}">Ver pedido</a></td>
+          </tr>`),
+          vazio: 'Nenhuma falha de cobrança recente registrada.',
+        })}`,
+    }) : ''}
 
     ${painel({
       titulo: 'Transações',
