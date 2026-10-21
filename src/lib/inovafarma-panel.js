@@ -6,6 +6,7 @@
 import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { nowISO } from './store.js';
+import { statusAutomaticoInova } from './inovafarma-automation.js';
 
 const CONFIG_ID = 'integracao';
 const SECRET_ID = 'inovafarma';
@@ -113,11 +114,13 @@ function registrarEventoInova(db, tipo) {
 
 export function diagnosticoInova(db) {
   const configuracao = db.collection('inovaPanelConfig').get(CONFIG_ID) || null;
+  const automatico = statusAutomaticoInova(db);
   const segredo = estadoCredencialInova(db);
   const sync = db.collection('inovaSyncMeta').get('estoque') || null;
   const eventos = db.collection('inovaStockSync').all().slice(-10).reverse();
   const docs = db.collection('orders').all();
-  const fila = docs.filter(p => p.inovaEnvioPendente === true && !p.inovaConfirmadoEm);
+  const fila = docs.filter(p => p.inovaEnvioPendente === true && !p.inovaConfirmadoEm &&
+    p.statusFinanceiro === 'aprovado' && p.statusOperacional !== 'cancelado');
   const confirmadas = docs.filter(p => !!p.inovaConfirmadoEm);
   const erros = db.collection('inovaPanelEvents').all().slice(-25).reverse();
   const produtos = db.collection('products').all().filter(p => p.ativo !== false);
@@ -131,11 +134,13 @@ export function diagnosticoInova(db) {
   const faltaEANnaFila = fila.filter(p => (p.itens || []).some(it => !/^\d{8,14}$/.test(
     String(it.ean || db.collection('products').get(it.produtoId)?.ean || '')))).length;
   return {
-    status: config.inova?.enabled ? 'ativada_por_ambiente' :
+    status: config.inova?.enabled ?
+      (!automatico.ultimaConexaoValidada ? 'aguardando_primeira_comunicacao' :
+        automatico.status === 'atencao' ? 'integracao_com_pendencias' : 'conectada_por_conector') :
       configuracao?.urlConector && segredo.legivel ? 'configurada_nao_conectada' : 'desativada',
-    configuracao, segredo,
-    // Sem conector oficial, NÃO declarar uma tentativa de conexão ou sucesso.
-    ultimaConexaoValidada: null,
+    configuracao, segredo, automatico,
+    // Somente webhook autenticado e aceito marca comunicação real bem-sucedida.
+    ultimaConexaoValidada: automatico.ultimaConexaoValidada,
     estoque: {
       ultimaSincronizacao: sync?.recebidoEm || null,
       quantidadeUltimoLote: eventos[0]?.total ?? 0,
@@ -143,13 +148,16 @@ export function diagnosticoInova(db) {
       desatualizado: estoqueDesatualizado,
     },
     vendas: { pendentes: fila.length, confirmadas: confirmadas.length,
-      conferir: faltaEANnaFila,
+      conferir: automatico.vendasParaConferir,
       pendentesDetalhes: fila.slice(0, 25).map(p => ({
         id: p.id, codigo: String(p.codigo || ''), criadoEm: p.criadoEm,
         statusFinanceiro: p.statusFinanceiro, totalCentavos: p.totalCentavos,
         vendedorCodigo: p.vendedor?.codigoInova || null,
       })),
     },
-    eventos, auditoria: erros,
+    eventos, auditoria: erros, vendedores: {
+      ativos: db.collection('sellers').all().filter(v => v.ativo === true).length,
+      vinculados: docs.filter(p => !!p.vendedor?.id).length,
+    },
   };
 }

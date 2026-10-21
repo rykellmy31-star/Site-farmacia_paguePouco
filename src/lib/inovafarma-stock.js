@@ -45,7 +45,7 @@ export function estoqueInovaDisponivel(produto, agora = Date.now()) {
 export function vendasPendentesInova(db, limite = MAX_VENDAS) {
   return db.collection('orders').all()
     .filter(p => p.inovaEnvioPendente === true && !p.inovaConfirmadoEm &&
-      ['aprovado', 'estorno_solicitado', 'estornado'].includes(p.statusFinanceiro))
+      p.statusFinanceiro === 'aprovado' && p.statusOperacional !== 'cancelado')
     .sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm)))
     .slice(0, Math.max(1, Math.min(MAX_VENDAS, Number(limite) || MAX_VENDAS)))
     .map(p => ({
@@ -82,16 +82,23 @@ export function confirmarVendasInova(db, dados) {
     return { ok: false, status: 400, erro: 'Informe de 1 a 100 vendas.' };
   }
   const ids = new Set();
+  const referencias = new Set();
   const atualizar = [];
   for (const v of vendas) {
     const id = String(v?.pedidoId || '');
     const referencia = String(v?.referenciaInova || '').trim();
-    if (!id || ids.has(id) || !referencia || referencia.length > 100) {
+    if (!id || ids.has(id) || !referencia || referencia.length > 100 || referencias.has(referencia)) {
       return { ok: false, status: 400, erro: 'Pedido ou referência inválida/repetida.' };
     }
     ids.add(id);
+    referencias.add(referencia);
+    // Uma mesma referência externa nunca pode provar duas vendas diferentes.
+    if (db.collection('orders').all().some(p => p.id !== id && p.inovaReferencia === referencia)) {
+      return { ok: false, status: 409, erro: 'Referência Inova já associada a outro pedido.' };
+    }
     const pedido = db.collection('orders').get(id);
-    if (!pedido || pedido.inovaEnvioPendente !== true) {
+    if (!pedido || pedido.inovaEnvioPendente !== true ||
+        (!pedido.inovaConfirmadoEm && (pedido.statusFinanceiro !== 'aprovado' || pedido.statusOperacional === 'cancelado'))) {
       return { ok: false, status: 409, erro: 'Pedido fora da fila INOVAFARMA.' };
     }
     if (pedido.inovaConfirmadoEm && pedido.inovaReferencia !== referencia) {

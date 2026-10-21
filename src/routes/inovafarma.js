@@ -3,6 +3,7 @@
  * Bearer obrigatório; nenhuma credencial da Inova é recebida/salva aqui.
  */
 import { config } from '../config.js';
+import { registrarAtividadeConectorInova } from '../lib/inovafarma-automation.js';
 import {
   autenticacaoInovaValida, importarEstoqueInova, vendasPendentesInova,
   confirmarVendasInova,
@@ -32,6 +33,9 @@ export function registrarRotasInovafarma(app, db) {
   app.post('/webhooks/inovafarma/vendas/confirmar', (req, res) => {
     if (!autenticar(req, res)) return;
     const r = confirmarVendasInova(db, req.body);
+    registrarAtividadeConectorInova(db,
+      r.ok ? 'vendas_confirmadas' : 'falha_validacao_vendas',
+      { quantidade: r.ok ? r.confirmadas : 0 });
     res.json(r.ok ? r : { ok: false, erro: r.erro, ...(r.status ? { status: r.status } : {}) },
       r.ok ? 200 : r.status);
   });
@@ -40,6 +44,11 @@ export function registrarRotasInovafarma(app, db) {
   app.post('/webhooks/inovafarma/estoque', (req, res) => {
     if (!autenticar(req, res)) return;
     const r = importarEstoqueInova(db, req.body);
+    if (!r.duplicado) {
+      registrarAtividadeConectorInova(db,
+        r.ok ? 'estoque_recebido' : 'falha_validacao_estoque',
+        { quantidade: r.ok ? r.atualizados : 0 });
+    }
     res.json(r.ok ? r : { ok: false, erro: r.erro }, r.ok ? 200 : r.status);
   });
 }

@@ -9,10 +9,14 @@ const LABELS = {
   desativada: 'Desativada — aguardando documentação e homologação',
   configurada_nao_conectada: 'Configurada localmente — conexão não homologada',
   ativada_por_ambiente: 'HABILITADA POR VARIÁVEL EXTERNA — verifique configuração!',
+  aguardando_primeira_comunicacao: 'Conector habilitado; aguardando primeiro evento autenticado',
+  integracao_com_pendencias: 'Conector autenticado; conferir estoque ou outras pendências',
+  conectada_por_conector: 'Dados recebidos de conector autenticado; monitoramento ativo',
 };
 export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
   const superAdmin = ctx.adminUser?.role === 'super_admin';
   const { configuracao: cfg, segredo, estoque, vendas, auditoria, eventos } = dados;
+  const auto = dados.automatico || { problemas: [], eventos: [], falhasValidacao: 0 };
   return paginaAdmin(ctx, {
     titulo: 'Integração InovaFarma',
     ativo: 'inovafarma',
@@ -22,7 +26,7 @@ export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
       ${erro ? `<div class="alerta aviso" role="alert">${e(erro)}</div>` : ''}
       ${salvo ? '<div class="alerta sucesso" role="status">Alteração salva. Nenhuma comunicação externa foi executada.</div>' : ''}
       <div class="alerta aviso"><strong>Status:</strong> ${e(LABELS[dados.status] || 'Estado desconhecido')}.
-        Testes reais, envio de vendas e sincronização aguardam a documentação da Precisão Sistemas e sua autorização explícita.
+        Esta interface registra automaticamente as atualizações recebidas do conector autenticado. A comunicação direta com o ERP exige integração oficial, documentação, homologação e sua autorização.
       </div>
       ${painel({ titulo: '1. Conexão com a InovaFarma', corpo: `
         <div class="grade-form duas-colunas">
@@ -66,7 +70,7 @@ export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
       ` })}
       ${painel({ titulo: '2. Sincronização de estoque', corpo: `
         <div class="grade-form duas-colunas">
-          <p><strong>Estado:</strong> ${dados.status === 'ativada_por_ambiente' ? 'Variável externa ativa; verificar homologação' : 'Desativada — sem conector homologado'}</p>
+          <p><strong>Estado:</strong> ${e(LABELS[dados.status] || 'Não verificado')}</p>
           <p><strong>Última sincronização registrada:</strong> ${QUANDO(estoque.ultimaSincronizacao)}</p>
           <p><strong>Produtos no último lote:</strong> ${estoque.quantidadeUltimoLote}</p>
           <p><strong>Produtos com divergência:</strong> ${estoque.divergencias}</p>
@@ -80,18 +84,24 @@ export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
           <p><strong>Vendas com envio pendente na fila existente:</strong> ${vendas.pendentes}</p>
           <p><strong>Vendas com confirmação registrada do ERP:</strong> ${vendas.confirmadas}</p>
           <p><strong>Pendências de EAN para conferir:</strong> ${vendas.conferir}</p>
-          <p><strong>Envio automático:</strong> desativado nesta interface</p>
+          <p><strong>Envio automático:</strong> ${auto.habilitada
+            ? 'Fila liberada para consumo pelo conector externo homologado (não envia diretamente pelo site)'
+            : 'Aguardando homologação: fila externa desativada'}</p>
         </div>
         <a class="botao pequeno secundario" href="#inova-vendas-pendentes">Consultar vendas pendentes</a>
         <p class="texto-pequeno texto-suave">Modelo de preparação contém pedido, data, EAN, quantidades, preços, descontos, frete, total, forma de pagamento e código histórico do vendedor. Não há formato oficial de transmissão homologado.</p>
       ` })}
       ${painel({ titulo: '4. Integração com vendedores', corpo: `
         <p>Os dados profissionais cadastrados no módulo Vendedores são vinculados aos pedidos no checkout. O código InovaFarma é preservado como texto, inclusive zeros à esquerda.</p>
+        <p><strong>Vendedores ativos:</strong> ${dados.vendedores?.ativos ?? 0} · <strong>Pedidos com vendedor:</strong> ${dados.vendedores?.vinculados ?? 0}.</p>
         <p><a class="botao pequeno secundario" href="/admin/vendedores">Consultar vendedores</a></p>
       ` })}
       ${painel({ titulo: '5. Monitoramento e diagnósticos', corpo: `
-        <p><strong>Última comunicação bem-sucedida:</strong> não verificada — não há teste oficial de conexão.</p>
-        <p><strong>Falhas de comunicação confirmadas por este painel:</strong> não disponível até ativar conector homologado.</p>
+        <p><strong>Última comunicação autenticada:</strong> ${QUANDO(dados.ultimaConexaoValidada)}</p>
+        <p><strong>Última checagem automática local:</strong> ${QUANDO(auto.ultimaAvaliacaoEm)}</p>
+        <p><strong>Alertas atuais:</strong> ${auto.problemas?.length
+          ? e(auto.problemas.join(', ')) : 'Nenhuma pendência detectada nesta avaliação (não equivale a homologação).'}</p>
+        <p><strong>Falhas de validação de eventos do conector:</strong> ${Number(auto.falhasValidacao || 0)}.</p>
         <p><strong>Ativação:</strong> bloqueada até documentação, homologação e autorização expressa.</p>
         <button class="botao pequeno secundario" type="button" disabled>Ativar integração — indisponível</button>
         <a href="#inova-erros" class="botao pequeno secundario">Ver histórico e erros</a>
@@ -112,8 +122,9 @@ export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
         linhas:eventos.map(ev=>`<tr><td>${e(ev.id)}</td><td>${Number(ev.total||0)}</td><td>${QUANDO(ev.recebidoEm)}</td></tr>`),
         vazio:'Nenhuma sincronização foi registrada.'})}` })}</section>
       <section id="inova-erros">
-      ${painel({ titulo:'7. Histórico de configurações (sem credenciais)', corpo:
-        tabelaAdmin({ colunas:['Evento','Data/hora'], linhas:auditoria.map(ev=>`
+      ${painel({ titulo:'7. Histórico automático e configurações (sem credenciais)', corpo:
+        tabelaAdmin({ colunas:['Evento','Data/hora'], linhas:[...(auto.eventos || []), ...auditoria]
+          .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0,35).map(ev=>`
           <tr><td>${e(ev.tipo)}</td><td>${QUANDO(ev.criadoEm)}</td></tr>`),
           vazio:'Nenhuma alteração administrativa registrada.' }) })}</section>
     `,

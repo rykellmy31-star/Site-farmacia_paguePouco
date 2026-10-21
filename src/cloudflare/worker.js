@@ -3,7 +3,8 @@
  * Não alterar o nome "loja-principal-v1": ele identifica o banco persistente.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { configureCloudflare } from '../config.js';
+import { config, configureCloudflare } from '../config.js';
+import { avaliarAutomacaoInova } from '../lib/inovafarma-automation.js';
 import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
 import { CloudStore } from './store.js';
@@ -87,7 +88,7 @@ export class LojaDurableObject extends DurableObject {
   // Durable Object Alarms: Pix e estornos não dependem de visitas do cliente.
   async programarAlarmeFinanceiro() {
     if (!temPixPendente(this.db) && !temEstornoPendente(this.db) &&
-        !temCheckoutInterrompido(this.db)) return;
+        !temCheckoutInterrompido(this.db) && !config.inova?.enabled) return;
     const atual = await this.ctx.storage.getAlarm();
     if (atual == null) await this.ctx.storage.setAlarm(Date.now() + 5 * 60_000);
   }
@@ -99,15 +100,30 @@ export class LojaDurableObject extends DurableObject {
       // PUBLIC_BASE_URL ainda não foi configurada na Cloudflare.
       configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://site.farmaciapaguepouco.app', this.secret);
       if (!this.app) this.app = createApplication(this.db);
-      await executarAlarmeFinanceiro({
-        pedidos: () => reconciliarCheckoutsInterrompidos(this.db),
-        pix: () => reconciliarPix(this.db),
-        estornos: () => reconciliarEstornos(this.db),
-        persistir: () => this.db.flush(),
-        reagendar: () => this.programarAlarmeFinanceiro(),
-        registrar: (fluxo, problema) =>
-          console.warn('[alarme financeiro]', fluxo, problema),
-      });
+      try {
+        await executarAlarmeFinanceiro({
+          pedidos: () => reconciliarCheckoutsInterrompidos(this.db),
+          pix: () => reconciliarPix(this.db),
+          estornos: () => reconciliarEstornos(this.db),
+          persistir: () => this.db.flush(),
+          reagendar: () => this.programarAlarmeFinanceiro(),
+          registrar: (fluxo, problema) =>
+            console.warn('[alarme financeiro]', fluxo, problema),
+        });
+      } finally {
+        // Monitoramento local periódico apenas após ativação homologada.
+        // Não faz requests ao ERP, não gera vendas nem altera saldos.
+        if (config.inova?.enabled) {
+          try {
+            avaliarAutomacaoInova(this.db, { persistir: true });
+            await this.db.flush();
+          } catch (erro) {
+            console.warn('[inova] monitoramento local indisponível:', erro?.name || 'erro');
+          }
+          // O diagnóstico nunca deve interromper o próximo alarme financeiro.
+          await this.programarAlarmeFinanceiro();
+        }
+      }
     });
   }
 }
