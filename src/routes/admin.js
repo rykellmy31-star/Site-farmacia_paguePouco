@@ -139,8 +139,7 @@ export function registrarRotasAdmin(app, db) {
     logAdmin(db, admin, 'login_admin', 'admin', admin.id, {}, req);
     res.cookie('pp_admin_sess', sessionId, { maxAge: config.adminSessionTTLHours * 3600, path: '/' });
     const next = String(req.body.next || '/admin');
-    // Destino sempre interno e existente; evita redirecionamento para "undefined"
-    // quando o formulário não contém "next" e bloqueia URL externa.
+    // Apenas caminhos internos do painel; evita open redirect e "/admin.evil".
     res.redirect(/^\/admin(?:\/|\?|$)/.test(next) && !next.startsWith('//') &&
       !/[\\\r\n]/.test(next) ? next : '/admin');
   });
@@ -450,7 +449,7 @@ export function registrarRotasAdmin(app, db) {
 
   /* =============================== SISTEMA ============================== */
   app.get('/admin/sistema', (req, res) => {
-    if (!req.adminUser) return void res.redirect('/admin/login');
+    if (!guard(req, res, 'auditoria.ver')) return;
     const ctx = ctxAdmin(req, db);
     let backups = [];
     try {
@@ -838,16 +837,34 @@ function registrarApi(app, db) {
       },
       obs: 'Rastreio atualizado.', por: req.adminUser.nome,
     });
+    if (!r.ok) return void res.json(r, 400);
     logAdmin(db, req.adminUser, 'atualizou_rastreio', 'pedido', pedido.id, { codigo: req.body.codigo }, req);
     res.json({ ok: true });
   });
 
-  app.post('/admin/api/pedidos/:id/cancelar', (req, res) => {
+  app.post('/admin/api/pedidos/:id/cancelar', async (req, res) => {
     if (!guardApi(req, res, 'pedidos.editar')) return;
     const pedido = db.collection('orders').get(req.params.id);
     if (!pedido) return void res.json({ ok: false, erro: 'Pedido não encontrado.' }, 404);
-    const r = cancelarPedido(db, pedido.id, { motivo: 'Cancelado pelo painel administrativo.', por: req.adminUser.nome });
-    if (!r.ok) return void res.json(r, 400);
+    if (pedido.statusFinanceiro === 'aprovado') {
+      if (!guardApi(req, res, 'pagamentos.estornar')) return;
+      const pagamento = db.collection('payments').get(pedido.pagamentoId);
+      if (!pagamento) return void res.json({ ok: false, erro: 'Cobrança aprovada não encontrada.' }, 409);
+      let estorno;
+      try { estorno = await refundPayment(db, pagamento); }
+      catch { return void res.json({ ok: false, erro: 'Erro ao consultar estorno no provedor.' }, 502); }
+      if (!estorno.ok) return void res.json(estorno, 409);
+      const confirmacao = atualizarStatusFinanceiro(db, pedido.id,
+        estorno.status === 'refunded' ? 'estornado' : 'estorno_solicitado',
+        { obs: 'Estorno solicitado antes do cancelamento.', por: req.adminUser.nome });
+      if (!confirmacao.ok) return void res.json(confirmacao, 409);
+      if (estorno.status !== 'refunded') {
+        return void res.json({ ok: true, aguardandoEstorno: true,
+          mensagem: 'Pedido não cancelado: aguardando confirmação do estorno pelo provedor.' }, 202);
+      }
+    }
+    const resultado = cancelarPedido(db, pedido.id, { motivo: 'Cancelado pelo painel administrativo.', por: req.adminUser.nome });
+    if (!resultado.ok) return void res.json(resultado, 409);
     logAdmin(db, req.adminUser, 'cancelou_pedido', 'pedido', pedido.id, { codigo: pedido.codigo }, req);
     res.json({ ok: true });
   });
@@ -857,6 +874,10 @@ function registrarApi(app, db) {
     const pedido = db.collection('orders').get(req.params.id);
     if (!pedido || !pedido.pagamentoId) return void res.json({ ok: false, erro: 'Pedido ou cobrança não encontrados.' }, 404);
     const status = String(req.body.status || 'approved');
+    if (!['approved', 'rejected'].includes(status) || pedido.statusFinanceiro !== 'pendente' ||
+        pedido.statusOperacional === 'cancelado') {
+      return void res.json({ ok: false, erro: 'Pedido ou transição incompatível com simulação.' }, 409);
+    }
     const r = await simulateApproval(db, pedido.pagamentoId, { aprovado: status === 'approved', origem: `painel:${req.adminUser.email}` });
     if (!r.ok) return void res.json(r, 400);
     if (status === 'approved') await atualizarStatusFinanceiro(db, pedido.id, 'aprovado', { obs: 'Aprovado em ambiente de testes (simulação pelo painel).', por: req.adminUser.nome });
@@ -869,12 +890,18 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'pagamentos.estornar')) return;
     const pedido = db.collection('orders').get(req.params.id);
     if (!pedido || !pedido.pagamentoId) return void res.json({ ok: false, erro: 'Cobrança não encontrada.' }, 404);
+    if (pedido.statusFinanceiro !== 'aprovado') return void res.json({ ok: false, erro: 'Pedido não tem pagamento aprovado para estornar.' }, 409);
     const pagamento = db.collection('payments').get(pedido.pagamentoId);
-    const r = await refundPayment(db, pagamento, req.body.valor ? toCents(req.body.valor) : null);
-    if (!r.ok) return void res.json(r, 400);
-    await atualizarStatusFinanceiro(db, pedido.id, 'estornado', { obs: 'Estorno solicitado pelo painel.', por: req.adminUser.nome });
+    if (!pagamento) return void res.json({ ok: false, erro: 'Cobrança não encontrada.' }, 404);
+    let r;
+    try { r = await refundPayment(db, pagamento, req.body.valor ? toCents(req.body.valor) : null); }
+    catch { return void res.json({ ok: false, erro: 'Falha externa ao solicitar estorno.' }, 502); }
+    if (!r.ok) return void res.json(r, 409);
+    const status = r.status === 'refunded' ? 'estornado' : 'estorno_solicitado';
+    const atualizacao = atualizarStatusFinanceiro(db, pedido.id, status, { obs: 'Solicitação de estorno pelo painel.', por: req.adminUser.nome });
+    if (!atualizacao.ok) return void res.json(atualizacao, 409);
     logAdmin(db, req.adminUser, 'solicitou_estorno', 'pedido', pedido.id, { pagamentoId: pagamento.id }, req);
-    res.json({ ok: true });
+    res.json({ ok: true, confirmado: r.status === 'refunded', status });
   });
 
   app.get('/admin/api/pedidos/exportar.csv', (req, res) => {
