@@ -7,6 +7,7 @@
  */
 import { config } from './config.js';
 import { uid } from './lib/store.js';
+import { vincularCarrinhoAoCliente } from './lib/cart.js';
 import { createApp } from './lib/http.js';
 import { readSession, csrfOk, escapeHtml, randomToken, csrfField } from './lib/security.js';
 import { ensureSettings } from './lib/settings.js';
@@ -68,6 +69,20 @@ app.use(async (req, res) => {
     });
     res.cookie(config.cartCookie, cart.id, { maxAge: 60 * 60 * 24 * 180, path: '/', httpOnly: false });
     req.cookies[config.cartCookie] = cart.id;
+  }
+
+  // Se o cliente chega autenticado com cookie de cesta pertencente
+  // a OUTRA conta (por exemplo em computador compartilhado), substitua
+  // o cookie antes de qualquer página carregar dados da cesta anterior.
+  if (!ASSET_RE.test(req.path) && req.user?.id && req.cookies[config.cartCookie]) {
+    const anterior = req.cookies[config.cartCookie];
+    const seguro = vincularCarrinhoAoCliente(db, anterior, req.user.id);
+    if (seguro && seguro !== anterior) {
+      res.cookie(config.cartCookie, seguro, {
+        maxAge: 60 * 60 * 24 * 180, path: '/', httpOnly: false,
+      });
+      req.cookies[config.cartCookie] = seguro;
+    }
   }
 
   // headers de segurança

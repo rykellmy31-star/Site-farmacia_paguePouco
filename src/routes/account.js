@@ -11,6 +11,7 @@ import {
 } from '../lib/security.js';
 import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
 import { sendMail } from '../lib/mailer.js';
+import { vincularCarrinhoAoCliente } from '../lib/cart.js';
 import { logCustomer } from '../lib/audit.js';
 import { config } from '../config.js';
 import { UF_LIST } from '../lib/cep.js';
@@ -43,10 +44,16 @@ export function registrarRotasConta(app, db) {
     if (cliente.ativo === false) {
       return void res.html(telaLogin(ctx, { erros: { email: 'Esta conta está desativada. Fale com o atendimento.' } }), 403);
     }
-    const sessionId = createSession(db, 'customer', cliente.id, { ip: req.ip, userAgent: req.headers['user-agent'], cartId: req.cookies?.[config.cartCookie] || null });
-    // vincula o carrinho atual ao cliente
-    const cartId = req.cookies?.[config.cartCookie];
-    if (cartId && db.collection('carts').get(cartId)) db.collection('carts').update(cartId, { clienteId: cliente.id });
+    const cartAnterior = req.cookies?.[config.cartCookie] || null;
+    const cartSeguro = vincularCarrinhoAoCliente(db, cartAnterior, cliente.id);
+    const sessionId = createSession(db, 'customer', cliente.id, {
+      ip: req.ip, userAgent: req.headers['user-agent'], cartId: cartSeguro,
+    });
+    if (cartSeguro && cartSeguro !== cartAnterior) {
+      res.cookie(config.cartCookie, cartSeguro, {
+        maxAge: 60 * 60 * 24 * 180, path: '/', httpOnly: false,
+      });
+    }
     db.collection('customers').update(cliente.id, { ultimoAcesso: new Date().toISOString() });
     logSystemLogin(db, req, email, true);
     res.cookie(config.sessionCookie, sessionId, { maxAge: config.sessionTTLHours * 3600, path: '/' });
@@ -95,9 +102,16 @@ export function registrarRotasConta(app, db) {
       ativo: true, emailConfirmado: false, marketing: dados.marketing,
       enderecos: [], favoritos: [], criadoEm: new Date().toISOString(), ultimoAcesso: null,
     });
-    const sessionId = createSession(db, 'customer', cliente.id, { ip: req.ip, userAgent: req.headers['user-agent'] });
-    const cartId = req.cookies?.[config.cartCookie];
-    if (cartId && db.collection('carts').get(cartId)) db.collection('carts').update(cartId, { clienteId: cliente.id });
+    const cartAnterior = req.cookies?.[config.cartCookie] || null;
+    const cartSeguro = vincularCarrinhoAoCliente(db, cartAnterior, cliente.id);
+    const sessionId = createSession(db, 'customer', cliente.id, {
+      ip: req.ip, userAgent: req.headers['user-agent'], cartId: cartSeguro,
+    });
+    if (cartSeguro && cartSeguro !== cartAnterior) {
+      res.cookie(config.cartCookie, cartSeguro, {
+        maxAge: 60 * 60 * 24 * 180, path: '/', httpOnly: false,
+      });
+    }
     logCustomer(db, cliente.id, 'cadastro', 'cliente', cliente.id, { email: cliente.email }, req);
 
     sendMail(db, {

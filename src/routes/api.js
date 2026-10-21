@@ -48,7 +48,7 @@ export function registrarRotasApi(app, db) {
   app.post('/api/carrinho/adicionar', { maxBodyBytes: 64 * 1024 }, (req, res) => {
     const cart = getCart(db, req);
     const produtoId = String(req.body.produtoId || '');
-    const quantidade = Math.max(1, Number(req.body.quantidade) || 1);
+    const quantidade = req.body.quantidade ?? 1;
     const r = addItem(db, cart, produtoId, quantidade);
     if (!r.ok) return void res.json({ ok: false, erro: r.erro, codigo: r.codigo }, 400);
     const resposta = responderCarrinho(req, res, db);
