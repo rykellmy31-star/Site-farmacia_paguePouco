@@ -70,13 +70,13 @@ if (result.worker_found) {
       MP_WEBHOOK_SECRET_alternativa: segredo('MP_WEBHOOK_SECRET'),
       ADMIN_PASSWORD_bootstrap: segredo('ADMIN_PASSWORD'),
       PUBLIC_BASE_URL_configurada: !!plain('PUBLIC_BASE_URL'),
-      PUBLIC_BASE_URL_esperada: String(plain('PUBLIC_BASE_URL')?.text || '').replace(/\\/$/, '') ===
+      PUBLIC_BASE_URL_esperada: String(plain('PUBLIC_BASE_URL')?.text || '').replace(/[/]$/, '') ===
         'https://site.farmaciapaguepouco.app',
       SESSION_SECRET: segredo('SESSION_SECRET'),
       EMAIL_SENDER: segredo('MAIL_API_KEY') || segredo('RESEND_API_KEY'),
     };
     result.runtime = {
-      compatibilidade_definida: /^\\d{4}-\\d{2}-\\d{2}$/.test(String(meta.compatibility_date || '')),
+      compatibilidade_definida: /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(meta.compatibility_date || '')),
       nodejs_compat: Array.isArray(meta.compatibility_flags) &&
         meta.compatibility_flags.includes('nodejs_compat'),
     };
