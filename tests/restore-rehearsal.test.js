@@ -58,16 +58,17 @@ test('backup reabre documentos + mídias idênticos em armazenamento isolado', a
 
 test('hash divergente, bytes faltantes e manifesto adulterado não são aceitos', async t => {
   const { root, original } = await midiaTeste(t);
-  await fs.writeFile(original, Buffer.from('alterado'));
+  // Uma mídia do mesmo tamanho, mas alterada, deve falhar por HASH
+  // (não apenas pelo tamanho). A mídia faltante falha separadamente.
+  await fs.writeFile(original, Buffer.alloc(bytes.length, 0x21));
   await assert.rejects(
     ensaiarRestauracaoCloudflare({ snapshot: snapshot(), manifest: manifest(), mediaDir: root }),
-    /arquivo ausente ou incompleto|arquivo alterado/,
+    /arquivo alterado/,
   );
-  const modified = manifest();
-  modified.files[0].sha256 = '0'.repeat(64);
+  await fs.rm(original);
   await assert.rejects(
-    ensaiarRestauracaoCloudflare({ snapshot: snapshot(), manifest: modified, mediaDir: root }),
-    /arquivo ausente ou incompleto|arquivo alterado/,
+    ensaiarRestauracaoCloudflare({ snapshot: snapshot(), manifest: manifest(), mediaDir: root }),
+    /ENOENT|arquivo ausente/,
   );
   const outside = manifest();
   outside.files[0].caminho = '../privado/arquivo.png';
