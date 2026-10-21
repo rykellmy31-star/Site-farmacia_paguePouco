@@ -260,6 +260,19 @@ async function main() {
     return `HTTP ${r.status}`;
   });
 
+  await testar('Crédito do desenvolvedor aparece em loja, conta, painel de login e erro 404', async () => {
+    const paginas = ['/', '/departamentos', '/conta/login', '/admin/login',
+      '/pagina/quem-somos', '/produto/nao-existe-este-produto'];
+    for (const caminho of paginas) {
+      const r = await anon.get(caminho);
+      assert(r.texto.includes('Projeto desenvolvido por <strong>Carlos Rykellmy Santos Correia</strong>'),
+        'crédito ausente em ' + caminho);
+      assert((r.texto.match(/data-credito-desenvolvedor=/g) || []).length === 1,
+        'crédito duplicado em ' + caminho);
+    }
+    return paginas.length + ' páginas com assinatura institucional';
+  });
+
   await testar('Menu de departamentos exibe as categorias', async () => {
     const r = await anon.get('/departamentos');
     assert(r.status === 200, `status ${r.status}`);
