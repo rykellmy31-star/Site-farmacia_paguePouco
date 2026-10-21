@@ -220,6 +220,9 @@ async function main() {
     await cli.get('/admin/login');
     const r = await cli.post('/admin/login', { form: { email, senha } });
     if (r.status !== 303 && r.status !== 302) throw new Error(`login admin falhou (${r.status})`);
+    // O token de visitante do login é substituído pelo token da sessão administrativa.
+    const painel = await cli.get('/admin');
+    if (painel.status !== 200 || !cli.csrf) throw new Error('Não foi possível obter CSRF da sessão administrativa.');
     return r;
   }
 
