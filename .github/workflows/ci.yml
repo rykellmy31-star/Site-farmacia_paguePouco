@@ -38,3 +38,13 @@ jobs:
         run: npm run build
       - name: Verify Worker compilation without publishing
         run: npm run check:cloudflare
+      # Ensaio somente leitura, não dá deploy nem acessa credenciais do painel.
+      # Nunca executar com secrets em pull requests externos (forks).
+      - name: Audit Cloudflare read-only API access without exposing secrets
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          CLOUDFLARE_AUDIT_TOKEN: ${{ secrets.CLOUDFLARE_AUDIT_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/audit-cloudflare-readonly.mjs
