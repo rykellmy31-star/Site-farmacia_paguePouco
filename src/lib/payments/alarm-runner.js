@@ -5,7 +5,7 @@
  * Todas as funções são injetadas para testar falhas sem pagamento real.
  */
 export async function executarAlarmeFinanceiro({
-  pix, estornos, persistir, reagendar, registrar = () => {},
+  pix, estornos, pedidos = null, persistir, reagendar, registrar = () => {},
 }) {
   const falhas = [];
   const executar = async (nome, acao) => {
@@ -21,6 +21,9 @@ export async function executarAlarmeFinanceiro({
   };
   // Mesmo quando Pix ou estornos lançam uma exceção, o outro fluxo continua.
   try {
+    // Reparo de vínculos locais não executa cobrança nem altera estoque.
+    // Se falhar, Pix e estornos continuam sendo conciliados normalmente.
+    if (pedidos) await executar('pedidos', pedidos);
     await executar('pix', pix);
     await executar('estornos', estornos);
   } finally {
