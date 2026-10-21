@@ -140,7 +140,7 @@ export function homePage(ctx) {
     switch (s.tipo) {
       case 'banners':
         return `<section class="secao" id="banners" style="margin-top:14px">${carrosselBanners(banners)}
-          ${bannersSec.length ? `<div class="vitrine mt-2" style="grid-template-columns:repeat(${Math.min(bannersSec.length, 3)},1fr)">
+          ${bannersSec.length ? `<div class="vitrine vitrine-banners mt-2" style="--colunas-banner:${Math.min(bannersSec.length, 3)}">
             ${bannersSec.map((b) => `<a href="${e(b.link || '#')}"><img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || '')}" loading="lazy" style="border-radius:12px"></a>`).join('')}
           </div>` : ''}
         </section>`;
@@ -256,7 +256,7 @@ function barraOrdenacao(ordenar, total, filtros = {}) {
   <form class="filtros" method="get" id="formOrdenacao">
     ${Object.entries(filtros).filter(([, v]) => v).map(([k, v]) => `<input type="hidden" name="${e(k)}" value="${e(v)}">`).join('')}
     <div class="linha centro entre" style="flex-wrap:wrap;gap:10px">
-      <div class="linha centro" style="gap:8px">
+      <div class="linha centro ordenacao-campo" style="gap:8px">
         <label class="rotulo mb-0" for="ordenar">Ordenar por</label>
         <select id="ordenar" name="ordenar" class="entrada" style="width:auto;min-width:170px" onchange="this.form.submit()">
           ${opcoes.map(([v, t]) => `<option value="${v}" ${ordenar === v ? 'selected' : ''}>${e(t)}</option>`).join('')}
