@@ -15,6 +15,7 @@ import { paginaPublica } from '../src/views/layout.js';
 import { paginaAdmin } from '../src/views/admin/layout.js';
 import { produtoPage } from '../src/views/public.js';
 import { cartaoProduto } from '../src/views/partials.js';
+import { telaVendedores } from '../src/views/admin/sellers.js';
 
 const raiz = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const chrome = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium',
@@ -55,6 +56,13 @@ const adminPage = paginaAdmin({db,settings,req:{query:new URLSearchParams()},
   '<th>Descrição</th><th>Total</th><th>Estado</th></tr></thead><tbody>' + linhas +
   '</tbody></table></div></div></div>'});
 
+const sellerAdmin = telaVendedores({
+  db, settings, req:{query:new URLSearchParams()},csrf:'teste',
+  adminUser:{id:'1',role:'super_admin',nome:'Admin'},
+  permissoes:{podeEditarVendedores:true},
+}, {vendedores:[{id:'v1',nome:'Vendedor de Teste',codigoInova:'00125',ativo:true}],
+  metricas:new Map([['v1',{pedidos:1,totalCentavos:1990}]])});
+
 const servidor = http.createServer(async(req,res)=>{
   const rota=new URL(req.url,'http://localhost').pathname;
   if(rota==='/styles.css'){
@@ -70,7 +78,8 @@ const servidor = http.createServer(async(req,res)=>{
     res.end(await fsp.readFile(path.join(raiz,'public/img',nome)));return;
   }
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
-  res.end(rota==='/admin'?adminPage:rota==='/produto-teste'?productDetail:storefront);
+  res.end(rota==='/admin'?adminPage:rota==='/produto-teste'?productDetail:
+    rota==='/vendedores-teste'?sellerAdmin:storefront);
 });
 
 const expression='(() => {' +
@@ -83,7 +92,8 @@ const expression='(() => {' +
   'scroll:document.documentElement.scrollWidth,search:rect(get(".busca")),suggestion:rect(lista),' +
   'mobileNav:visible(get(".menu-mobile")),desktopNav:visible(get(".menu-departamentos")),' +
   'sort:rect(get(".ordenacao-campo select")),icon:rect(get(".cartao h3 svg")),' +
-  'table:rect(get(".tabela-rolagem")),buy:rect(get(".compra-produto .botao-adicionar-cesta")),' +
+  'table:rect(get(".tabela-rolagem")),sellerForm:rect(get("#vendedorCodigo")),' +
+  'buy:rect(get(".compra-produto .botao-adicionar-cesta")),' +
   'buyIcon:rect(get(".compra-produto .icone-cesta svg")),catalogBuy:rect(get(".produto .acoes .botao-adicionar-cesta")),' +
   'catalogIcon:rect(get(".produto .acoes .icone-cesta svg"))});})()';
 
@@ -121,11 +131,12 @@ try{
   });
   await cd('Page.enable');await cd('Runtime.enable');
   const host='http://127.0.0.1:'+servidor.address().port;
-  for(const area of ['publica','produto','admin']){
+  for(const area of ['publica','produto','admin','vendedores']){
     for(const width of [320,375,390,430,768,1024,1440]){
       await cd('Emulation.setDeviceMetricsOverride',{
         width,height:880,deviceScaleFactor:1,mobile:width<768});
-      await cd('Page.navigate',{url:host+(area==='admin'?'/admin':area==='produto'?'/produto-teste':'/')});
+      await cd('Page.navigate',{url:host+(area==='admin'?'/admin':area==='produto'?'/produto-teste':
+        area==='vendedores'?'/vendedores-teste':'/')});
       let value;
       for(let k=0;k<40;k++){
         await delay(80);
@@ -167,13 +178,17 @@ try{
           assert(value.buy.width<=value.client+2 && value.buy.left>=0,
             label+': botão mobile ultrapassa a tela '+JSON.stringify(value));
         }
+      }else if(area==='vendedores'){
+        assert(value.table&&value.table.width>100,label+': tabela de vendedores indisponível');
+        assert(value.sellerForm&&value.sellerForm.width>=90&&value.sellerForm.left>=0&&
+          value.sellerForm.right<=value.client+2,label+': formulário vendedor cortado '+JSON.stringify(value));
       }else{
         assert(value.table&&value.table.width>100,label+': tabela administrativa indisponível');
       }
       console.log('✓ '+label+' sem corte horizontal');
     }
   }
-  console.log('LAYOUT RESPONSIVO: 21/21 viewports aprovadas — mobile, desktop e produto');
+  console.log('LAYOUT RESPONSIVO: 28/28 viewports aprovadas — catálogo, produto, painel e vendedores');
 }finally{
   try{socket?.close();}catch{}
   if(proc)proc.kill('SIGKILL');
