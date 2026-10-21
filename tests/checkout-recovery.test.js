@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
 import { cancelarPedido, atualizarStatusFinanceiro, cancelarCriacaoComRecusaDefinitiva } from '../src/lib/orders.js';
 import { createPayment as criarCobrancaMP } from '../src/lib/payments/mercadopago.js';
+import { renovarCestaAposPedido } from '../src/routes/checkout.js';
 
 class DB {
   constructor() { this.cols = new Map(); }
@@ -175,4 +176,39 @@ test('inconsistência na reserva bloqueia rollback e mantém conciliação manua
   assert.equal(db.collection('orders').get('pedido').pendenciaPagamento, 'conciliacao_necessaria');
   assert.equal(db.collection('orders').get('pedido').statusFinanceiro, 'pendente');
   assert.equal(db.collection('coupons').get('cupom').usos, 1);
+});
+
+test('checkout incerto troca cookie e conserva pedido/cesta original para auditoria', () => {
+  const db = new DB();
+  db.collection('carts').insert({
+    id: 'c_original', clienteId: 'cliente', itens: [{ produtoId: 'p1', quantidade: 2 }],
+    frete: { endereco: { cep: '01001000' } }, cupom: { codigo: 'DESCONTO' },
+  });
+  db.collection('orders').insert({
+    id: 'pedido', clienteId: 'cliente', carrinhoId: 'c_original',
+    pendenciaPagamento: 'conciliacao_necessaria', statusFinanceiro: 'pendente',
+  });
+  const cookies = [];
+  const res = { cookie: (...args) => cookies.push(args) };
+  const novo = renovarCestaAposPedido(db, res, 'cliente');
+  assert.notEqual(novo.id, 'c_original');
+  assert.equal(novo.clienteId, 'cliente');
+  assert.deepEqual(novo.itens, []);
+  assert.equal(novo.cupom, null);
+  assert.equal(novo.frete, null);
+  assert.equal(cookies[0][1], novo.id, 'navegador recebe nova cesta');
+  assert.equal(db.collection('orders').get('pedido').carrinhoId, 'c_original');
+  assert.equal(db.collection('orders').get('pedido').statusFinanceiro, 'pendente');
+  assert.equal(db.collection('carts').get('c_original').itens[0].quantidade, 2);
+  assert.equal(db.collection('carts').get('c_original').cupom.codigo, 'DESCONTO');
+});
+
+test('cada retomada cria novo identificador de cesta sem duplicar pedido', () => {
+  const db = new DB();
+  const res = { cookie() {} };
+  const primeira = renovarCestaAposPedido(db, res, 'c1');
+  const segunda = renovarCestaAposPedido(db, res, 'c1');
+  assert.notEqual(primeira.id, segunda.id);
+  assert.equal(db.collection('orders').count(), 0);
+  assert.equal(db.collection('carts').count(), 2);
 });
