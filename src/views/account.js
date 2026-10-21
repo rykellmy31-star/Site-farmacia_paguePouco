@@ -5,6 +5,7 @@ import { campoForm, listaErros, alertaHtml, etiquetaStatus, migalhas } from './p
 import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
 import { formatDateTime, formatDate, formatCep } from '../lib/format.js';
 import { productUrl, imagemPrincipal } from '../lib/catalog.js';
+import { autorPublicoDoEventoPedido } from '../lib/order-history-public.js';
 
 function moldura(ctx, { titulo, conteudo, ativo = '' }) {
   return paginaPublica(ctx, {
@@ -279,7 +280,7 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
           <ul class="linha-tempo">
             ${(pedido.historico || []).slice().reverse().map((h) => `<li>
               <strong>${e(String(h.status || '').replace(/_/g, ' '))}</strong>
-              <span class="quando">${formatDateTime(h.em)} — ${e(h.por || 'sistema')}</span>
+              <span class="quando">${formatDateTime(h.em)} — ${e(autorPublicoDoEventoPedido(h))}</span>
               ${h.obs ? `<div class="texto-pequeno">${e(h.obs)}</div>` : ''}
             </li>`).join('')}
           </ul>
