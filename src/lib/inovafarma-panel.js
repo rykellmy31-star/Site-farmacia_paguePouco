@@ -119,7 +119,8 @@ export function diagnosticoInova(db) {
   const sync = db.collection('inovaSyncMeta').get('estoque') || null;
   const eventos = db.collection('inovaStockSync').all().slice(-10).reverse();
   const docs = db.collection('orders').all();
-  const fila = docs.filter(p => p.inovaEnvioPendente === true && !p.inovaConfirmadoEm);
+  const fila = docs.filter(p => p.inovaEnvioPendente === true && !p.inovaConfirmadoEm &&
+    p.statusFinanceiro === 'aprovado' && p.statusOperacional !== 'cancelado');
   const confirmadas = docs.filter(p => !!p.inovaConfirmadoEm);
   const erros = db.collection('inovaPanelEvents').all().slice(-25).reverse();
   const produtos = db.collection('products').all().filter(p => p.ativo !== false);
@@ -147,7 +148,7 @@ export function diagnosticoInova(db) {
       desatualizado: estoqueDesatualizado,
     },
     vendas: { pendentes: fila.length, confirmadas: confirmadas.length,
-      conferir: faltaEANnaFila,
+      conferir: automatico.vendasParaConferir,
       pendentesDetalhes: fila.slice(0, 25).map(p => ({
         id: p.id, codigo: String(p.codigo || ''), criadoEm: p.criadoEm,
         statusFinanceiro: p.statusFinanceiro, totalCentavos: p.totalCentavos,
