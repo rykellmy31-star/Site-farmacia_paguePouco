@@ -87,7 +87,14 @@ test('simulação não pode reaplicar aprovação já finalizada', async () => {
   const db = new DB();
   db.collection('payments').insert({ id: 'p1', status: 'pending', provedor: 'internal', eventos: [] });
   assert.equal((await simulateApproval(db, 'p1')).ok, true);
-  assert.equal((await simulateApproval(db, 'p1')).ok, false);
+  const eventos = db.collection('payments').get('p1').eventos.length;
+  const duplicado = await simulateApproval(db, 'p1');
+  assert.equal(duplicado.ok, true);
+  assert.equal(duplicado.duplicado, true);
+  assert.equal(db.collection('payments').get('p1').eventos.length, eventos,
+    'aprovação repetida nunca altera o histórico');
+  assert.equal((await simulateApproval(db, 'p1', { aprovado: false })).ok, false,
+    'não permite transformar pagamento aprovado em recusado');
 });
 
 test('webhook MP exige assinatura com segredo e verifica valor, moeda e vínculo', async () => {
