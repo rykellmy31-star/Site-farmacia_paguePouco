@@ -8,6 +8,7 @@ import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
 import { CloudStore } from './store.js';
 import { RequestQueue } from './request-queue.js';
+import { reconciliarPix, temPixPendente } from '../lib/payments/reconciliation.js';
 import initialData from '../../.cloudflare/seed.json';
 
 export class LojaDurableObject extends DurableObject {
@@ -69,11 +70,30 @@ export class LojaDurableObject extends DurableObject {
         ip: request.headers.get('x-pague-pouco-ip') || 'unknown',
       });
       await this.db.flush(); // Não confirma sucesso antes da persistência.
+      await this.programarAlarmePix();
       return response;
     }).catch(err => {
       console.error('[worker] falha ao atender requisição:', err.message);
       return new Response('Não foi possível processar a solicitação. Tente novamente.',
         { status: 500, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
+    });
+  }
+  // Durable Object Alarms: independem de o cliente consultar o pedido.
+  async programarAlarmePix() {
+    if (!temPixPendente(this.db)) return;
+    const atual = await this.ctx.storage.getAlarm();
+    if (atual == null) await this.ctx.storage.setAlarm(Date.now() + 5 * 60_000);
+  }
+
+  async alarm() {
+    return this.queue.run(async () => {
+      await this.ready;
+      configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://localhost.invalid', this.secret);
+      if (!this.app) this.app = createApplication(this.db);
+      const resumo = await reconciliarPix(this.db);
+      if (resumo.erros) console.warn('[pix] cobranças aguardando conciliação:', resumo.erros);
+      await this.db.flush();
+      await this.programarAlarmePix();
     });
   }
 }
