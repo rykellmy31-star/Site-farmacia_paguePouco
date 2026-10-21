@@ -13,3 +13,14 @@ export function revogarSessoes(db, tipo, usuarioId, { preservar = null } = {}) {
   }
   return removidas;
 }
+
+/** Invalida TODOS os links anteriores depois de uma troca de senha. */
+export function invalidarRecuperacoesSenha(db, clienteId) {
+  const tokens = db.collection('passwordTokens');
+  let invalidos = 0;
+  for (const t of tokens.find(t => String(t.clienteId) === String(clienteId) && !t.usado)) {
+    tokens.update(t.id, { usado: true, usadoEm: new Date().toISOString() });
+    invalidos++;
+  }
+  return invalidos;
+}
