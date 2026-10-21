@@ -21,7 +21,18 @@ export function getCart(db, req) {
     req.setCartCookie = cart.id;
   }
   if (req.user?.id && cart.clienteId !== req.user.id) {
-    cart = carts.update(cart.id, { clienteId: req.user.id });
+    if (cart.clienteId) {
+      // Outro usuário pode ter utilizado este navegador/cookie. Não
+      // transfira carrinho e dados do cliente anterior para a sessão atual.
+      cart = carts.insert({
+        id: novoCarrinhoId(), clienteId: req.user.id, itens: [],
+        cupom: null, frete: null, criadoEm: nowISO(), atualizadoEm: nowISO(),
+      });
+      req.setCartCookie = cart.id;
+    } else {
+      // Apenas carrinhos anônimos podem ser assumidos após login.
+      cart = carts.update(cart.id, { clienteId: req.user.id });
+    }
   }
   return cart;
 }
@@ -46,8 +57,13 @@ export function normalizeCart(db, cart) {
       continue;
     }
     const disponivel = estoqueDisponivel(p);
-    const quantidade = Math.max(1, Math.min(Number(item.quantidade) || 1, disponivel, 99));
-    if (quantidade < Number(item.quantidade || 1)) {
+    if (!Number.isSafeInteger(disponivel) || disponivel <= 0) {
+      avisos.push({ item, tipo: 'estoque', mensagem: `${p.nome}: sem estoque disponível. Item removido da cesta.`, produto: p });
+      continue;
+    }
+    const qtdAnterior = Number(item.quantidade);
+    const quantidade = Math.min(Number.isSafeInteger(qtdAnterior) && qtdAnterior > 0 ? qtdAnterior : 1, disponivel, 99);
+    if (quantidade < qtdAnterior) {
       avisos.push({ item, tipo: 'estoque', mensagem: `${p.nome}: estoque disponível reduzido para ${quantidade}.`, produto: p });
     }
     const preco = precoVigenteCentavos(p);
@@ -76,13 +92,20 @@ export function normalizeCart(db, cart) {
 }
 
 export function addItem(db, cart, produtoId, quantidade = 1) {
+  const solicitada = Number(quantidade);
+  if (!Number.isSafeInteger(solicitada) || solicitada < 1 || solicitada > 99) {
+    return { ok: false, erro: 'Informe quantidade inteira entre 1 e 99.', codigo: 'QUANTIDADE_INVALIDA' };
+  }
   const p = db.collection('products').get(produtoId);
   if (!p) return { ok: false, erro: 'Produto não encontrado.' };
   const venda = podeVender(p);
   if (!venda.ok) return { ok: false, erro: venda.motivo, codigo: venda.codigo };
   const disponivel = estoqueDisponivel(p);
   const atual = (cart.itens || []).find((i) => i.produtoId === p.id);
-  const qtdFinal = Math.min(99, (Number(atual?.quantidade) || 0) + Math.max(1, Number(quantidade) || 1));
+  const qtdFinal = (Number(atual?.quantidade) || 0) + solicitada;
+  if (!Number.isSafeInteger(qtdFinal) || qtdFinal > 99) {
+    return { ok: false, erro: 'A cesta aceita até 99 unidades por produto.', codigo: 'QUANTIDADE_INVALIDA' };
+  }
   if (qtdFinal > disponivel) {
     return { ok: false, erro: `Quantidade indisponível. Restam ${disponivel} unidade(s) em estoque.`, codigo: 'SEM_ESTOQUE' };
   }
@@ -94,7 +117,11 @@ export function addItem(db, cart, produtoId, quantidade = 1) {
 }
 
 export function setItemQuantity(db, cart, produtoId, quantidade) {
-  const qtd = Math.max(0, Math.min(99, Number(quantidade) || 0));
+  const qtd = Number(quantidade);
+  if (!Number.isSafeInteger(qtd) || qtd < 0 || qtd > 99 ||
+      quantidade === null || quantidade === '' || quantidade === undefined) {
+    return { ok: false, erro: 'Informe quantidade inteira entre 0 e 99.', codigo: 'QUANTIDADE_INVALIDA' };
+  }
   if (qtd === 0) return removeItem(db, cart, produtoId);
   const p = db.collection('products').get(produtoId);
   if (!p) return { ok: false, erro: 'Produto não encontrado.' };
