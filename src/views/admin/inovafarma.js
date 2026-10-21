@@ -68,6 +68,15 @@ export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
         <p><button class="botao secundario" type="button" disabled>Testar conexão — aguardando homologação</button></p>
       ` : '<p>Somente Super Administrador pode visualizar e alterar endereço, credenciais e parâmetros. Este acesso exibe apenas estado e monitoramento.</p>'}
       ` })}
+      ${superAdmin ? painel({titulo:'Importação inicial do catálogo de produtos',corpo:`
+        <p>Após a homologação do conector, os produtos disponíveis na InovaFarma
+          serão recebidos em lotes e ficarão aguardando sua revisão.
+          Você pode selecionar quais entram em Produtos, sempre inativos,
+          sem alterar estoques ou produtos existentes.</p>
+        <p><a class="botao" href="/admin/produtos/inovafarma">Revisar produtos recebidos</a></p>
+        <p class="texto-pequeno texto-suave">Ainda não há consulta direta ao ERP:
+          o cadastro de URL e token não importa produtos sozinho.</p>
+      `}) : ''}
       ${painel({ titulo: '2. Sincronização de estoque', corpo: `
         <div class="grade-form duas-colunas">
           <p><strong>Estado:</strong> ${e(LABELS[dados.status] || 'Não verificado')}</p>
