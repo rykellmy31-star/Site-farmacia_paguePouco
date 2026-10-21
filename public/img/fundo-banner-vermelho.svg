@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-label="Fundo vermelho para banner Pague Pouco, sem textos">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#8b0000"/><stop offset="100%" stop-color="#8b0000"/></linearGradient></defs>
+  <rect width="1200" height="420" fill="url(#g)"/>
+  <g fill="#ffffff" opacity=".14">
+    <circle cx="1050" cy="80" r="120"/><circle cx="980" cy="330" r="70"/><circle cx="120" cy="360" r="90"/>
+  </g>
+</svg>

@@ -1,0 +1,125 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { Collection } from '../src/lib/store.js';
+import { atualizarStatusFinanceiro, atualizarStatusOperacional, cancelarPedido, statusOperacionalExibido } from '../src/lib/orders.js';
+import { telaConta, telaPedidoDetalhe } from '../src/views/account.js';
+import { telaPedido } from '../src/views/admin/vendas.js';
+import { telaBanners } from '../src/views/admin/catalogo.js';
+
+class DB {
+  constructor(){this.cols=new Map()}
+  collection(name){
+    if(!this.cols.has(name)) this.cols.set(name,new Collection({_commit(){}},name));
+    return this.cols.get(name);
+  }
+}
+function criar(status='aprovado',operacional='em_separacao') {
+  const db=new DB();
+  db.collection('products').insert({id:'p1',nome:'Medicamento teste',estoque:{quantidade:8,reservado:0}});
+  const pedido=db.collection('orders').insert({
+    id:'o1',codigo:'PPTESTE123',statusFinanceiro:status,statusOperacional:operacional,
+    pagamentoId:'pg',metodoPagamento:'pix',totalCentavos:190,
+    criadoEm:'2026-10-21T17:21:00Z',
+    itens:[{produtoId:'p1',quantidade:1}], historico:[],
+    endereco:{cep:'45970000',nome:'Cliente Exemplo'},
+  });
+  db.collection('payments').insert({id:'pg',status:status==='aprovado'?'approved':'pending',
+    pedidoId:'o1',provedor:'internal',metodo:'pix',valorCentavos:190});
+  return {db,pedido};
+}
+const ctx=db=>({db,settings:{empresa:{nomeFantasia:'Farmácia Pague Pouco'},tema:{},seo:{},whatsapp:{},cookies:{}},
+  usuario:{nome:'Cliente Exemplo'},req:{pathname:'/conta'},arvore:[],csrf:'teste'});
+
+test('estorno confirmado antes do despacho encerra entrega junto com pagamento',()=>{
+  const {db}=criar();
+  assert.equal(atualizarStatusFinanceiro(db,'o1','estornado').ok,false,
+    'não concluir sem confirmação do banco');
+  db.collection('payments').update('pg',{status:'refunded'});
+  const r=atualizarStatusFinanceiro(db,'o1','estornado',{por:'conciliacao'});
+  assert.equal(r.ok,true);
+  assert.equal(r.pedido.statusOperacional,'cancelado');
+  assert.equal(r.pedido.statusFinanceiro,'estornado');
+  assert.equal(r.pedido.historico.filter(e=>e.tipo==='operacional'&&e.status==='cancelado').length,1);
+  assert.equal(cancelarPedido(db,'o1').semAlteracao,true);
+  assert.equal(atualizarStatusFinanceiro(db,'o1','estornado').semAlteracao,true);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,8,
+    'não inventar reposição física');
+});
+
+test('estorno após envio marca devolução em análise, sem mentir sobre entrega ou repor estoque',()=>{
+  const {db}=criar('aprovado','saiu_para_entrega');
+  db.collection('payments').update('pg',{status:'refunded'});
+  const r=atualizarStatusFinanceiro(db,'o1','estornado');
+  assert.equal(r.ok,true);
+  assert.equal(r.pedido.statusOperacional,'devolucao_em_analise');
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,8);
+  assert.equal(atualizarStatusOperacional(db,'o1','entregue').ok,false);
+  assert.equal(cancelarPedido(db,'o1').ok,false);
+  assert.equal(r.pedido.historico.filter(h=>h.status==='devolucao_em_analise').length,1);
+});
+
+test('pedido já entregue estornado exige conferência de devolução, preservando entregueEm',()=>{
+  const {db}=criar('aprovado','entregue');
+  db.collection('orders').update('o1',{entregueEm:'2026-10-21T16:00:00Z'});
+  db.collection('payments').update('pg',{status:'refunded'});
+  const r=atualizarStatusFinanceiro(db,'o1','estornado');
+  assert.equal(r.pedido.statusOperacional,'devolucao_em_analise');
+  assert.equal(r.pedido.entregueEm,'2026-10-21T16:00:00Z');
+});
+
+test('pedido antigo estornado aparece coerente no painel e conta sem mutação retroativa',()=>{
+  const {db}=criar('estornado','saiu_para_entrega');
+  const p=db.collection('orders').get('o1');
+  assert.equal(statusOperacionalExibido(p),'devolucao_em_analise');
+  const cliente=telaConta(ctx(db),{pedidos:[p]});
+  assert.match(cliente,/Devolução em análise/);
+  assert.doesNotMatch(cliente,/saiu para entrega/i);
+  const detalhe=telaPedidoDetalhe(ctx(db),{pedido:p});
+  assert.match(detalhe,/Devolução em análise/);
+  const admin=telaPedido({...ctx(db),adminUser:{role:'super_admin',nome:'Admin'},permissoes:{podeEditarPedidos:true}},
+    {pedido:p,pagamento:null,eventos:[]});
+  assert.match(admin,/Devolução em análise/);
+  assert.equal(db.collection('orders').get('o1').statusOperacional,'saiu_para_entrega',
+    'histórico armazenado preservado em pedidos antigos');
+});
+
+test('pedido expirado ou recusado aparece como cancelado; estorno pendente não é confirmado',()=>{
+  for (const financeiro of ['expirado','recusado']) {
+    assert.equal(statusOperacionalExibido({
+      statusFinanceiro:financeiro,statusOperacional:'aguardando_pagamento',
+    }),'cancelado');
+  }
+  assert.equal(statusOperacionalExibido({
+    statusFinanceiro:'estorno_solicitado',statusOperacional:'saiu_para_entrega',
+  }),'estorno_em_analise');
+});
+
+test('entregue possui ação explícita somente após envio de pedido pago e mantém bloqueios',()=>{
+  const {db}=criar('aprovado','saiu_para_entrega');
+  const p=db.collection('orders').get('o1');
+  const adminCtx={...ctx(db),adminUser:{role:'super_admin',nome:'Admin'},
+    permissoes:{podeEditarPedidos:true}};
+  const html=telaPedido(adminCtx,{pedido:p,pagamento:null,eventos:[]});
+  assert.match(html,/data-marcar-entregue="o1"/);
+  const entregue=atualizarStatusOperacional(db,'o1','entregue');
+  assert.equal(entregue.ok,true);
+  assert.equal(entregue.pedido.statusOperacional,'entregue');
+  assert.equal(entregue.pedido.entregueEm!=null,true);
+  const html2=telaPedido(adminCtx,{pedido:entregue.pedido,pagamento:null,eventos:[]});
+  assert.doesNotMatch(html2,/data-marcar-entregue=/);
+  assert.equal(atualizarStatusOperacional(db,'o1','enviado').ok,false);
+});
+
+test('modelo vermelho pode ser baixado e reutilizado sem textos originais',()=>{
+  const svg=readFileSync(new URL('../public/img/fundo-banner-vermelho.svg',import.meta.url),'utf8');
+  assert.match(svg,/viewBox="0 0 1200 420"/);
+  assert.match(svg,/#8b0000/);
+  assert.doesNotMatch(svg,/<text\b|Ofertas do dia|Confira as ofertas|<script/i);
+  const db=new DB();
+  const html=telaBanners({...ctx(db),adminUser:{id:'adm',nome:'Admin',role:'super_admin'}},
+    {banners:[],midias:[]});
+  assert.match(html,/Baixar somente o fundo vermelho/);
+  assert.match(html,/download="fundo-banner-vermelho-pague-pouco.svg"/);
+  assert.match(html,/data-usar-fundo-banner="\/img\/fundo-banner-vermelho.svg"/);
+});

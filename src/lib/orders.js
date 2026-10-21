@@ -36,7 +36,24 @@ export const STATUS_OPERACIONAL = {
   saiu_para_entrega: { id: 'saiu_para_entrega', nome: 'Saiu para entrega', ordem: 5 },
   entregue: { id: 'entregue', nome: 'Entregue', ordem: 6 },
   cancelado: { id: 'cancelado', nome: 'Cancelado', ordem: 7 },
+  devolucao_em_analise: { id: 'devolucao_em_analise', nome: 'Devolução em análise', ordem: 8 },
 };
+
+/** Apresenta um estado coerente inclusive em pedidos legados que ficaram
+ * com "saiu para entrega" após estorno. Não modifica histórico físico.
+ */
+export function statusOperacionalExibido(pedido) {
+  if (!pedido) return 'aguardando_pagamento';
+  if (pedido.statusFinanceiro === 'estornado') {
+    if (['enviado','saiu_para_entrega','entregue','devolucao_em_analise'].includes(pedido.statusOperacional))
+      return 'devolucao_em_analise';
+    return 'cancelado';
+  }
+  if (pedido.statusFinanceiro === 'estorno_solicitado') return 'estorno_em_analise';
+  if (['recusado','expirado'].includes(pedido.statusFinanceiro) &&
+      pedido.statusOperacional === 'aguardando_pagamento') return 'cancelado';
+  return pedido.statusOperacional;
+}
 
 export function proximoCodigo(db) {
   const ano = new Date().getFullYear();
@@ -406,6 +423,7 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
     patch.statusOperacional = 'em_separacao';
   }
   if (status === 'recusado' || status === 'expirado') {
+    patch.statusOperacional = 'cancelado';
     const liberacao = liberarReserva(db, pedido);
     if (!liberacao.ok) return liberacao;
 
@@ -422,10 +440,31 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
     }
   }
 
+  // Somente confirmação REAL de estorno encerra a operação. Se a mercadoria
+  // já foi expedida, não afirmamos que voltou ao estoque ou que foi cancelada
+  // fisicamente: registramos conferência da devolução.
+  if (status === 'estornado') {
+    patch.statusOperacional = ['enviado','saiu_para_entrega','entregue','devolucao_em_analise']
+      .includes(pedido.statusOperacional) ? 'devolucao_em_analise' : 'cancelado';
+  }
+  const mudouOperacional = !!patch.statusOperacional &&
+    patch.statusOperacional !== pedido.statusOperacional;
   const atualizado = db.collection('orders').update(pedidoId, patch);
   adicionarHistorico(db, atualizado, { tipo: 'financeiro', status, obs, por });
+  if (mudouOperacional) {
+    adicionarHistorico(db, db.collection('orders').get(pedidoId), {
+      tipo: 'operacional', status: patch.statusOperacional,
+      obs: status === 'estornado' && patch.statusOperacional === 'devolucao_em_analise'
+        ? 'Estorno confirmado; verificar devolução física sem repor o estoque automaticamente.'
+        : 'Operação encerrada automaticamente após resultado financeiro confirmado.',
+      por: 'sistema',
+    });
+  }
   const pedidoAtual = db.collection('orders').get(pedidoId);
   enfileirarAvisoPedido(db, pedidoAtual, 'financeiro', status);
+  if (mudouOperacional && ['recusado','expirado','estornado'].includes(status)) {
+    enfileirarAvisoPedido(db, pedidoAtual, 'operacional', patch.statusOperacional);
+  }
   return { ok: true, pedido: pedidoAtual };
 }
 
@@ -433,8 +472,8 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
   if (!STATUS_OPERACIONAL[status]) return { ok: false, erro: 'Status operacional inválido.' };
-  if (status === 'cancelado') return { ok: false, erro: 'Use o fluxo de cancelamento validado.' };
-  if (pedido.statusOperacional === 'cancelado') return { ok: false, erro: 'Pedido cancelado não pode ser reativado.' };
+  if (['cancelado','devolucao_em_analise'].includes(status)) return { ok: false, erro: 'Use o fluxo de cancelamento ou devolução validado.' };
+  if (['cancelado','devolucao_em_analise'].includes(pedido.statusOperacional)) return { ok: false, erro: 'Pedido encerrado ou em devolução não pode avançar na entrega.' };
   if (status === pedido.statusOperacional && !rastreio) return { ok: true, pedido, semAlteracao: true };
   if (status !== pedido.statusOperacional &&
       STATUS_OPERACIONAL[status].ordem <= (STATUS_OPERACIONAL[pedido.statusOperacional]?.ordem || 0)) {
@@ -479,7 +518,7 @@ export function validarCancelamentoOperacional(pedido) {
       ['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento)) {
     return { ok: false, erro: 'Pagamento aguardando conferência. Não cancele antes de verificar a cobrança.' };
   }
-  if (['entregue', 'cancelado', 'enviado', 'saiu_para_entrega'].includes(pedido.statusOperacional)) {
+  if (['entregue', 'cancelado', 'enviado', 'saiu_para_entrega', 'devolucao_em_analise'].includes(pedido.statusOperacional)) {
     return { ok: false, erro: 'Pedido expedido, entregue ou cancelado exige outro fluxo.' };
   }
   return { ok: true };
@@ -487,6 +526,12 @@ export function validarCancelamentoOperacional(pedido) {
 
 export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = {}) {
   const pedido = db.collection('orders').get(pedidoId);
+  // O fluxo financeiro pode ter encerrado a operação no mesmo evento.
+  // Evita um segundo cancelamento/histórico/alteração de estoque.
+  if (pedido?.statusOperacional === 'cancelado' &&
+      pedido.statusFinanceiro === 'estornado') {
+    return { ok: true, pedido, semAlteracao: true };
+  }
   const admissivel = validarCancelamentoOperacional(pedido);
   if (!admissivel.ok) return admissivel;
   if (['aprovado', 'estorno_solicitado'].includes(pedido.statusFinanceiro)) {
@@ -495,6 +540,11 @@ export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = 
   if (pedido.statusFinanceiro === 'pendente') {
     const r = atualizarStatusFinanceiro(db, pedido.id, 'recusado', { obs: 'Cancelamento antes da aprovação.', por });
     if (!r.ok) return r;
+    // A recusa já encerrou a entrega no mesmo evento financeiro.
+    const encerrado = db.collection('orders').get(pedidoId);
+    if (encerrado.statusOperacional === 'cancelado') {
+      return { ok: true, pedido: encerrado };
+    }
   }
   db.collection('orders').update(pedidoId, { statusOperacional: 'cancelado', atualizadoEm: nowISO() });
   adicionarHistorico(db, db.collection('orders').get(pedidoId), { tipo: 'operacional', status: 'cancelado', obs: motivo, por });

@@ -130,11 +130,11 @@ test('estorno confirmado conclui cancelamento solicitado uma vez, sem reembolso 
   assert.equal(temEstornoPendente(db), false);
 });
 
-test('estorno avulso confirmado não cancela automaticamente pedido', async () => {
+test('estorno avulso confirmado cancela operação não expedida automaticamente', async () => {
   const db = dbEstorno({ status: 'refunded', cancelar: false });
   assert.equal((await reconciliarEstornos(db)).confirmados, 1);
   assert.equal(db.collection('orders').get('o').statusFinanceiro, 'estornado');
-  assert.equal(db.collection('orders').get('o').statusOperacional, 'em_separacao');
+  assert.equal(db.collection('orders').get('o').statusOperacional, 'cancelado');
   assert.equal(temEstornoPendente(db), false);
 });
 

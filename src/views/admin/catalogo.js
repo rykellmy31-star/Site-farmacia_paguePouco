@@ -6,6 +6,7 @@ import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, pod
 import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
+import { statusOperacionalExibido } from '../../lib/orders.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -53,7 +54,7 @@ export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoque
             <td>${e(p.cliente?.nome || '—')}</td>
             <td>${money(p.totalCentavos)}</td>
             <td>${etiquetaStatus(p.statusFinanceiro)}</td>
-            <td>${etiquetaStatus(p.statusOperacional)}</td>
+            <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
             <td><a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a></td>
           </tr>`),
           vazio: 'Nenhum pedido ainda.',
@@ -583,6 +584,19 @@ export function telaBanners(ctx, { banners, midias }) {
     ativo: 'banners',
     conteudo: `
     <h1 class="mt-0">Banners da home</h1>
+    ${painel({titulo:'Modelo reutilizável — fundo vermelho',corpo:`
+      <p>Este é apenas o fundo original vermelho dos banners, <strong>sem texto, logotipo ou botão</strong>.
+        Guarde a imagem no computador ou reutilize no próximo banner.</p>
+      <img src="/img/fundo-banner-vermelho.svg" alt="Fundo vermelho padrão da farmácia sem textos"
+        width="480" height="168" style="display:block;max-width:100%;height:auto;border-radius:10px;margin-bottom:12px">
+      <div class="linha" style="gap:8px;flex-wrap:wrap">
+        <a class="botao pequeno secundario" href="/img/fundo-banner-vermelho.svg"
+          download="fundo-banner-vermelho-pague-pouco.svg">Baixar somente o fundo vermelho</a>
+        <button class="botao pequeno" type="button" data-usar-fundo-banner="/img/fundo-banner-vermelho.svg">
+          Usar esse fundo no novo banner
+        </button>
+      </div>
+    `})}
     ${painel({
       titulo: 'Novo banner',
       corpo: `<form method="post" action="/admin/api/banners">

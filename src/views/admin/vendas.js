@@ -5,7 +5,7 @@ import {
   etiquetaStatus, graficoBarras, paginacaoAdmin, money,
 } from './layout.js';
 import { formatDateTime, formatDate, formatCep, formatDoc, formatPhone } from '../../lib/format.js';
-import { STATUS_FINANCEIRO, STATUS_OPERACIONAL, pedidoPrecisaConferencia } from '../../lib/orders.js';
+import { STATUS_FINANCEIRO, STATUS_OPERACIONAL, pedidoPrecisaConferencia, statusOperacionalExibido } from '../../lib/orders.js';
 import { mapStatus } from '../../lib/payments/internal.js';
 
 /* =============================== PEDIDOS =============================== */
@@ -58,7 +58,7 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, v
             ${pedidoPrecisaConferencia(p)
               ? '<div class="texto-pequeno"><strong>Conferir cobrança</strong></div>' : ''}
           </td>
-          <td>${etiquetaStatus(p.statusOperacional)}</td>
+          <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
           <td>${formatDateTime(p.criadoEm)}</td>
           <td><a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a></td>
         </tr>`),
@@ -106,7 +106,7 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
     <div class="cartoes">
       ${cartaoMetrica('Total', money(pedido.totalCentavos), `${(pedido.itens || []).reduce((a, i) => a + i.quantidade, 0)} itens`)}
       ${cartaoMetrica('Pagamento', STATUS_FINANCEIRO[pedido.statusFinanceiro]?.nome || pedido.statusFinanceiro)}
-      ${cartaoMetrica('Entrega', STATUS_OPERACIONAL[pedido.statusOperacional]?.nome || pedido.statusOperacional)}
+      ${cartaoMetrica('Entrega', STATUS_OPERACIONAL[statusOperacionalExibido(pedido)]?.nome || statusOperacionalExibido(pedido))}
       ${cartaoMetrica('Frete', pedido.freteCentavos ? money(pedido.freteCentavos) : 'Grátis', e(pedido.freteOpcao?.prazo || ''))}
     </div>
 
@@ -117,9 +117,13 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
           corpo: `<form method="post" action="/admin/api/pedidos/${e(pedido.id)}/status">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
             ${campoAdmin({ nome: 'status', rotulo: 'Novo status', valor: pedido.statusOperacional,
-              opcoes: Object.values(STATUS_OPERACIONAL).map((s) => ({ valor: s.id, texto: s.nome })) })}
+              opcoes: Object.values(STATUS_OPERACIONAL).filter(s => !['cancelado','devolucao_em_analise'].includes(s.id)).map((s) => ({ valor: s.id, texto: s.nome })) })}
             ${campoAdmin({ nome: 'obs', rotulo: 'Observação interna' })}
             <button class="botao" type="submit">Atualizar status</button>
+            ${pedido.statusFinanceiro === 'aprovado' &&
+                ['enviado','saiu_para_entrega'].includes(pedido.statusOperacional)
+              ? `<button class="botao pequeno secundario" type="button"
+                  data-marcar-entregue="${e(pedido.id)}">✓ Marcar como entregue</button>` : ''}
           </form>`,
         })}
 
@@ -327,7 +331,7 @@ export function telaCliente(ctx, { cliente, pedidos, enderecos }) {
           <td>${formatDateTime(p.criadoEm)}</td>
           <td>${money(p.totalCentavos)}</td>
           <td>${etiquetaStatus(p.statusFinanceiro)}</td>
-          <td>${etiquetaStatus(p.statusOperacional)}</td>
+          <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
           <td><a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a></td>
         </tr>`),
         vazio: 'Nenhum pedido deste cliente.',

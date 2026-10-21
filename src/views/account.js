@@ -2,7 +2,7 @@
 import { escapeHtml as e } from '../lib/security.js';
 import { paginaPublica, money, ICONES } from './layout.js';
 import { campoForm, listaErros, alertaHtml, etiquetaStatus, migalhas } from './partials.js';
-import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
+import { STATUS_OPERACIONAL, STATUS_FINANCEIRO, statusOperacionalExibido } from '../lib/orders.js';
 import { formatDateTime, formatDate, formatCep } from '../lib/format.js';
 import { productUrl, imagemPrincipal } from '../lib/catalog.js';
 import { autorPublicoDoEventoPedido } from '../lib/order-history-public.js';
@@ -165,7 +165,7 @@ export function telaConta(ctx, { pedidos }) {
               <td>${formatDate(p.criadoEm)}</td>
               <td>${money(p.totalCentavos)}</td>
               <td>${etiquetaStatus(p.statusFinanceiro)}</td>
-              <td>${etiquetaStatus(p.statusOperacional)}</td>
+              <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
               <td><a class="botao pequeno secundario" href="/conta/pedidos/${e(p.codigo)}">Detalhes</a></td>
             </tr>`).join('')}</tbody></table></div>`
             : '<div class="estado-vazio">Você ainda não fez pedidos. <a href="/ofertas">Ver ofertas</a></div>'}
@@ -189,7 +189,7 @@ export function telaPedidos(ctx, { pedidos }) {
             <td>${(p.itens || []).reduce((a, i) => a + i.quantidade, 0)}</td>
             <td>${money(p.totalCentavos)}</td>
             <td>${etiquetaStatus(p.statusFinanceiro)}</td>
-            <td>${etiquetaStatus(p.statusOperacional)}</td>
+            <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
             <td><a class="botao pequeno secundario" href="/conta/pedidos/${e(p.codigo)}">Abrir</a></td>
           </tr>`).join('')}</tbody></table></div>`
           : '<div class="estado-vazio">Nenhum pedido encontrado.</div>'}
@@ -219,7 +219,7 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
         <div class="corpo">
           <div class="linha" style="gap:10px;flex-wrap:wrap">
             <div><span class="rotulo">Pagamento</span>${etiquetaStatus(pedido.statusFinanceiro)}</div>
-            <div><span class="rotulo">Entrega</span>${etiquetaStatus(pedido.statusOperacional)}</div>
+            <div><span class="rotulo">Entrega</span>${etiquetaStatus(statusOperacionalExibido(pedido))}</div>
             <div><span class="rotulo">Forma</span>${e(String(pedido.metodoPagamento || '').replace('credit_card', 'Cartão de crédito').replace('debit_card', 'Cartão de débito').replace('pix', 'Pix'))}</div>
             ${pedido.vendedor?.nome ? `<div><span class="rotulo">Vendedor</span><strong>${e(pedido.vendedor.nome)}</strong></div>` : ''}
           </div>

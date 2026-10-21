@@ -97,13 +97,14 @@ export function etiquetaStatus(status, tipo = 'financeiro') {
     pendente: 'laranja', aprovado: 'verde', recusado: 'vermelha', estornado: 'azul', expirado: 'cinza',
     aguardando_pagamento: 'laranja', em_separacao: 'azul', preparando_envio: 'azul',
     enviado: 'azul', saiu_para_entrega: 'azul', entregue: 'verde', cancelado: 'vermelha',
+    devolucao_em_analise: 'laranja', estorno_em_analise: 'laranja',
   };
   const id = String(status || '');
   // rótulos oficiais em português (cadastro único em lib/orders.js)
   const nome = (tipo === 'operacional' ? STATUS_OPERACIONAL[id]?.nome : STATUS_FINANCEIRO[id]?.nome)
     || STATUS_OPERACIONAL[id]?.nome
     || STATUS_FINANCEIRO[id]?.nome
-    || id.replace(/_/g, ' ');
+    || (id === 'estorno_em_analise' ? 'Estorno em análise' : id.replace(/_/g, ' '));
   return `<span class="etiqueta ${mapa[id] || 'cinza'}">${e(nome)}</span>`;
 }
 
