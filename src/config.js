@@ -80,6 +80,7 @@ export const config = {
     enabled: bool(process.env.INOVA_STOCK_ENABLED, false),
     token: process.env.INOVA_STOCK_TOKEN || '',
     maxAgeMinutes: int(process.env.INOVA_STOCK_MAX_AGE_MINUTES, 15),
+    credentialsKey: process.env.INOVA_CREDENTIALS_KEY || '',
   },
   payments: {
     credentialsKey: process.env.MP_CREDENTIALS_KEY || '',
@@ -135,6 +136,7 @@ export function configureCloudflare(env, origin, persistentSecret) {
     enabled: bool(env.INOVA_STOCK_ENABLED, false),
     token: env.INOVA_STOCK_TOKEN || '',
     maxAgeMinutes: int(env.INOVA_STOCK_MAX_AGE_MINUTES, 15),
+    credentialsKey: env.INOVA_CREDENTIALS_KEY || '',
   };
   config.payments.provider = String(env.PAYMENT_PROVIDER || 'internal').toLowerCase();
   config.payments.credentialsKey = env.MP_CREDENTIALS_KEY || '';
