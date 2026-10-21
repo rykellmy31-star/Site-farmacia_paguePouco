@@ -58,13 +58,13 @@ export class CloudStore {
   async close() { await this.flush(); }
 
   /**
-   * Exportação privada do banco. Nunca distribua sessões autenticadas, links
+   * Exportação privada do banco. Nunca distribua sessões autenticadas, mensagens com links de recuperação de senha, links
    * de recuperação de senha ou o segredo interno junto ao backup operacional.
    * Esses dados são transitórios e não devem sobreviver a uma restauração.
    */
   exportData() {
     const collections = Object.create(null);
-    const proibidas = new Set(['__meta', 'sessions', 'passwordTokens']);
+    const proibidas = new Set(['__meta', 'sessions', 'passwordTokens', 'mailOutbox']);
     for (const row of this.sql.exec('SELECT collection_name, doc FROM documents ORDER BY collection_name, rowid')) {
       if (proibidas.has(row.collection_name)) continue;
       (collections[row.collection_name] ||= []).push(JSON.parse(row.doc));

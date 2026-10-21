@@ -410,6 +410,14 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(approved.statusFinanceiro, 'aprovado');
   assert.equal(afterApproval.products.find(p => p.id === produto.id).estoque.quantidade, 8);
   assert.equal(afterApproval.products.find(p => p.id === produto.id).estoque.reservado, 0);
+  // A fila é privada: NÃO está no JSON de backup. Inspecione-a pela
+  // página administrativa autenticada, sem exportar tokens ou conteúdo bruto.
+  const contarAviso = (html, titulo, codigo) =>
+    html.split(titulo + ' — pedido ' + codigo).length - 1;
+  const painelAvisosAprovacao = await (await admin.get('/admin/sistema')).text();
+  assert.equal(contarAviso(painelAvisosAprovacao, 'Pagamento confirmado', order.codigo), 1,
+    'aprovação deve registrar aviso no painel privado');
+  assert.match(painelAvisosAprovacao, /fila/, 'sem transporte não pode afirmar entrega');
 
   // Aprovação duplicada não pode baixar o estoque duas vezes.
   const secondApproval = await admin.json('/admin/api/pedidos/' + order.id + '/simular-pagamento',
@@ -419,6 +427,9 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   const afterDuplicate = await snapshot();
   assert.equal(afterDuplicate.products.find(p => p.id === produto.id).estoque.quantidade, 8);
   assert.equal(afterDuplicate.orders.find(o => o.id === order.id).statusFinanceiro, 'aprovado');
+  assert.equal(contarAviso(await (await admin.get('/admin/sistema')).text(),
+    'Pagamento confirmado', order.codigo), 1,
+    'simulação de cobrança duplicada não pode duplicar notificação');
   assert.equal(afterDuplicate.payments.find(p => p.id === payment.id).eventos.length,
     afterApproval.payments.find(p => p.id === payment.id).eventos.length,
     'notificações duplicadas não devem criar eventos financeiros duplicados');
@@ -547,8 +558,14 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     assert.equal(change.status, 400, 'não pode voltar de entregue para ' + status);
     assert.equal((await change.json()).ok, false);
   }
-  const finished = (await snapshot()).orders.find(p => p.id === order.id);
+  const estadoEntrega = await snapshot();
+  const finished = estadoEntrega.orders.find(p => p.id === order.id);
   assert.equal(finished.statusOperacional, 'entregue');
+  const painelEntrega = await (await admin.get('/admin/sistema')).text();
+  for (const titulo of ['Pedido enviado', 'Pedido entregue']) {
+    assert.equal(contarAviso(painelEntrega, titulo, order.codigo), 1,
+      'entrega deve gerar aviso único na fila para ' + titulo);
+  }
   const cancelledFinished = await admin.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
   assert.equal(cancelledFinished.status, 409, 'entrega finalizada não pode ser cancelada pelo formulário');
   assert.equal((await cancelledFinished.json()).ok, false);
@@ -636,16 +653,28 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     'cupom de uso único precisa voltar para quem fizer nova tentativa');
   assert.equal(dataRejectedAfter.products.find(p => p.id === produto.id).estoque.reservado, 0,
     'pedido recusado libera toda a reserva');
+  assert.equal(contarAviso(await (await admin.get('/admin/sistema')).text(),
+    'Pagamento recusado', rejectedOrder.codigo), 1,
+    'recusa de pagamento registra aviso de tentativa não concluída');
   assert.equal((await client.json('/api/carrinho/adicionar', {
     produtoId: produto.id, quantidade: 1,
   })).status, 200);
   const retryCupom = await client.json('/api/carrinho/cupom', { codigo: 'RECUPERA-CHECKOUT-1' });
   assert.equal(retryCupom.status, 200, 'cupom torna a funcionar após recusa de pagamento');
 
-  // E-mail não configurado nunca deve ser marcado como entregue.
-  const fila = (await snapshot()).mailOutbox || [];
-  assert.ok(fila.some(m => m.assunto?.includes(rejectedOrder.codigo)),
-    'confirmação do pedido deve entrar na fila privada');
-  assert.equal(fila.some(m => m.assunto?.includes(rejectedOrder.codigo) && m.status === 'enviado'),
-    false, 'fila local sem provedor não pode afirmar que entregou e-mail');
+  // E-mail sem provedor fica pendente no painel, mas nunca no backup JSON.
+  const painelFinal = await (await admin.get('/admin/sistema')).text();
+  assert.match(painelFinal, new RegExp('Pedido ' + rejectedOrder.codigo + ' recebido'),
+    'confirmação inicial precisa constar na fila administrativa');
+  assert.match(painelFinal, /Fila de e-mails/);
+  assert.doesNotMatch(painelFinal, /\benviado\b(?=<\/td>)/,
+    'fila sem transporte não pode alegar entrega');
+  const backupSeguro = await admin.json('/admin/api/sistema/backup', {});
+  assert.equal(backupSeguro.status, 200);
+  const exportacao = await backupSeguro.json();
+  assert.ok(exportacao.collections.orders?.some(p => p.id === rejectedOrder.id));
+  assert.equal('mailOutbox' in exportacao.collections, false,
+    'backup publicado não pode incluir mensagens com links de recuperação de senha');
+  assert.equal('passwordTokens' in exportacao.collections, false);
+  assert.equal('sessions' in exportacao.collections, false);
 });

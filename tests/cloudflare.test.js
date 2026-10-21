@@ -210,6 +210,8 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal('__meta' in snapshot.collections, false, 'segredos internos nunca devem ser exportados');
   assert.equal('sessions' in snapshot.collections, false, 'não exportar cookies/sessões reutilizáveis de clientes e administradores');
   assert.equal('passwordTokens' in snapshot.collections, false, 'não exportar links de recuperação de senha');
+  assert.equal('mailOutbox' in snapshot.collections, false,
+    'não exportar mensagens com URLs de redefinição de senha ou dados privados');
   const media = snapshot.collections.midia.find(item => item.nome === 'teste.svg');
   assert.ok(media, JSON.stringify(uploadResult));
   assert.equal(await (await call(media.url)).text(), svg);
