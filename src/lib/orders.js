@@ -255,6 +255,9 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     endereco: { ...endereco },
     rastreio: { codigo: '', transportadora: '', url: '', enviadoEm: null },
     pagamentoId: null,
+    // Se o Worker reiniciar antes de associar o pagamento ao pedido, o
+    // reconciliador identifica esta etapa sem presumir recusa ou aprovação.
+    pendenciaPagamento: 'criacao_em_andamento',
     observacoes: '',
     historico: [{
       tipo: 'operacional', status: 'aguardando_pagamento', em: nowISO(),
