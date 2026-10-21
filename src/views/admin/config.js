@@ -535,6 +535,24 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
     </div>
 
     ${painel({
+      titulo: 'Homologação financeira e conciliação automática',
+      corpo: `<p class="texto-pequeno">Indicadores internos sem valores de pagamentos, nomes de clientes
+        ou credenciais. O último ciclo registrado não comprova crédito bancário real.</p>
+        <p><strong>Última execução do alarme:</strong> ${stats.conciliacaoFinanceira?.ultimaExecucaoEm
+          ? formatDateTime(stats.conciliacaoFinanceira.ultimaExecucaoEm) : 'Ainda não registrada'}</p>
+        <p><strong>Resultado do último ciclo:</strong> ${e(stats.conciliacaoFinanceira?.situacao || 'Sem registro')}</p>
+        <div class="cartoes">
+          ${cartaoMetrica('Pix pendentes', stats.conciliacaoFinanceira?.pixPendentes || 0)}
+          ${cartaoMetrica('Estornos pendentes', stats.conciliacaoFinanceira?.estornosPendentes || 0)}
+          ${cartaoMetrica('Checkouts interrompidos', stats.conciliacaoFinanceira?.checkoutsInterrompidos || 0)}
+          ${cartaoMetrica('Pedidos para conferência', stats.conciliacaoFinanceira?.conferencias || 0)}
+        </div>
+        <p class="texto-pequeno">Se a conciliação mostrar pendências, confira os pagamentos no painel
+          antes de qualquer nova cobrança, cancelamento ou liberação de estoque.
+          Não há acionamento manual de cobrança nesta seção.</p>`
+    })}
+
+    ${painel({
       titulo: 'Backup dos dados',
       corpo: `<p class="texto-pequeno">${config.isCloudflare
         ? 'Baixe os cadastros, pedidos e configurações no JSON abaixo. Os arquivos de imagem/vídeo são exportados separadamente em suas versões originais; guarde tudo em local privado. Ainda não há restauração automática homologada.'
