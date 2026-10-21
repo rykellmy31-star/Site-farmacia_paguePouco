@@ -82,10 +82,10 @@ export function salvarCredenciaisMercadoPago(db, dados) {
       webhookSecret.length > 512 || /\s/.test(webhookSecret)) {
     return { ok: false, erro: 'Public Key ou assinatura de webhook inválida.' };
   }
-  // Evita cobrar produção com credenciais identificadas como teste e vice-versa.
-  if (ambiente === 'testes' && accessToken.startsWith('APP_USR-')) {
-    return { ok: false, erro: 'Token de produção informado para ambiente de testes.' };
-  }
+  // O Mercado Pago pode emitir Access Tokens de TESTE e PRODUÇÃO com prefixo
+  // APP_USR-. Prefixo não informa o ambiente: não rejeitar token de teste válido.
+  // A escolha do ambiente é responsabilidade do titular, e o painel exige uma
+  // confirmação separada antes de habilitar cobranças reais.
   if (ambiente === 'producao' && accessToken.startsWith('TEST-')) {
     return { ok: false, erro: 'Token de testes informado para ambiente de produção.' };
   }

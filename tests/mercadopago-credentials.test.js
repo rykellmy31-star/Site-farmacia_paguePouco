@@ -67,13 +67,16 @@ test('alteração de chave ou adulteração causa bloqueio seguro, nunca fallbac
  }finally{await cleanup();}
 });
 
-test('token de produção exige ambiente produção e assinatura do webhook',async()=>{
+test('token APP_USR aceita ambiente de teste; produção exige assinatura de webhook',async()=>{
  const cleanup=environment();try{
   const db=new DB();
-  assert.equal(salvarCredenciaisMercadoPago(db,payload({accessToken:'APP_USR-0123456789abcdefghijklmnopqrstuvwxyz'})).ok,false);
+  // Credenciais oficiais de teste do Mercado Pago também podem começar por APP_USR.
+  assert.equal(salvarCredenciaisMercadoPago(db,payload({accessToken:'APP_USR-0123456789abcdefghijklmnopqrstuvwxyz'})).ok,true);
+  assert.equal(credenciaisMercadoPago(db).sandbox,true);
   assert.equal(salvarCredenciaisMercadoPago(db,payload({accessToken:'APP_USR-0123456789abcdefghijklmnopqrstuvwxyz',ambiente:'producao',webhookSecret:''})).ok,false);
   assert.equal(salvarCredenciaisMercadoPago(db,payload({accessToken:'TEST-0123456789abcdefghijklmnopqrstuvwxyz',ambiente:'producao'})).ok,false);
   assert.equal(salvarCredenciaisMercadoPago(db,payload({accessToken:'APP_USR-0123456789abcdefghijklmnopqrstuvwxyz',ambiente:'producao'})).ok,true);
+  assert.equal(credenciaisMercadoPago(db).sandbox,false);
   db.collection('settings').insert({id:'pagamentos',provedor:'mercadopago',ambienteTestes:true});
   assert.equal(getProviderInfo(db).configurado,false,'nao habilita produção com checkbox de teste');
   db.collection('settings').update('pagamentos',{ambienteTestes:false});
