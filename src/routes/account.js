@@ -205,7 +205,12 @@ export function registrarRotasConta(app, db) {
     const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
     if (!pedido) return void res.redirect('/conta/pedidos');
     const r = cancelarPedido(db, pedido.id, { motivo: cleanText(req.body.motivo, 300) || 'Cancelado pelo cliente.', por: req.user.nome });
-    logCustomer(db, req.user.id, 'cancelou_pedido', 'pedido', pedido.id, { motivo: req.body.motivo || '' }, req);
+    if (!r.ok) {
+      const ctx = criarContexto(req, db);
+      ctx.aviso = escapeHtml(r.erro || 'Não foi possível cancelar este pedido.');
+      return void res.html(telaPedidoDetalhe(ctx, { pedido: db.collection('orders').get(pedido.id) }), 409);
+    }
+    logCustomer(db, req.user.id, 'cancelou_pedido', 'pedido', pedido.id, { motivo: cleanText(req.body.motivo, 300) }, req);
     res.redirect(`/conta/pedidos/${pedido.codigo}`);
   });
 
