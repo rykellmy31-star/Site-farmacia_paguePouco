@@ -5,7 +5,7 @@ import {
   getCart, calcularTotais, normalizeCart, aplicarCupom, removerCupom, clearCart, attachCartCookie,
 } from '../lib/cart.js';
 import { calcularFrete, resolverFreteEscolhido } from '../lib/freight.js';
-import { criarPedido } from '../lib/orders.js';
+import { criarPedido, cancelarPedido } from '../lib/orders.js';
 import { createPayment, installmentOptions, enabledMethods, providerPublicInfo } from '../lib/payments/index.js';
 import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '../lib/security.js';
 import { lookupCep, UF_LIST } from '../lib/cep.js';
@@ -206,6 +206,7 @@ export function registrarRotasCheckout(app, db) {
     const cfgPag = ctx.settings.pagamentos || {};
     res.html(telaPagamento(ctx, {
       totais,
+      erros: req.query.get('erro') ? { pagamento: req.query.get('erro') } : {},
       parcelas: installmentOptions(db, totais.totalCentavos),
       formasPagamento: {
         ...formas,
@@ -233,6 +234,7 @@ export function registrarRotasCheckout(app, db) {
     }
 
     const parcelas = Math.max(1, Number(req.body.parcelas) || 1);
+    const itensOriginais = [...(cart.itens || [])];
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
@@ -245,8 +247,9 @@ export function registrarRotasCheckout(app, db) {
 
     const pedido = resultado.pedido;
 
-    // Cria a cobrança no provedor configurado
-    const cobranca = await createPayment(db, {
+    // Cria a cobrança no provedor configurado. Timeout não equivale a recusa.
+    let cobranca, erroIndeterminado = false;
+    try { cobranca = await createPayment(db, {
       order: pedido,
       method: metodo,
       payer: { nome: pedido.cliente?.nome, email: pedido.cliente?.email, cpf: req.user?.cpf },
@@ -255,7 +258,27 @@ export function registrarRotasCheckout(app, db) {
       paymentMethodId: req.body.paymentMethodId || null,
       issuerId: req.body.issuerId || null,
       returnUrls: { notificationUrl: `${config.publicBaseUrl}/webhooks/mercadopago` },
-    });
+    }); } catch (err) {
+      erroIndeterminado = true;
+      cobranca = { ok: false, erro: 'Não foi possível determinar se o provedor registrou a cobrança.' };
+    }
+    if (!cobranca?.ok || !cobranca.pagamento) {
+      if (erroIndeterminado) {
+        db.collection('orders').update(pedido.id, {
+          pendenciaPagamento: 'conciliacao_necessaria',
+          historico: [...(pedido.historico || []), {
+            tipo: 'financeiro', status: 'conciliacao_necessaria', em: new Date().toISOString(),
+            por: 'sistema', obs: 'Resposta indeterminada do provedor; reserva mantida até conciliação.',
+          }],
+        });
+        return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
+      }
+      cancelarPedido(db, pedido.id, { motivo: 'Cobrança não criada; estoque liberado.', por: 'sistema' });
+      // Restaura o carrinho original: a compra NÃO foi finalizada.
+      db.collection('carts').update(cart.id, { itens: itensOriginais, atualizadoEm: new Date().toISOString() });
+      return void res.redirect('/checkout/pagamento?erro=' +
+        encodeURIComponent(cobranca?.erro || 'Não foi possível iniciar o pagamento.'));
+    }
 
     if (cobranca && cobranca.ok && cobranca.pagamento) {
       const pagamentoId = cobranca.pagamento.id;
@@ -270,7 +293,7 @@ export function registrarRotasCheckout(app, db) {
     });
 
     sendMail(db, {
-      to: pedido.cliente?.email || req.user.email,
+      to: pedido.cliente?.email || req.user?.email || '',
       subject: `Pedido ${pedido.codigo} recebido — Farmácia Pague Pouco`,
       html: `<h1>Recebemos seu pedido ${escapeHtml(pedido.codigo)}</h1>
         <p>Olá, ${escapeHtml(String(pedido.cliente?.nome || '').split(' ')[0])}!</p>
@@ -279,7 +302,7 @@ export function registrarRotasCheckout(app, db) {
         <p><a href="${config.publicBaseUrl}/conta/pedidos/${pedido.codigo}">Acompanhar pedido</a></p>`,
     }).catch(() => {});
 
-    logCustomer(db, req.user.id, 'criou_pedido', 'pedido', pedido.id, { codigo: pedido.codigo, total: pedido.totalCentavos }, req);
+    if (req.user) logCustomer(db, req.user.id, 'criou_pedido', 'pedido', pedido.id, { codigo: pedido.codigo, total: pedido.totalCentavos }, req);
 
     // Após o pedido, o cliente recebe uma CESTA NOVA (o carrinho anterior fica
     // vinculado ao pedido). Isso mantém a proteção contra duplicidade sem
