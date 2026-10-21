@@ -126,9 +126,9 @@ export async function getPaymentStatus(db, payment) {
 }
 
 /** Processa notificação (webhook) do provedor. */
-export async function handleWebhook(db, { provider, headers, body, rawBody }) {
+export async function handleWebhook(db, { provider, headers, body, rawBody, dataId = null }) {
   const id = String(provider || '').toLowerCase();
-  if (id === 'mercadopago') return mercadoPago.handleWebhook({ db, headers, body, rawBody, config });
+  if (id === 'mercadopago') return mercadoPago.handleWebhook({ db, headers, body, rawBody, dataId, config });
   return internalProvider.handleWebhook({ db, headers, body, rawBody, config });
 }
 
