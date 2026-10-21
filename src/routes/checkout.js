@@ -234,7 +234,7 @@ export function registrarRotasCheckout(app, db) {
     }
 
     const parcelas = Math.max(1, Number(req.body.parcelas) || 1);
-    const itensOriginais = [...(cart.itens || [])];
+    const carrinhoOriginal = { itens: [...(cart.itens || [])], cupom: cart.cupom, frete: cart.frete };
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
@@ -275,7 +275,7 @@ export function registrarRotasCheckout(app, db) {
       }
       cancelarPedido(db, pedido.id, { motivo: 'Cobrança não criada; estoque liberado.', por: 'sistema' });
       // Restaura o carrinho original: a compra NÃO foi finalizada.
-      db.collection('carts').update(cart.id, { itens: itensOriginais, atualizadoEm: new Date().toISOString() });
+      db.collection('carts').update(cart.id, { ...carrinhoOriginal, atualizadoEm: new Date().toISOString() });
       return void res.redirect('/checkout/pagamento?erro=' +
         encodeURIComponent(cobranca?.erro || 'Não foi possível iniciar o pagamento.'));
     }
