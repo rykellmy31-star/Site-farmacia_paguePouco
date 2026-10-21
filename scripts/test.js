@@ -1010,6 +1010,26 @@ async function main() {
     return 'listagem, busca e filtros ok';
   });
 
+  await testar('InovaFarma: importação em lote só é permitida ao superadmin e sem publicar automaticamente', async () => {
+    const r=await admin.get('/admin/produtos/inovafarma');
+    assert(r.status===200&&r.texto.includes('Importação de produtos') &&
+      r.texto.includes('Aguardando') && r.texto.includes('Importar selecionados (inativos)'),
+      'tela de revisão InovaFarma indisponível');
+    const semAutorizacao=await anon.get('/admin/produtos/inovafarma');
+    assert([302,303].includes(semAutorizacao.status), 'consulta anônima permitida');
+    const nenhum=await admin.post('/admin/produtos/inovafarma/revisar',
+      {form:{acao:'importar'}});
+    assert(nenhum.status===400, 'aceitou lote de seleção vazio');
+    const falso=await admin.post('/admin/produtos/inovafarma/revisar',
+      {form:{acao:'importar','eans[]':'7891234567890'}});
+    assert([302,303].includes(falso.status)&&falso.location.includes('erro='),
+      'aceitou cadastrar sem produto vindo da InovaFarma');
+    const publico=await anon.get('/busca?q=Sabonete+Inova+Nao+Importado');
+    assert(!publico.texto.includes('Sabonete Inova Nao Importado'),
+      'pré-cadastro não deve publicar produtos na vitrine');
+    return 'revisão autenticada; importação inexistente negada; nenhum produto publicado';
+  });
+
   await testar('Criação de produto pelo painel', async () => {
     const r = await admin.post('/admin/api/produtos', {
       form: {
