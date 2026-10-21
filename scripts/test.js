@@ -400,6 +400,24 @@ async function main() {
     return 'ok';
   });
 
+  await testar('Layout responsivo atualizado em loja, busca, login e painel', async () => {
+    const css = await anon.get('/styles.css');
+    assert(css.status === 200 && css.texto.includes('RESPONSIVIDADE REAL'),
+      'a correção responsiva não está publicada');
+    for (const rule of ['grid-template-columns: minmax(0, 1fr) auto', 'grid-column: 1 / -1',
+      'max-height: min(55dvh, 420px)', 'width: 100% !important', '.menu-departamentos, .submenu-departamentos']) {
+      assert(css.texto.includes(rule), 'regra responsiva ausente: ' + rule);
+    }
+    for (const [url, titulo] of [['/', 'inicial'], ['/busca?q=teste', 'busca'], ['/admin/login', 'login admin']]) {
+      const page = await anon.get(url);
+      assert(page.status === 200, 'não carregou a página ' + titulo);
+      assert(page.texto.includes('width=device-width'), 'viewport mobile ausente em ' + titulo);
+      assert(page.texto.includes('styles.css?v=responsivo-mobile-desktop-20261021'),
+        'CSS novo não referenciado em ' + titulo);
+    }
+    return 'viewport e CSS versionado carregam em desktop/mobile';
+  });
+
   /* ========================== CONTA DO CLIENTE ========================== */
   secao('Cadastro, login e recuperação de senha');
   console.log('\n[Cadastro, login e recuperação de senha]');
