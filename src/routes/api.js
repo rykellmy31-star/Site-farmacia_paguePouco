@@ -4,7 +4,7 @@ import {
   getCart, attachCartCookie, addItem, setItemQuantity, removeItem, clearCart,
   calcularTotais, aplicarCupom, removerCupom, normalizeCart,
 } from '../lib/cart.js';
-import { lookupCep, ufFromCep } from '../lib/cep.js';
+import { lookupCep, ufFromCep, isValidCep } from '../lib/cep.js';
 import { calcularFrete } from '../lib/freight.js';
 import { searchProducts } from '../lib/catalog.js';
 import { htmlGavetaCarrinho, htmlRodapeCarrinho, htmlItensCarrinho, htmlResumoCarrinho } from '../views/cart.js';
@@ -109,7 +109,7 @@ export function registrarRotasApi(app, db) {
     const cep = String(req.body.cep || '').replace(/\D/g, '');
     const cidade = String(req.body.cidade || '');
     const uf = String(req.body.uf || '');
-    if (!cep) return void res.json({ ok: false, erro: 'Informe o CEP.' }, 400);
+    if (!isValidCep(cep)) return void res.json({ ok: false, erro: 'Informe um CEP válido com 8 dígitos.' }, 400);
     const cart = getCart(db, req);
     const calc = calcularFrete({
       config: ctx.settings.frete,
@@ -144,6 +144,9 @@ export function registrarRotasApi(app, db) {
   /* ---------------------- PREFERÊNCIA DE CEP -------------------------- */
   app.post('/api/cep-sessao', { maxBodyBytes: 8 * 1024 }, (req, res) => {
     const cep = String(req.body.cep || '').replace(/\D/g, '');
+    if (!isValidCep(cep) || !ufFromCep(cep)) {
+      return void res.json({ ok: false, erro: 'Informe um CEP válido.' }, 400);
+    }
     res.cookie('pp_cep', cep, { maxAge: 60 * 60 * 24 * 180, httpOnly: false });
     if (req.session) db.collection('sessions').update(req.session.id, { cep });
     res.json({ ok: true, uf: ufFromCep(cep) });
