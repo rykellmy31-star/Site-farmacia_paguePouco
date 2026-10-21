@@ -1,7 +1,7 @@
 /** Painel seguro para preparação de integração. Nunca chama API do ERP. */
 import { escapeHtml as e } from '../../lib/security.js';
 import { formatDateTime } from '../../lib/format.js';
-import { paginaAdmin, painel, tabelaAdmin } from './layout.js';
+import { paginaAdmin, painel, tabelaAdmin, money } from './layout.js';
 
 const SIM_NAO = b => b ? 'Sim' : 'Não';
 const QUANDO = t => t ? formatDateTime(t) : 'Ainda não verificada';
@@ -99,6 +99,15 @@ export function telaIntegracaoInova(ctx, { dados, erro = '', salvo = '' }) {
       <section id="inova-vendas-pendentes">
       ${painel({ titulo: '6. Vendas pendentes e registros de estoque', corpo:
         `<p>Vendas na fila: ${vendas.pendentes}. Pedidos de períodos anteriores não são enviados automaticamente quando a integração está desligada.</p>
+        ${superAdmin ? tabelaAdmin({colunas:['Pedido','Data','Pagamento','Vendedor (código)','Total','Abrir'],
+          linhas:(vendas.pendentesDetalhes || []).map(p => `<tr>
+            <td>${e(p.codigo)}</td><td>${QUANDO(p.criadoEm)}</td>
+            <td>${e(p.statusFinanceiro || '')}</td><td>${e(p.vendedorCodigo || 'Geral')}</td>
+            <td>${money(p.totalCentavos || 0)}</td>
+            <td><a href="/admin/pedidos/${encodeURIComponent(p.id)}">Ver pedido</a></td>
+          </tr>`), vazio:'Nenhuma venda aguardando registro no ERP.'})
+          : '<p>Somente Super Administrador pode consultar os pedidos individuais da fila.</p>'}
+        <h4>Histórico de lotes de estoque recebidos</h4>
         ${tabelaAdmin({colunas:['Lote recebido','Itens','Registrado em'],
         linhas:eventos.map(ev=>`<tr><td>${e(ev.id)}</td><td>${Number(ev.total||0)}</td><td>${QUANDO(ev.recebidoEm)}</td></tr>`),
         vazio:'Nenhuma sincronização foi registrada.'})}` })}</section>
