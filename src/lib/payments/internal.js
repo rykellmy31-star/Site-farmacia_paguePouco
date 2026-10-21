@@ -152,6 +152,13 @@ export async function simulateApproval(db, paymentId, { aprovado = true, origem 
     return { ok: false, erro: 'Pagamentos reais não podem ser aprovados manualmente. Aguarde a confirmação do provedor.' };
   }
   const status = aprovado ? STATUS.APPROVED : STATUS.REJECTED;
+  if (p.status === status) {
+    // Reenvios e cliques duplicados não acrescentam eventos nem movimentos.
+    return { ok: true, pagamentoId: p.id, pedidoId: p.pedidoId, status, pagamento: p, duplicado: true };
+  }
+  if (p.status !== STATUS.PENDING) {
+    return { ok: false, erro: 'Esta cobrança já foi finalizada e não pode ser simulada novamente.' };
+  }
   const upd = db.collection('payments').update(paymentId, {
     status,
     statusDetalhe: aprovado ? 'Aprovado em ambiente de testes (simulação).' : 'Recusado em ambiente de testes (simulação).',
