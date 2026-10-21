@@ -14,6 +14,7 @@ import { logCustomer } from '../lib/audit.js';
 import { sendMail } from '../lib/mailer.js';
 import { config } from '../config.js';
 import { uid } from '../lib/store.js';
+import { vendedoresAtivos } from '../lib/sellers.js';
 
 function exigirLoginCompra(req, res, db) {
   if (req.user) return true;
@@ -228,6 +229,7 @@ export function registrarRotasCheckout(app, db) {
         descontoPix: Number(cfgPag.descontoPixPercentual || 0),
       },
       endereco: cart.frete.endereco,
+      vendedores: vendedoresAtivos(db),
       frete: { label: revalidado.opcao.label, prazo: revalidado.opcao.prazo },
     }));
   });
@@ -270,7 +272,8 @@ export function registrarRotasCheckout(app, db) {
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
-      freteConfig: ctx.settings.frete, cupomCodigo: cart.cupom?.codigo || null, req,
+      freteConfig: ctx.settings.frete, cupomCodigo: cart.cupom?.codigo || null,
+      vendedorId: req.body.vendedorId || null, req,
     });
 
     if (!resultado.ok) {
