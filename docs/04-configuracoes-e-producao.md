@@ -131,6 +131,9 @@ server {
 3. Na área <https://www.mercadopago.com.br/developers/pt>, entre em
    **Suas integrações → sua aplicação → Credenciais de teste**.
    Cole o **Access Token**. A Public Key é opcional para o Pix atual.
+   **Atenção:** o Mercado Pago pode usar prefixo `APP_USR-` para credenciais
+   **de teste e de produção**. Confira a seção de onde copiou o token:
+   escolher Teste no formulário NÃO transforma um token de produção em teste.
    Cole também a assinatura secreta em **Notificações/Webhooks**.
 4. Selecione **Credenciais para: Teste**, salve e, no painel
    **Meios de pagamento e parcelamento**, selecione **Mercado Pago**,
