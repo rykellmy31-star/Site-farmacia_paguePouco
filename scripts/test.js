@@ -462,8 +462,12 @@ async function main() {
     const token = tokenEncontrado;
     const tela = await outro.get(`/conta/redefinir/${token}`);
     assert(tela.status === 200 && tela.texto.includes('Definir nova senha'), 'tela de redefinição inválida');
+    const fraca = await outro.post('/conta/redefinir-senha', { form: { token, senha: 'aaaaaaaa', senha2: 'aaaaaaaa' } });
+    assert(fraca.status === 400, 'recuperação deve rejeitar senha sem números');
     const troca = await outro.post('/conta/redefinir-senha', { form: { token, senha: 'Nova@12345', senha2: 'Nova@12345' } });
     assert(troca.status === 303 || troca.status === 302, `status ${troca.status}`);
+    const repetida = await outro.post('/conta/redefinir-senha', { form: { token, senha: 'OutroTeste123', senha2: 'OutroTeste123' } });
+    assert(repetida.status === 400, 'o mesmo token de recuperação não pode ser usado duas vezes');
     const login = new Cliente('login-nova-senha');
     await login.get('/conta/login');
     const r2 = await login.post('/conta/login', { form: { email: emailCliente, senha: 'Nova@12345' } });

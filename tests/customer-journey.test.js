@@ -179,6 +179,19 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(afterRegistration.status, 200);
   assert.equal((await afterRegistration.json()).quantidade, 2, 'carrinho preservado ao cadastrar');
 
+  // Sem transporte de e-mail configurado no Worker, a recuperação deve
+  // ser honesta e não deixar tokens secretos inúteis no banco persistente.
+  await client.token('/conta/esqueci-senha');
+  const forgot = await client.form('/conta/esqueci-senha', {
+    email: 'comprador-jornada@tests.example',
+  });
+  assert.equal(forgot.status, 200);
+  assert.match(await forgot.text(), /O envio de e-mail ainda não está habilitado/);
+  const beforeCheckout = await snapshot();
+  assert.equal(beforeCheckout.passwordTokens?.length || 0, 0,
+    'sem serviço de e-mail não se deve gerar token de recuperação inacessível');
+
+
   // Promoção restrita deve respeitar as categorias, nunca descontar
   // produtos que não participam da promoção.
   const restricted = await admin.form('/admin/api/cupons', {

@@ -67,6 +67,32 @@ export class CloudStore {
     return { format: 'pague-pouco-sqlite-export-v1', createdAt: new Date().toISOString(), collections };
   }
 
+  /**
+   * Manifesto completo de mídia guardada no SQLite. O backup de documentos
+   * existente não contém os bytes do arquivo: cada item precisa ser baixado
+   * em sua própria URL administrativa para não concentrar todos os arquivos
+   * na memória de um Worker.
+   */
+  exportMediaManifest() {
+    const files = Array.from(this.sql.exec(
+      'SELECT path, mime, size, etag, modified FROM files ORDER BY path'
+    ), row => ({
+      caminho: row.path,
+      tipo: row.mime,
+      tamanho: Number(row.size),
+      sha256: String(row.etag || '').replace(/^"|"$/g, ''),
+      modificadoEm: row.modified,
+      chave: Buffer.from(row.path, 'utf8').toString('base64url'),
+    }));
+    return {
+      format: 'pague-pouco-midia-manifest-v1',
+      createdAt: new Date().toISOString(),
+      total: files.length,
+      bytes: files.reduce((n, file) => n + file.tamanho, 0),
+      files,
+    };
+  }
+
   takeRateLimit(key, max, windowMs) {
     const now = Date.now();
     // Limpeza na própria requisição: nenhum timer ou dependência de memória volátil.

@@ -537,12 +537,30 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
     ${painel({
       titulo: 'Backup dos dados',
       corpo: `<p class="texto-pequeno">${config.isCloudflare
-        ? 'Baixe uma cópia privada dos cadastros, pedidos e configurações em JSON. As imagens e vídeos não estão incluídos nesta exportação. Guarde o arquivo em local seguro.'
-        : 'O backup copia os arquivos do banco de dados (snapshots) para uma pasta interna.'}</p>
+        ? 'Baixe os cadastros, pedidos e configurações no JSON abaixo. Os arquivos de imagem/vídeo são exportados separadamente em suas versões originais; guarde tudo em local privado. Ainda não há restauração automática homologada.'
+        : 'O backup copia os arquivos de todas as coleções e da pasta de uploads para uma pasta interna. A restauração deve ser homologada antes de uso real.'}</p>
       <form method="post" action="/admin/api/sistema/backup">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <button class="botao" type="submit">${config.isCloudflare ? "Baixar backup JSON" : "Gerar backup agora"}</button>
       </form>
+      ${config.isCloudflare ? `<hr style="margin:18px 0;border:0;border-top:1px solid var(--borda)">
+        <h3>Backup dos arquivos de imagem e vídeo</h3>
+        <p class="texto-pequeno">Arquivos armazenados: <strong>${stats.backupMidias?.total || 0}</strong>.
+          Baixe o manifesto com os nomes, tamanhos e hashes SHA-256 e depois os arquivos abaixo.
+          Cada download exige sua sessão de superadministrador. Não compartilhe esse material.</p>
+        <a class="botao secundario" href="/admin/api/sistema/backup/midias.json" download>Baixar manifesto de mídias</a>
+        ${stats.backupMidias?.files?.length ? `
+          <div class="tabela-rolagem mt-2"><table class="tabela">
+            <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Ação</th></tr></thead>
+            <tbody>${stats.backupMidias.files.slice(0, 40).map((file) => `<tr>
+              <td><code>${e(file.caminho)}</code></td>
+              <td>${(file.tamanho / 1024).toFixed(1)} KB</td>
+              <td><a class="botao pequeno secundario" href="/admin/api/sistema/backup/arquivo/${e(file.chave)}" download>Baixar original</a></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+          ${stats.backupMidias.total > 40 ? '<p class="texto-pequeno">Exibindo apenas os primeiros 40 arquivos. O manifesto contém a lista completa para exportação assistida.</p>' : ''}
+        ` : '<p class="texto-pequeno">Nenhuma imagem ou vídeo no armazenamento interno.</p>'}
+      ` : ''}
       ${stats.backups.length ? `<p class="texto-pequeno mt-2 mb-0">Últimos backups: ${stats.backups.slice(0, 5).map((b) => `<code>${e(b)}</code>`).join(', ')}</p>` : ''}`,
     })}
 
@@ -550,8 +568,9 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
       titulo: 'Fila de e-mails (saída)',
       semPadding: true,
       corpo: `<p class="corpo texto-pequeno">
-          Sem SMTP configurado, as mensagens ficam nesta fila (e em arquivos .eml) para consulta e testes.
-          Configurando SMTP_HOST/SMTP_USER/SMTP_PASS, o envio real é tentado automaticamente.
+          ${config.isCloudflare
+            ? 'No Worker publicado, as mensagens ficam armazenadas nesta fila privada e NÃO são entregues automaticamente por e-mail. A integração de envio precisa de um transporte compatível antes de ser homologada.'
+            : 'Sem SMTP, mensagens ficam na fila e em arquivos .eml locais. Com credenciais SMTP válidas, o envio é tentado e precisa ser homologado.'}
         </p>
         ${tabelaAdmin({
           colunas: ['Data', 'Para', 'Assunto', 'Status', 'Arquivo'],

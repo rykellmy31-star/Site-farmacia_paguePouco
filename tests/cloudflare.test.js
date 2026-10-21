@@ -10,6 +10,7 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CloudStore } from '../src/cloudflare/store.js';
 import { RequestQueue } from '../src/cloudflare/request-queue.js';
@@ -211,6 +212,37 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.ok(media, JSON.stringify(uploadResult));
   assert.equal(await (await call(media.url)).text(), svg);
 
+  // Backup seguro: o JSON preserva cadastros e o manifesto relaciona os
+  // arquivos originais, cada um com hash SHA-256 e download autenticado.
+  const unauthedBackup = await call('/admin/api/sistema/backup/midias.json', {
+    headers: { Cookie: '' },
+  });
+  assert.equal(unauthedBackup.status, 401, 'backup de mídia não pode ser público');
+  const manifestResponse = await call('/admin/api/sistema/backup/midias.json');
+  assert.equal(manifestResponse.status, 200);
+  assert.match(manifestResponse.headers.get('content-disposition') || '', /attachment/);
+  assert.equal(manifestResponse.headers.get('cache-control'), 'no-store');
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.format, 'pague-pouco-midia-manifest-v1');
+  const entry = manifest.files.find(item => item.caminho === media.caminho);
+  assert.ok(entry, 'mídia precisa constar no manifesto');
+  assert.equal(entry.tamanho, Buffer.byteLength(svg));
+  assert.equal(entry.sha256, crypto.createHash('sha256').update(svg).digest('hex'));
+  const unauthedFile = await call('/admin/api/sistema/backup/arquivo/' + entry.chave, {
+    headers: { Cookie: '' },
+  });
+  assert.equal(unauthedFile.status, 401, 'bytes originais não podem ser públicos via backup');
+  const download = await call('/admin/api/sistema/backup/arquivo/' + entry.chave);
+  assert.equal(download.status, 200);
+  assert.match(download.headers.get('content-disposition') || '', /attachment/);
+  assert.equal(download.headers.get('content-type'), 'application/octet-stream');
+  assert.equal(await download.text(), svg, 'backup deve conter bytes idênticos ao upload');
+  assert.equal((await call('/admin/api/sistema/backup/arquivo/YWJjLi4vLi4vc2VncmVkbw')).status, 400,
+    'caminhos suspeitos com travessia devem ser recusados com 400');
+  assert.equal((await call('/admin/api/sistema/backup/arquivo/' +
+    Buffer.from('2026/10/arquivo-inexistente.png').toString('base64url'))).status, 404,
+    'arquivo inexistente deve devolver 404');
+
   // Fluxo real do editor de produtos: a rota GET exibe o formulário,
   // mas o action POST deve apontar para /admin/api/produtos(/:id).
   const newProductPage = await call('/admin/produtos/novo');
@@ -298,6 +330,9 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   await start();
   assert.equal((await call('/admin')).status, 200, 'sessão persiste após reinicialização');
   assert.equal(await (await call(media.url)).text(), svg, 'upload persiste após reinicialização');
+  const afterRestartDownload = await call('/admin/api/sistema/backup/arquivo/' + entry.chave);
+  assert.equal(afterRestartDownload.status, 200);
+  assert.equal(await afterRestartDownload.text(), svg, 'backup de mídia sobrevive à reinicialização');
   const range = await call(media.url, { headers: { Range: 'bytes=0-3' } });
   assert.equal(range.status, 206);
   assert.equal(await range.text(), '<svg');
