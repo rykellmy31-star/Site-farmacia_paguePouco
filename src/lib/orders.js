@@ -419,12 +419,24 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
   return { ok: true, pedido: db.collection('orders').get(pedidoId) };
 }
 
-export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = {}) {
-  const pedido = db.collection('orders').get(pedidoId);
+/**
+ * Deve ser chamado ANTES de qualquer chamada externa de estorno. Caso a
+ * encomenda já tenha sido expedida, o botão Cancelar não pode reembolsar
+ * dinheiro e somente depois descobrir que a operação era proibida.
+ * Devoluções pós-expedição exigem fluxo específico com conferência humana.
+ */
+export function validarCancelamentoOperacional(pedido) {
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
   if (['entregue', 'cancelado', 'enviado', 'saiu_para_entrega'].includes(pedido.statusOperacional)) {
     return { ok: false, erro: 'Pedido expedido, entregue ou cancelado exige outro fluxo.' };
   }
+  return { ok: true };
+}
+
+export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = {}) {
+  const pedido = db.collection('orders').get(pedidoId);
+  const admissivel = validarCancelamentoOperacional(pedido);
+  if (!admissivel.ok) return admissivel;
   if (['aprovado', 'estorno_solicitado'].includes(pedido.statusFinanceiro)) {
     return { ok: false, erro: 'Pagamento aprovado: confirme o estorno no provedor antes do cancelamento.' };
   }
