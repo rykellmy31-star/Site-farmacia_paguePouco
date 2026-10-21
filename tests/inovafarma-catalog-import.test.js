@@ -154,7 +154,7 @@ test('tela de revisão tem filtros, seleção em massa, sem publicação automá
   assert.match(html,/Importar selecionados \(inativos\)/);
   assert.match(html,/7891234567890/);
   assert.match(html,/estoque local zero/);
-  assert.doesNotMatch(html,/publicado automaticamente/i);
+  assert.match(html,/nenhum será publicado automaticamente/i);
 });
 
 test('rota privada só recebe lotes com conector autenticado e integração habilitada',()=>{
