@@ -7,14 +7,21 @@ import {
 import { formatDateTime, formatDate, formatCep, formatDoc, formatPhone } from '../../lib/format.js';
 import { STATUS_FINANCEIRO, STATUS_OPERACIONAL, pedidoPrecisaConferencia, statusOperacionalExibido } from '../../lib/orders.js';
 import { mapStatus } from '../../lib/payments/internal.js';
+import { pedidoOcultoDoCliente, podeOcultarPedido } from '../../lib/order-visibility.js';
 
 /* =============================== PEDIDOS =============================== */
-export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, vendedores = [] }) {
+export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, vendedores = [], totalOcultos = 0, aviso = '' }) {
   return paginaAdmin(ctx, {
     titulo: 'Pedidos',
     ativo: 'pedidos',
     conteudo: `
     <h1 class="mt-0">Pedidos <span class="texto-suave texto-pequeno">(${total})</span></h1>
+    ${aviso ? `<div class="alerta info" role="status">${e(aviso.slice(0,230))}</div>` : ''}
+    ${ctx.permissoes?.podeOcultarPedidos ? `<p class="texto-pequeno texto-suave">
+      <strong>${totalOcultos} pedido(s) oculto(s)</strong> preservados no banco, relatórios financeiros
+      e auditoria. A lixeira apenas retira pedidos encerrados da visão do cliente;
+      não exclui transações.
+    </p>` : ''}
     ${painel({
       corpo: `<form class="barra-ferramentas" method="get" action="/admin/pedidos" style="margin:0">
         <input type="text" name="q" placeholder="Código, nome, e-mail ou CPF" value="${e(filtros.q || '')}">
@@ -22,6 +29,10 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, v
           <option value="">Todos os vendedores</option>
           ${vendedores.map(v => `<option value="${e(v.id)}" ${filtros.vendedor === v.id ? 'selected' : ''}>${e(v.nome)} — ${e(v.codigoInova)}</option>`).join('')}
         </select>
+        ${ctx.permissoes?.podeOcultarPedidos ? `<select name="visibilidade" aria-label="Filtrar pedidos visíveis ou ocultos">
+          <option value="visiveis" ${filtros.visibilidade !== 'ocultos' ? 'selected' : ''}>Pedidos visíveis</option>
+          <option value="ocultos" ${filtros.visibilidade === 'ocultos' ? 'selected' : ''}>Pedidos ocultos (${totalOcultos})</option>
+        </select>` : ''}
         <select name="financeiro">
           <option value="">Pagamento: todos</option>
           ${Object.values(STATUS_FINANCEIRO).map((s) => `<option value="${e(s.id)}" ${filtros.financeiro === s.id ? 'selected' : ''}>${e(s.nome)}</option>`).join('')}
@@ -60,7 +71,22 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, v
           </td>
           <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
           <td>${formatDateTime(p.criadoEm)}</td>
-          <td><a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a></td>
+          <td><div class="linha centro" style="gap:6px;flex-wrap:nowrap">
+            <a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a>
+            ${ctx.permissoes?.podeOcultarPedidos && pedidoOcultoDoCliente(p)
+              ? `<form method="post" action="/admin/pedidos/${e(p.id)}/restaurar" style="margin:0"
+                   onsubmit="return confirm('Restaurar este pedido para a conta do cliente?')">
+                  <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+                  <button class="botao pequeno secundario" type="submit" title="Restaurar pedido" aria-label="Restaurar pedido ${e(p.codigo)}">↩ Restaurar</button>
+                </form>`
+              : ctx.permissoes?.podeOcultarPedidos && podeOcultarPedido(p).ok
+              ? `<form method="post" action="/admin/pedidos/${e(p.id)}/ocultar" style="margin:0"
+                   onsubmit="return confirm('Ocultar o pedido ${e(p.codigo)} da conta do cliente? Os dados financeiros continuarão no banco e poderão ser restaurados.')">
+                  <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+                  <button class="botao pequeno secundario" type="submit" title="Ocultar pedido sem excluir do banco" aria-label="Ocultar pedido ${e(p.codigo)} da conta do cliente">🗑️</button>
+                </form>`
+              : ''}
+          </div></td>
         </tr>`),
         vazio: 'Nenhum pedido encontrado.',
       }),
@@ -80,6 +106,10 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
       <h1 class="mt-0 mb-0">Pedido ${e(pedido.codigo)}</h1>
       <a class="botao secundario" href="/admin/pedidos">Voltar</a>
     </div>
+    ${pedidoOcultoDoCliente(pedido) ? `<div class="alerta aviso" role="status">
+      Este pedido está oculto na conta do cliente desde ${formatDateTime(pedido.ocultoDoClienteEm)}.
+      O registro financeiro, histórico e estoque permanecem inalterados.
+    </div>` : ''}
 
     ${['criacao_em_andamento', 'conciliacao_necessaria'].includes(pedido.pendenciaPagamento) &&
       pedido.statusFinanceiro === 'pendente' ? `<div class="alerta" role="alert">
