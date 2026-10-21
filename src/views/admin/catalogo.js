@@ -6,6 +6,7 @@ import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, pod
 import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
+import { statusOperacionalExibido } from '../../lib/orders.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -53,7 +54,7 @@ export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoque
             <td>${e(p.cliente?.nome || '—')}</td>
             <td>${money(p.totalCentavos)}</td>
             <td>${etiquetaStatus(p.statusFinanceiro)}</td>
-            <td>${etiquetaStatus(p.statusOperacional)}</td>
+            <td>${etiquetaStatus(statusOperacionalExibido(p))}</td>
             <td><a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a></td>
           </tr>`),
           vazio: 'Nenhum pedido ainda.',
