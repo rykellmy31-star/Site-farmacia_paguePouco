@@ -260,7 +260,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=compra-compacta-20261021">
+<link rel="stylesheet" href="/styles.css?v=confirmacao-pix-20261021">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
@@ -291,7 +291,7 @@ ${barraCookies(settings.cookies)}
     cep: ctx.cepSessao || '',
     logado: !!ctx.usuario,
   })};</script>
-<script src="/js/app.js" defer></script>
+<script src="/js/app.js?v=confirmacao-pix-20261021" defer></script>
 </body>
 </html>`;
 }
