@@ -30,6 +30,8 @@ jobs:
         run: node --test tests/restore-rehearsal.test.js tests/financial-alarm.test.js
       - name: Existing integration tests (simulated payments only)
         run: npm test
+      - name: Real browser responsive checks (320px to 1440px)
+        run: node scripts/test-responsive.js
       - name: Cloudflare component tests
         run: npm run test:cloudflare
       - name: Build Cloudflare assets
