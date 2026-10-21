@@ -561,6 +561,11 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <button class="botao" type="submit">${config.isCloudflare ? "Baixar backup JSON" : "Gerar backup agora"}</button>
       </form>
+      ${config.isCloudflare ? `<p class="texto-pequeno"><strong>Homologação de recuperação:</strong> baixe também o manifesto e todos
+        os arquivos de mídia, guarde as cópias em local externo privado e faça o ensaio isolado
+        pelo script <code>node scripts/validate-cloudflare-backup.mjs</code>.
+        A exportação não é um backup automático nem comprova restauração real enquanto
+        você não concluir e validar esses downloads.</p>` : ''}
       ${config.isCloudflare ? `<hr style="margin:18px 0;border:0;border-top:1px solid var(--borda)">
         <h3>Backup dos arquivos de imagem e vídeo</h3>
         <p class="texto-pequeno">Arquivos armazenados: <strong>${stats.backupMidias?.total || 0}</strong>.
