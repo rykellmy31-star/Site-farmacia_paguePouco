@@ -17,6 +17,7 @@ import { produtoPage } from '../src/views/public.js';
 import { cartaoProduto } from '../src/views/partials.js';
 import { telaVendedores } from '../src/views/admin/sellers.js';
 import { telaIntegracaoInova } from '../src/views/admin/inovafarma.js';
+import { telaImportacaoCatalogoInova } from '../src/views/admin/inovafarma-catalog.js';
 
 const raiz = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const chrome = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium',
@@ -73,6 +74,13 @@ const inovaAdmin = telaIntegracaoInova({
   estoque:{ultimaSincronizacao:null,quantidadeUltimoLote:0,divergencias:0,semCorrespondenciaEAN:0,desatualizado:true},
   vendas:{pendentes:0,confirmadas:0,conferir:0,pendentesDetalhes:[]},auditoria:[],eventos:[],
 } });
+const catalogAdmin = telaImportacaoCatalogoInova({
+  db,settings,csrf:'teste',req:{pathname:'/admin/produtos/inovafarma',query:new URLSearchParams()},
+  adminUser:{id:'1',role:'super_admin',nome:'Admin'},
+}, {lista:{candidatos:[{id:'x',ean:'7891234567890',nome:'Produto da Inova',
+  marca:'Marca',precoCentavos:990,quantidade:12,situacao:'aguardando_revisao',
+  conflitoEAN:false,vinculoAtual:null}],total:1,pagina:1,porPagina:50,
+  estatisticas:{aguardando:1,importados:0}},busca:'',situacao:'',saldo:'disponivel'});
 const servidor = http.createServer(async(req,res)=>{
   const rota=new URL(req.url,'http://localhost').pathname;
   if(rota==='/styles.css'){
@@ -89,7 +97,8 @@ const servidor = http.createServer(async(req,res)=>{
   }
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(rota==='/admin'?adminPage:rota==='/produto-teste'?productDetail:
-    rota==='/vendedores-teste'?sellerAdmin:rota==='/inovafarma-teste'?inovaAdmin:storefront);
+    rota==='/vendedores-teste'?sellerAdmin:rota==='/inovafarma-teste'?inovaAdmin:
+    rota==='/inova-catalogo-teste'?catalogAdmin:storefront);
 });
 
 const expression='(() => {' +
@@ -103,7 +112,7 @@ const expression='(() => {' +
   'mobileNav:visible(get(".menu-mobile")),desktopNav:visible(get(".menu-departamentos")),' +
   'sort:rect(get(".ordenacao-campo select")),icon:rect(get(".cartao h3 svg")),' +
   'table:rect(get(".tabela-rolagem")),sellerForm:rect(get("#vendedorCodigo")),' +
-  'inovaForm:rect(get("#inovaURL")),' +
+  'inovaForm:rect(get("#inovaURL")),catalogFilter:rect(get(\'input[name="q"]\')),' +
   'buy:rect(get(".compra-produto .botao-adicionar-cesta")),' +
   'buyIcon:rect(get(".compra-produto .icone-cesta svg")),catalogBuy:rect(get(".produto .acoes .botao-adicionar-cesta")),' +
   'catalogIcon:rect(get(".produto .acoes .icone-cesta svg"))});})()';
@@ -142,12 +151,13 @@ try{
   });
   await cd('Page.enable');await cd('Runtime.enable');
   const host='http://127.0.0.1:'+servidor.address().port;
-  for(const area of ['publica','produto','admin','vendedores','inovafarma']){
+  for(const area of ['publica','produto','admin','vendedores','inovafarma','catalogoinova']){
     for(const width of [320,375,390,430,768,1024,1440]){
       await cd('Emulation.setDeviceMetricsOverride',{
         width,height:880,deviceScaleFactor:1,mobile:width<768});
       await cd('Page.navigate',{url:host+(area==='admin'?'/admin':area==='produto'?'/produto-teste':
-        area==='vendedores'?'/vendedores-teste':area==='inovafarma'?'/inovafarma-teste':'/')});
+        area==='vendedores'?'/vendedores-teste':area==='inovafarma'?'/inovafarma-teste':
+        area==='catalogoinova'?'/inova-catalogo-teste':'/')});
       let value;
       for(let k=0;k<40;k++){
         await delay(80);
@@ -189,6 +199,11 @@ try{
           assert(value.buy.width<=value.client+2 && value.buy.left>=0,
             label+': botão mobile ultrapassa a tela '+JSON.stringify(value));
         }
+      }else if(area==='catalogoinova'){
+        assert(value.table&&value.table.width>100,label+': tabela da importação indisponível');
+        assert(value.catalogFilter&&value.catalogFilter.width>=90&&value.catalogFilter.left>=0&&
+          value.catalogFilter.right<=value.client+2,
+          label+': filtro da importação cortado '+JSON.stringify(value));
       }else if(area==='inovafarma'){
         assert(value.inovaForm&&value.inovaForm.width>=90&&value.inovaForm.left>=0&&
           value.inovaForm.right<=value.client+2,
@@ -203,7 +218,7 @@ try{
       console.log('✓ '+label+' sem corte horizontal');
     }
   }
-  console.log('LAYOUT RESPONSIVO: 35/35 viewports aprovadas — loja, produto, painel, vendedores e InovaFarma');
+  console.log('LAYOUT RESPONSIVO: 42/42 viewports aprovadas — loja, produto, painel, vendedores, Inova e catálogo');
 }finally{
   try{socket?.close();}catch{}
   if(proc)proc.kill('SIGKILL');
