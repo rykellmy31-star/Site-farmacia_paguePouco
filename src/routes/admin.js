@@ -48,6 +48,7 @@ import { revogarSessoes } from '../lib/session-revocation.js';
 import { cadastrarVendedor, editarVendedor, metricasVendedores } from '../lib/sellers.js';
 import { telaVendedores } from '../views/admin/sellers.js';
 import { validarNovoCupom } from '../lib/coupon-validation.js';
+import { pedidoOcultoDoCliente, ocultarPedidoDoCliente, restaurarPedidoAoCliente } from '../lib/order-visibility.js';
 
 const CARTAO_403 = (req) => ({
   ok: false, erro: 'Seu perfil não tem permissão para esta ação.',
@@ -86,6 +87,7 @@ function ctxAdmin(req, db) {
     permissoes: {
       podeGerenciarUsuarios: req.adminUser?.role === 'super_admin',
       podeEditarPedidos: can(req.adminUser, 'pedidos.editar'),
+      podeOcultarPedidos: req.adminUser?.role === 'super_admin',
       podeEstornar: can(req.adminUser, 'pagamentos.estornar'),
       podeSimularPagamento: can(req.adminUser, 'pagamentos.estornar') || req.adminUser?.role === 'super_admin',
       podeEditarVendedores: can(req.adminUser, 'vendedores.editar'),
@@ -514,8 +516,13 @@ export function registrarRotasAdmin(app, db) {
       periodo: req.query.get('periodo') || '',
       pendencia: req.query.get('pendencia') === '1' ? '1' : '',
       vendedor: req.query.get('vendedor') || '',
+      visibilidade: req.adminUser.role === 'super_admin' && req.query.get('visibilidade') === 'ocultos'
+        ? 'ocultos' : 'visiveis',
     };
     let pedidos = db.collection('orders').all();
+    const totalOcultos = pedidos.filter(pedidoOcultoDoCliente).length;
+    pedidos = pedidos.filter(p => filtros.visibilidade === 'ocultos'
+      ? pedidoOcultoDoCliente(p) : !pedidoOcultoDoCliente(p));
     if (filtros.q) {
       const b = String(filtros.q).toLowerCase();
       pedidos = pedidos.filter((p) => [p.codigo, p.cliente?.nome, p.cliente?.email, p.cliente?.cpf].some((f) => String(f || '').toLowerCase().includes(b)));
@@ -533,7 +540,31 @@ export function registrarRotasAdmin(app, db) {
     const total = pedidos.length;
     const pagina = Number(req.query.get('pagina')) || 1;
     const porPagina = 25;
-    res.html(telaPedidos(ctx, { pedidos: pedidos.slice((pagina - 1) * porPagina, pagina * porPagina), total, pagina, porPagina, filtros, vendedores: db.collection('sellers').all() }));
+    res.html(telaPedidos(ctx, { pedidos: pedidos.slice((pagina - 1) * porPagina, pagina * porPagina), total, pagina, porPagina, filtros, totalOcultos, aviso: req.query.get('aviso') || '', vendedores: db.collection('sellers').all() }));
+  });
+
+  // Exclusão apenas visual e reversível. Histórico e relatórios financeiros
+  // continuam contendo todos os pedidos originais no banco.
+  app.post('/admin/pedidos/:id/ocultar', (req, res) => {
+    if (!req.adminUser) return void res.redirect('/admin/login');
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('403 — Somente o Super Administrador pode ocultar pedidos.');
+    const resultado = ocultarPedidoDoCliente(db, req.params.id, { por: req.adminUser.id });
+    if (!resultado.ok) return void res.redirect('/admin/pedidos?aviso=' + encodeURIComponent(resultado.erro));
+    logAdmin(db, req.adminUser, 'ocultou_pedido_do_cliente', 'pedido', resultado.pedido.id,
+      { codigo: resultado.pedido.codigo, visibilidade: 'oculto' }, req);
+    res.redirect('/admin/pedidos?aviso=' + encodeURIComponent('Pedido ocultado da conta do cliente; histórico preservado.'));
+  });
+
+  app.post('/admin/pedidos/:id/restaurar', (req, res) => {
+    if (!req.adminUser) return void res.redirect('/admin/login');
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('403 — Somente o Super Administrador pode restaurar pedidos.');
+    const resultado = restaurarPedidoAoCliente(db, req.params.id);
+    if (!resultado.ok) return void res.redirect('/admin/pedidos?visibilidade=ocultos&aviso=' + encodeURIComponent(resultado.erro));
+    logAdmin(db, req.adminUser, 'restaurou_pedido_ao_cliente', 'pedido', resultado.pedido.id,
+      { codigo: resultado.pedido.codigo, visibilidade: 'visivel' }, req);
+    res.redirect('/admin/pedidos?visibilidade=ocultos&aviso=' + encodeURIComponent('Pedido restaurado para a conta do cliente.'));
   });
 
   app.get('/admin/pedidos/:id', (req, res) => {
