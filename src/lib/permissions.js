@@ -19,7 +19,7 @@ export const ROLES = {
       'dashboard.ver', 'produtos.*', 'categorias.*', 'estoque.*', 'midia.*',
       'pedidos.*', 'clientes.ver', 'clientes.editar', 'fretes.*', 'pagamentos.ver',
       'pagamentos.estornar', 'whatsapp.*', 'banners.*', 'promocoes.*', 'paginas.*',
-      'relatorios.ver', 'configuracoes.*', 'auditoria.ver', 'vendedores.ver', 'vendedores.editar',
+      'relatorios.ver', 'configuracoes.*', 'auditoria.ver', 'vendedores.ver', 'vendedores.editar', 'inovafarma.ver',
     ],
   },
   gerente: {
