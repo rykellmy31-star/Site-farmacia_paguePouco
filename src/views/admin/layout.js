@@ -49,7 +49,7 @@ export function paginaAdmin(ctx, { titulo, conteudo, ativo = '', headExtra = '',
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${e(titulo)} — Painel | ${e(empresa.nomeFantasia || 'Pague Pouco')}</title>
 <meta name="robots" content="noindex,nofollow">
-<link rel="stylesheet" href="/styles.css?v=banners-inteiros-20261020">
+<link rel="stylesheet" href="/styles.css?v=admin-produtos-salvar-v2">
 <link rel="icon" href="/img/favicon.svg">
 <style>
 :root{--marca-texto:${e(ctx.settings.tema?.corTexto || '#8b0000')};--primaria:${e(ctx.settings.tema?.corPrimaria || '#8b0000')};--primaria-escura:${e(ctx.settings.tema?.corPrimariaEscura || '#6b0000')};--secundaria:${e(ctx.settings.tema?.corSecundaria || '#8b0000')};}
@@ -83,7 +83,7 @@ ${headExtra}
 </div>
 <div class="notificacao" id="notificacaoAdmin" role="status"></div>
 <script>window.PP_ADMIN=${JSON.stringify({ csrf: ctx.csrf, role: usuario.role })};</script>
-<script src="/js/admin.js" defer></script>
+<script src="/js/admin.js?v=admin-produtos-salvar-v2" defer></script>
 ${corpoExtra}
 </body>
 </html>`;
