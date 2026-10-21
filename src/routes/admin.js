@@ -418,6 +418,12 @@ export function registrarRotasAdmin(app, db) {
       configPag: ctx.settings.pagamentos || {},
       credenciais: req.adminUser.role === 'super_admin' ? estadoCredenciaisMercadoPago(db) : null,
       urlWebhook: `${config.publicBaseUrl}/webhooks/mercadopago`,
+      falhas: req.adminUser.role === 'super_admin'
+        ? db.collection('orders').all().filter((p) => p.falhaPagamento ||
+          p.historico?.some((h) => h.status === 'cancelado' &&
+            String(h.obs || '').includes('Cobrança recusada ou integração não configurada')))
+          .sort((a,b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 10)
+        : [],
       metricas: {
         total: pagamentos.length,
         aprovadas: aprovados.length,
