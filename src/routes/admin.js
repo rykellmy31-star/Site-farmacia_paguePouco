@@ -37,6 +37,7 @@ import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
+import { validarNovoCupom } from '../lib/coupon-validation.js';
 
 const CARTAO_403 = (req) => ({
   ok: false, erro: 'Seu perfil não tem permissão para esta ação.',
@@ -1044,21 +1045,16 @@ function registrarApi(app, db) {
   /* ------------------------------- CUPONS ------------------------------- */
   app.post('/admin/api/cupons', (req, res) => {
     if (!guardApi(req, res, 'promocoes.criar')) return;
-    const codigo = String(req.body.codigo || '').trim().toUpperCase();
-    if (!codigo) return void res.json({ ok: false, erro: 'Informe o código do cupom.' }, 400);
+    const valida = validarNovoCupom(req.body);
+    if (!valida.ok) return void res.json({ ok: false, erro: valida.erro }, 400);
+    const { codigo } = valida.dados;
     if (db.collection('coupons').findOne((c) => c.codigo === codigo)) {
       return void res.json({ ok: false, erro: 'Já existe um cupom com este código.' }, 400);
     }
     db.collection('coupons').insert({
-      codigo,
-      tipo: req.body.tipo || 'percentual',
-      valor: Number(req.body.valor) || 0,
+      ...valida.dados,
       ativo: req.body.ativo === '1' || req.body.ativo === 'on',
-      validoDe: req.body.validoDe || null,
-      validoAte: req.body.validoAte || null,
-      usoMaximo: req.body.usoMaximo ? Number(req.body.usoMaximo) : null,
       usos: 0,
-      valorMinimo: toCents(req.body.valorMinimo || '0'),
       categoriasPermitidas: String(req.body.categoriasPermitidas || '').split(',').map((s) => s.trim()).filter(Boolean),
       primeiroPedido: req.body.primeiroPedido === '1' || req.body.primeiroPedido === 'on',
       descricao: cleanText(req.body.descricao, 200),
