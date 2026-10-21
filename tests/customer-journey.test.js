@@ -391,6 +391,13 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
 
   const pendingInPanel = await admin.get('/admin/pedidos/' + order.id);
   assert.equal(pendingInPanel.status, 200);
+  // Um Pix normal já registrado não é uma cobrança de resultado incerto.
+  const pedidosConferencia = await admin.get('/admin/pedidos?pendencia=1');
+  assert.equal(pedidosConferencia.status, 200);
+  const painelConferencia = await pedidosConferencia.text();
+  assert.match(painelConferencia, /Somente pagamentos a conferir/);
+  assert.doesNotMatch(painelConferencia, new RegExp(order.codigo),
+    'Pix pendente com cobrança registrada não entra na fila de conciliação manual');
   assert.match(await pendingInPanel.text(), new RegExp(order.codigo));
 
   // Somente simulação pelo administrador — sem transação financeira real.
