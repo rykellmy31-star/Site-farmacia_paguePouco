@@ -16,6 +16,7 @@ import { paginaAdmin } from '../src/views/admin/layout.js';
 import { produtoPage } from '../src/views/public.js';
 import { cartaoProduto } from '../src/views/partials.js';
 import { telaVendedores } from '../src/views/admin/sellers.js';
+import { telaIntegracaoInova } from '../src/views/admin/inovafarma.js';
 
 const raiz = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const chrome = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium',
@@ -63,6 +64,15 @@ const sellerAdmin = telaVendedores({
 }, {vendedores:[{id:'v1',nome:'Vendedor de Teste',codigoInova:'00125',ativo:true}],
   metricas:new Map([['v1',{pedidos:1,totalCentavos:1990}]])});
 
+const inovaAdmin = telaIntegracaoInova({
+  db,settings,csrf:'teste',req:{pathname:'/admin/inovafarma'},
+  adminUser:{id:'1',role:'super_admin',nome:'Admin'},permissoes:{},
+}, { dados: {
+  status:'desativada',configuracao:null,segredo:{chaveDisponivel:false,cadastrada:false,legivel:false},
+  ultimaConexaoValidada:null,
+  estoque:{ultimaSincronizacao:null,quantidadeUltimoLote:0,divergencias:0,semCorrespondenciaEAN:0,desatualizado:true},
+  vendas:{pendentes:0,confirmadas:0,conferir:0,pendentesDetalhes:[]},auditoria:[],eventos:[],
+} });
 const servidor = http.createServer(async(req,res)=>{
   const rota=new URL(req.url,'http://localhost').pathname;
   if(rota==='/styles.css'){
@@ -79,7 +89,7 @@ const servidor = http.createServer(async(req,res)=>{
   }
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(rota==='/admin'?adminPage:rota==='/produto-teste'?productDetail:
-    rota==='/vendedores-teste'?sellerAdmin:storefront);
+    rota==='/vendedores-teste'?sellerAdmin:rota==='/inovafarma-teste'?inovaAdmin:storefront);
 });
 
 const expression='(() => {' +
@@ -93,6 +103,7 @@ const expression='(() => {' +
   'mobileNav:visible(get(".menu-mobile")),desktopNav:visible(get(".menu-departamentos")),' +
   'sort:rect(get(".ordenacao-campo select")),icon:rect(get(".cartao h3 svg")),' +
   'table:rect(get(".tabela-rolagem")),sellerForm:rect(get("#vendedorCodigo")),' +
+  'inovaForm:rect(get("#inovaURL")),' +
   'buy:rect(get(".compra-produto .botao-adicionar-cesta")),' +
   'buyIcon:rect(get(".compra-produto .icone-cesta svg")),catalogBuy:rect(get(".produto .acoes .botao-adicionar-cesta")),' +
   'catalogIcon:rect(get(".produto .acoes .icone-cesta svg"))});})()';
@@ -131,12 +142,12 @@ try{
   });
   await cd('Page.enable');await cd('Runtime.enable');
   const host='http://127.0.0.1:'+servidor.address().port;
-  for(const area of ['publica','produto','admin','vendedores']){
+  for(const area of ['publica','produto','admin','vendedores','inovafarma']){
     for(const width of [320,375,390,430,768,1024,1440]){
       await cd('Emulation.setDeviceMetricsOverride',{
         width,height:880,deviceScaleFactor:1,mobile:width<768});
       await cd('Page.navigate',{url:host+(area==='admin'?'/admin':area==='produto'?'/produto-teste':
-        area==='vendedores'?'/vendedores-teste':'/')});
+        area==='vendedores'?'/vendedores-teste':area==='inovafarma'?'/inovafarma-teste':'/')});
       let value;
       for(let k=0;k<40;k++){
         await delay(80);
@@ -178,6 +189,10 @@ try{
           assert(value.buy.width<=value.client+2 && value.buy.left>=0,
             label+': botão mobile ultrapassa a tela '+JSON.stringify(value));
         }
+      }else if(area==='inovafarma'){
+        assert(value.inovaForm&&value.inovaForm.width>=90&&value.inovaForm.left>=0&&
+          value.inovaForm.right<=value.client+2,
+          label+': formulario InovaFarma cortado '+JSON.stringify(value));
       }else if(area==='vendedores'){
         assert(value.table&&value.table.width>100,label+': tabela de vendedores indisponível');
         assert(value.sellerForm&&value.sellerForm.width>=90&&value.sellerForm.left>=0&&
@@ -188,7 +203,7 @@ try{
       console.log('✓ '+label+' sem corte horizontal');
     }
   }
-  console.log('LAYOUT RESPONSIVO: 28/28 viewports aprovadas — catálogo, produto, painel e vendedores');
+  console.log('LAYOUT RESPONSIVO: 35/35 viewports aprovadas — loja, produto, painel, vendedores e InovaFarma');
 }finally{
   try{socket?.close();}catch{}
   if(proc)proc.kill('SIGKILL');
