@@ -20,7 +20,7 @@
     "dev:cloudflare": "wrangler dev",
     "deploy:cloudflare": "wrangler deploy",
     "check:cloudflare": "wrangler deploy --dry-run",
-    "test:cloudflare": "node --test tests/cloudflare.test.js tests/admin-forms.test.js tests/customer-journey.test.js"
+    "test:cloudflare": "node --test --test-concurrency=1 tests/cloudflare.test.js tests/admin-forms.test.js tests/customer-journey.test.js"
   },
   "dependencies": {},
   "devDependencies": {
