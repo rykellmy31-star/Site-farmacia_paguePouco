@@ -164,6 +164,9 @@ export function registrarRotasAdmin(app, db) {
     logAdmin(db, admin, 'login_admin', 'admin', admin.id, {}, req);
     res.cookie('pp_admin_sess', sessionId, { maxAge: config.adminSessionTTLHours * 3600, path: '/' });
     const next = String(req.body.next || '/admin');
+    // Senha provisória é uma barreira de autenticação: nunca use next para
+    // contorná-la, mesmo se o link for uma rota interna do painel.
+    if (admin.deveTrocarSenha === true) return void res.redirect('/admin/alterar-senha');
     // Apenas caminhos internos do painel; evita open redirect e "/admin.evil".
     res.redirect(/^\/admin(?:\/|\?|$)/.test(next) && !next.startsWith('//') &&
       !/[\\\r\n]/.test(next) ? next : '/admin');
