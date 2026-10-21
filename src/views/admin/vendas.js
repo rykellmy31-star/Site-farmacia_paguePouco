@@ -369,7 +369,7 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
           <p class="texto-pequeno"><strong>URL para configurar nas notificações do Mercado Pago:</strong><br>
             <code>${e(urlWebhook)}</code></p>
           <button type="submit" class="botao">Salvar credenciais com segurança</button>
-          <p class="texto-pequeno texto-suave">Salvar credenciais não ativa cobranças reais automaticamente. Depois selecione Mercado Pago e confirme o ambiente correto abaixo.</p>
+          <p class="texto-pequeno texto-suave">Salvar credenciais não ativa cobranças reais automaticamente. <strong>Confira na sua conta Mercado Pago se a chave copiada é de teste ou produção:</strong> ambas podem começar com APP_USR. A seleção do ambiente aqui não converte uma chave de produção em teste. Depois selecione Mercado Pago e confirme o ambiente correto abaixo.</p>
         </form>
         ${credenciais.origem === 'painel' ? `<form method="post" action="/admin/api/mercadopago/remover" class="mt-2">
           <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
