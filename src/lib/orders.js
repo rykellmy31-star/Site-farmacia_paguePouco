@@ -475,6 +475,36 @@ export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = 
   return { ok: true, pedido: db.collection('orders').get(pedidoId) };
 }
 
+/**
+ * Apenas o código interno que recebeu uma RECUSA DEFINITIVA do provedor
+ * pode finalizar a criação interrompida. Não libera estoque se uma cobrança
+ * tiver sido registrada antes de uma queda ou timeout.
+ *
+ * Não usar para respostas HTTP 408/429/5xx nem falhas de rede.
+ */
+export function cancelarCriacaoComRecusaDefinitiva(db, pedidoId) {
+  const pedido = db.collection('orders').get(pedidoId);
+  if (!pedido || pedido.statusFinanceiro !== 'pendente' ||
+      pedido.pendenciaPagamento !== 'criacao_em_andamento' || pedido.pagamentoId ||
+      db.collection('payments').find(p => p.pedidoId === pedidoId).length) {
+    return { ok: false, erro: 'Cobrança não comprovadamente recusada; conferência necessária.' };
+  }
+  // O bloqueio protetivo só é suspenso quando o provedor confirmou que
+  // NÃO foi criado pagamento e não há pagamento local do pedido.
+  db.collection('orders').update(pedidoId, { pendenciaPagamento: null });
+  const cancelado = cancelarPedido(db, pedidoId, {
+    motivo: 'Cobrança recusada ou integração não configurada; reserva liberada.',
+    por: 'sistema',
+  });
+  if (!cancelado.ok) {
+    // Reserva inconsistente: mantenha o pedido bloqueado para auditoria.
+    db.collection('orders').update(pedidoId, {
+      pendenciaPagamento: 'conciliacao_necessaria',
+    });
+  }
+  return cancelado;
+}
+
 export function pedidosDoCliente(db, clienteId) {
   return db.collection('orders')
     .find((o) => o.clienteId === clienteId)
