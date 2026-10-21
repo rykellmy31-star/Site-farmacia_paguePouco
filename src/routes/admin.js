@@ -138,7 +138,11 @@ export function registrarRotasAdmin(app, db) {
     db.collection('admins').update(admin.id, { ultimoAcesso: new Date().toISOString() });
     logAdmin(db, admin, 'login_admin', 'admin', admin.id, {}, req);
     res.cookie('pp_admin_sess', sessionId, { maxAge: config.adminSessionTTLHours * 3600, path: '/' });
-    res.redirect(String(req.body.next || '/admin').startsWith('/admin') ? String(req.body.next) : '/admin');
+    const next = String(req.body.next || '/admin');
+    // Destino sempre interno e existente; evita redirecionamento para "undefined"
+    // quando o formulário não contém "next" e bloqueia URL externa.
+    res.redirect(/^\/admin(?:\/|\?|$)/.test(next) && !next.startsWith('//') &&
+      !/[\\\r\n]/.test(next) ? next : '/admin');
   });
 
   app.get('/admin/sair', (req, res) => {
