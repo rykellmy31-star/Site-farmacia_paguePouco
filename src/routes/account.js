@@ -10,6 +10,7 @@ import {
   validators as v, cleanText, onlyDigits, randomToken, escapeHtml,
 } from '../lib/security.js';
 import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
+import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
 import { sendMail } from '../lib/mailer.js';
 import { vincularCarrinhoAoCliente } from '../lib/cart.js';
@@ -228,7 +229,7 @@ export function registrarRotasConta(app, db) {
 
   app.get('/conta/pedidos/:codigo', async (req, res) => {
     if (!exigirLogin(req, res)) return;
-    const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
+    const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id && !pedidoOcultoDoCliente(o));
     if (!pedido) return void res.redirect('/conta/pedidos');
     // A identificação do cliente já foi validada. O GET externo apenas consulta
     // o status de uma cobrança existente; nunca cria outra ou estorna.
@@ -240,7 +241,7 @@ export function registrarRotasConta(app, db) {
 
   app.post('/conta/pedidos/:codigo/cancelar', (req, res) => {
     if (!exigirLogin(req, res)) return;
-    const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
+    const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id && !pedidoOcultoDoCliente(o));
     if (!pedido) return void res.redirect('/conta/pedidos');
     const r = cancelarPedido(db, pedido.id, { motivo: cleanText(req.body.motivo, 300) || 'Cancelado pelo cliente.', por: req.user.nome });
     if (!r.ok) {
