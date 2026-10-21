@@ -237,8 +237,11 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.match(download.headers.get('content-disposition') || '', /attachment/);
   assert.equal(download.headers.get('content-type'), 'application/octet-stream');
   assert.equal(await download.text(), svg, 'backup deve conter bytes idênticos ao upload');
-  assert.equal((await call('/admin/api/sistema/backup/arquivo/YWJjLi4vLi4vc2VncmVkbw')).status, 404,
-    'chave que não aponta para arquivo salvo é recusada');
+  assert.equal((await call('/admin/api/sistema/backup/arquivo/YWJjLi4vLi4vc2VncmVkbw')).status, 400,
+    'caminhos suspeitos com travessia devem ser recusados com 400');
+  assert.equal((await call('/admin/api/sistema/backup/arquivo/' +
+    Buffer.from('2026/10/arquivo-inexistente.png').toString('base64url'))).status, 404,
+    'arquivo inexistente deve devolver 404');
 
   // Fluxo real do editor de produtos: a rota GET exibe o formulário,
   // mas o action POST deve apontar para /admin/api/produtos(/:id).
