@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { config } from '../config.js';
+import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
 import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
 import { paginaAdmin } from '../views/admin/layout.js';
@@ -668,6 +669,9 @@ function registrarApi(app, db) {
     const dados = lerProdutoDoForm(req.body);
     dados.slug = slugUnicoProduto(db, dados.nome);
     const quantidadeInicial = Math.max(0, Number(req.body.quantidade) || 0);
+    if (inovaAtiva() && quantidadeInicial > 0) {
+      return void res.json({ ok: false, erro: 'Estoque é controlado pela InovaFarma.' }, 409);
+    }
     // Estoque inicia zerado; a movimentação abaixo faz a única entrada
     // e grava o histórico. Inicializar com quantidadeInicial duplicava o saldo.
     dados.estoque = { quantidade: 0, minimo: Number(req.body.estoqueMinimo) || 5, reservado: 0 };
@@ -694,6 +698,9 @@ function registrarApi(app, db) {
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
     const estoque = { ...(produto.estoque || {}) };
     const novaQtd = Number(req.body.quantidade);
+    if (inovaAtiva() && Number.isFinite(novaQtd) && novaQtd !== Number(estoque.quantidade || 0)) {
+      return void res.json({ ok: false, erro: 'Quantidade gerenciada pela InovaFarma: edite o estoque no ERP.' }, 409);
+    }
     if (Number.isFinite(novaQtd) && novaQtd !== Number(estoque.quantidade || 0)) {
       registrarMovimentoEstoque(db, {
         produtoId: produto.id, tipo: 'ajuste', quantidade: novaQtd,
@@ -803,7 +810,7 @@ function registrarApi(app, db) {
         };
         if (existente) {
           db.collection('products').update(existente.id, dados);
-          if (obj.quantidade) {
+          if (obj.quantidade && !inovaAtiva()) {
             registrarMovimentoEstoque(db, { produtoId: existente.id, tipo: 'ajuste', quantidade: Number(obj.quantidade), origem: 'importacao_csv', usuarioId: req.adminUser.id });
           }
           atualizados++;
@@ -814,9 +821,9 @@ function registrarApi(app, db) {
             codigoInterno: obj.codigoInterno || '',
             caracteristicas: {}, imagens: [], videos: [], vendas: 0, relacionados: [],
             sanitario: { classificacao: 'nao_aplicavel', requerReceita: false, controlado: false, registroMS: '', apresentacao: '', concentracao: '', principioAtivo: '', fabricante: obj.fabricante || '', bulaUrl: '', aprovadoFarmaceutico: false, restricaoTransporte: false, restricaoAdvertencia: '' },
-            estoque: { quantidade: Number(obj.quantidade) || 0, minimo: Number(obj.estoqueMinimo) || 5, reservado: 0 },
+            estoque: { quantidade: inovaAtiva() ? 0 : (Number(obj.quantidade) || 0), minimo: Number(obj.estoqueMinimo) || 5, reservado: 0 },
           });
-          if (Number(obj.quantidade) > 0) {
+          if (!inovaAtiva() && Number(obj.quantidade) > 0) {
             registrarMovimentoEstoque(db, { produtoId: novo.id, tipo: 'entrada', quantidade: Number(obj.quantidade), origem: 'importacao_csv', usuarioId: req.adminUser.id });
           }
           criados++;
@@ -887,6 +894,7 @@ function registrarApi(app, db) {
   /* ------------------------------- ESTOQUE ------------------------------ */
   app.post('/admin/api/estoque/movimentar', (req, res) => {
     if (!guardApi(req, res, 'estoque.movimentar')) return;
+    if (inovaAtiva()) return void res.json({ ok: false, erro: 'Movimentações de estoque devem ser feitas na InovaFarma.' }, 409);
     const { produtoId, tipo, quantidade, lote, validade, observacao } = req.body;
     if (!produtoId) return void res.json({ ok: false, erro: 'Selecione o produto.' }, 400);
     const qtd = Number(quantidade);

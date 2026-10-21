@@ -9,6 +9,7 @@
  * Esses bloqueios valem para vitrine, busca, carrinho e checkout.
  */
 import { slugify } from './security.js';
+import { inovaAtiva, estoqueInovaDisponivel } from './inovafarma-stock.js';
 
 export const CLASSIFICACOES = {
   nao_aplicavel: { id: 'nao_aplicavel', nome: 'Não se aplica (não é medicamento)', exigeRegistro: false, vendaOnline: true },
@@ -81,6 +82,7 @@ export function podeVender(produto) {
 }
 
 export function estoqueDisponivel(produto) {
+  if (inovaAtiva()) return estoqueInovaDisponivel(produto);
   const e = produto?.estoque || {};
   return Math.max(0, Number(e.quantidade || 0) - Number(e.reservado || 0));
 }

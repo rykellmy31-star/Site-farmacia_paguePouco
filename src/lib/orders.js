@@ -10,6 +10,7 @@
  */
 import crypto from 'node:crypto';
 import { nowISO } from './store.js';
+import { inovaAtiva } from './inovafarma-stock.js';
 import { podeVender, precoVigenteCentavos, estoqueDisponivel } from './catalog.js';
 import { resolverFreteEscolhido } from './freight.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
@@ -65,6 +66,10 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
     case 'saida':
       estoque.quantidade = Math.max(0, antes - q);
       estoque.reservado = Math.max(0, reservadoAntes - q);
+      if (inovaAtiva() && origem === 'pedido_aprovado') {
+        // Protege o saldo do site até a Inova comprovar a baixa no snapshot.
+        estoque.inovaPendente = Math.max(0, Number(estoque.inovaPendente || 0)) + q;
+      }
       break;
     case 'reserva':
       estoque.reservado = reservadoAntes + q;
@@ -383,6 +388,7 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   if (status === 'aprovado') {
     const reserva = validarReservaParaAprovacao(db, pedidoId);
     if (!reserva.ok) return reserva;
+    if (inovaAtiva()) patch.inovaEnvioPendente = true;
     for (const item of pedido.itens || []) {
       registrarMovimentoEstoque(db, {
         produtoId: item.produtoId, tipo: 'saida', quantidade: item.quantidade,
