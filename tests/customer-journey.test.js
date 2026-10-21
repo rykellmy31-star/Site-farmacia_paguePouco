@@ -391,6 +391,13 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
 
   const pendingInPanel = await admin.get('/admin/pedidos/' + order.id);
   assert.equal(pendingInPanel.status, 200);
+  // Um Pix normal já registrado não é uma cobrança de resultado incerto.
+  const pedidosConferencia = await admin.get('/admin/pedidos?pendencia=1');
+  assert.equal(pedidosConferencia.status, 200);
+  const painelConferencia = await pedidosConferencia.text();
+  assert.match(painelConferencia, /Somente pagamentos a conferir/);
+  assert.doesNotMatch(painelConferencia, new RegExp(order.codigo),
+    'Pix pendente com cobrança registrada não entra na fila de conciliação manual');
   assert.match(await pendingInPanel.text(), new RegExp(order.codigo));
 
   // Somente simulação pelo administrador — sem transação financeira real.
@@ -447,6 +454,16 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   await staff.token('/admin/login');
   const staffLogin = await staff.form('/admin/login', { email: staffEmail, senha: staffPassword });
   assert.equal(staffLogin.status, 303);
+  const painelAtendente = await staff.get('/admin');
+  assert.equal(painelAtendente.status, 200,
+    'atendente deve acessar painel inicial mesmo sem acesso a relatórios');
+  const painelRestrito = await painelAtendente.text();
+  assert.match(painelRestrito, /Painel da loja/);
+  assert.match(painelRestrito, /\/admin\/pedidos/);
+  assert.doesNotMatch(painelRestrito, /Receita \(pagos\)|Ticket médio|Vendas nos últimos 30 dias|Produtos mais vendidos/,
+    'painel de atendente não pode revelar dados agregados de faturamento');
+  assert.doesNotMatch(painelRestrito, /\/admin\/relatorios/,
+    'atendente não pode receber atalho financeiro');
   await staff.token('/admin/pedidos');
   assert.equal((await staff.get('/admin/pedidos')).status, 200);
   assert.equal((await staff.get('/admin/sistema')).status, 403, 'backup não deve abrir para atendente');

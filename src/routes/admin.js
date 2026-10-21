@@ -26,7 +26,7 @@ import {
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
   registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro,
-  cancelarPedido, validarCancelamentoOperacional, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
+  cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
@@ -85,7 +85,29 @@ export function registrarRotasAdmin(app, db) {
   /* ============================ AUTENTICAÇÃO ============================ */
   app.get('/admin', (req, res) => {
     if (!req.adminUser) return void res.redirect('/admin/login');
+    if (!guard(req, res, 'dashboard.ver')) return;
     const ctx = ctxAdmin(req, db);
+    // Atendentes e operadores podem abrir o painel, mas não têm
+    // permissão para acessar faturamento, ticket médio ou rankings.
+    // Entregue apenas atalhos das áreas autorizadas, sem carregar métricas.
+    if (!can(req.adminUser, 'relatorios.ver')) {
+      const atalhos = [
+        ['pedidos.ver', '/admin/pedidos', 'Pedidos'],
+        ['clientes.ver', '/admin/clientes', 'Clientes'],
+        ['produtos.ver', '/admin/produtos', 'Produtos'],
+        ['estoque.ver', '/admin/estoque', 'Estoque'],
+        ['paginas.ver', '/admin/paginas', 'Páginas'],
+      ].filter(([permissao]) => can(req.adminUser, permissao));
+      return void res.html(paginaAdmin(ctx, {
+        titulo: 'Painel', ativo: 'dashboard',
+        conteudo: `<h1>Painel da loja</h1>
+          <p>Selecione uma área disponível para o seu perfil.</p>
+          <div class="linha" style="gap:12px;flex-wrap:wrap">
+          ${atalhos.map(([, url, nome]) =>
+            `<a class="botao secundario" href="${url}">${nome}</a>`).join('')}
+          </div>`,
+      }));
+    }
     const agora = new Date();
     const de = new Date(agora.getTime() - 30 * 86400000).toISOString();
     const m = metricas(db, { de });
@@ -263,7 +285,13 @@ export function registrarRotasAdmin(app, db) {
   app.get('/admin/pedidos', (req, res) => {
     if (!guard(req, res, 'pedidos.ver')) return;
     const ctx = ctxAdmin(req, db);
-    const filtros = { q: req.query.get('q') || '', financeiro: req.query.get('financeiro') || '', operacional: req.query.get('operacional') || '', periodo: req.query.get('periodo') || '' };
+    const filtros = {
+      q: req.query.get('q') || '',
+      financeiro: req.query.get('financeiro') || '',
+      operacional: req.query.get('operacional') || '',
+      periodo: req.query.get('periodo') || '',
+      pendencia: req.query.get('pendencia') === '1' ? '1' : '',
+    };
     let pedidos = db.collection('orders').all();
     if (filtros.q) {
       const b = String(filtros.q).toLowerCase();
@@ -271,6 +299,7 @@ export function registrarRotasAdmin(app, db) {
     }
     if (filtros.financeiro) pedidos = pedidos.filter((p) => p.statusFinanceiro === filtros.financeiro);
     if (filtros.operacional) pedidos = pedidos.filter((p) => p.statusOperacional === filtros.operacional);
+    if (filtros.pendencia) pedidos = pedidos.filter(pedidoPrecisaConferencia);
     if (filtros.periodo) {
       const dias = filtros.periodo === 'hoje' ? 1 : Number(filtros.periodo);
       const limite = new Date(Date.now() - (dias - 1) * 86400000).toISOString().slice(0, 10);
