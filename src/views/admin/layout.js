@@ -50,7 +50,7 @@ export function paginaAdmin(ctx, { titulo, conteudo, ativo = '', headExtra = '',
 <title>${e(titulo)} — Painel | ${e(empresa.nomeFantasia || 'Pague Pouco')}</title>
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#8b0000">
-<link rel="stylesheet" href="/styles.css?v=admin-produtos-salvar-v2">
+<link rel="stylesheet" href="/styles.css?v=responsivo-mobile-desktop-20261021">
 <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho">
 <style>
 :root{--marca-texto:${e(ctx.settings.tema?.corTexto || '#8b0000')};--primaria:${e(ctx.settings.tema?.corPrimaria || '#8b0000')};--primaria-escura:${e(ctx.settings.tema?.corPrimariaEscura || '#6b0000')};--secundaria:${e(ctx.settings.tema?.corSecundaria || '#8b0000')};}
