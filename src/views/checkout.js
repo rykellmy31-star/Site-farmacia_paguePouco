@@ -147,6 +147,8 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
 export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = {}, endereco, frete }) {
   const cfg = ctx.settings.pagamentos || {};
   const infoPag = ctx.infoPagamento || {};
+  const pctPix = Math.max(0, Math.min(100, Number(cfg.descontoPixPercentual) || 0));
+  const descontoPix = Math.round(totais.totalCentavos * pctPix / 100);
   return paginaPublica(ctx, {
     titulo: 'Pagamento',
     semIndex: true,
@@ -154,7 +156,7 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
       ${migalhas([{ texto: 'Início', url: '/' }, { texto: 'Cesta', url: '/carrinho' }, { texto: 'Entrega', url: '/checkout/endereco' }, { texto: 'Pagamento' }])}
       ${passosHtml('pagamento')}
       ${listaErros(erros)}
-      ${infoPag.motivo ? alertaHtml(`<strong>Ambiente de testes:</strong> ${e(infoPag.motivo)}`, 'aviso') : ''}
+      ${infoPag.motivo ? alertaHtml(e(infoPag.motivo), 'aviso') : ''}
       <div class="checkout-grade">
         <form method="post" action="/checkout/finalizar" id="formPagamento">
           <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
@@ -206,7 +208,8 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
               <a class="texto-pequeno" href="/checkout/endereco">(alterar)</a></p>
           </div>
 
-          <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar">Finalizar pedido</button>
+          <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
+            ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>Finalizar pedido</button>
           <p class="texto-pequeno texto-suave mt-2 mb-0">
             Ao finalizar, você concorda com os <a href="/pagina/termos-de-uso" target="_blank">Termos de Uso</a> e a
             <a href="/pagina/politica-de-privacidade" target="_blank">Política de Privacidade</a>.
@@ -219,7 +222,8 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
             ${(ctx.cart.itens || []).map((i) => `<div class="resumo-linha"><span>${i.quantidade}× ${e(i.nome)}</span><strong>${money(i.precoUnitarioCentavos * i.quantidade)}</strong></div>`).join('')}
             <div id="resumoCarrinho">${htmlResumoCarrinho(ctx.cart, totais, { mostrarFrete: true })}</div>
             <div class="resumo-linha"><span>Frete (${e(frete?.label || '')})</span><strong>${totais.freteCentavos && !totais.freteGratis ? money(totais.freteCentavos) : '<span style="color:var(--sucesso)">Grátis</span>'}</strong></div>
-            <div class="resumo-linha total"><span>Total</span><span>${money(totais.totalCentavos)}</span></div>
+            <div class="resumo-linha total"><span>Total antes do desconto Pix ou juros</span><span>${money(totais.totalCentavos)}</span></div>
+            ${pctPix > 0 && formasPagamento.pix ? `<div class="resumo-linha"><span>Total no Pix (${pctPix}% de desconto)</span><strong>${money(totais.totalCentavos - descontoPix)}</strong></div>` : ''}
           </div>
         </aside>
       </div>
@@ -236,7 +240,7 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
       <div class="pagina-conteudo texto-centro">
         <h1>${ICONES.check} Pedido registrado!</h1>
         <p class="negrito">Pedido <strong>${e(pedido.codigo)}</strong></p>
-        <p>Enviamos a confirmação para <strong>${e(pedido.cliente?.email || '')}</strong>.</p>
+        <p>E-mail informado no pedido: <strong>${e(pedido.cliente?.email || '')}</strong>. O envio automático depende de um serviço de e-mail configurado.</p>
       </div>
 
       ${pagamento?.metodo === 'pix' && pedido.statusFinanceiro === 'pendente' ? `
