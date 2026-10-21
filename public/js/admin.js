@@ -188,14 +188,16 @@
     const tipo = resposta.headers.get('content-type') || '';
     const dados = tipo.includes('application/json') ? await resposta.json() : null;
     if (!resposta.ok || dados?.ok !== true) {
-      throw new Error(dados?.erro || 'Não foi possível salvar. Recarregue a página e tente novamente.');
+      const detalhes = dados?.erros && typeof dados.erros === 'object'
+        ? Object.values(dados.erros).join(' ') : '';
+      throw new Error(dados?.erro || detalhes || 'Não foi possível salvar. Recarregue a página e tente novamente.');
     }
     const destino = dados.url ? destinoSeguroPainel(dados.url) : telaComAvisoDeSucesso();
     if (!destino) throw new Error('O servidor retornou um endereço inválido.');
+    const retorno = new URL(destino, window.location.origin);
+    retorno.searchParams.set('salvo', '1');
     notificar(mensagemSalvamento(rota, dados));
-    setTimeout(() => {
-      window.location.assign(destinoSeguroPainel(destino + (destino.includes('?') ? '&' : '?') + 'salvo=1') || telaComAvisoDeSucesso());
-    }, 850);
+    setTimeout(() => window.location.assign(retorno.pathname + retorno.search + retorno.hash), 850);
   }
 
   // sincroniza editores com os campos ocultos antes de enviar
