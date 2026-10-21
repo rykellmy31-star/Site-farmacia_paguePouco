@@ -4,6 +4,7 @@
  */
 import { config } from '../config.js';
 import { registrarAtividadeConectorInova } from '../lib/inovafarma-automation.js';
+import { receberCatalogoInova } from '../lib/inovafarma-catalog-import.js';
 import {
   autenticacaoInovaValida, importarEstoqueInova, vendasPendentesInova,
   confirmarVendasInova,
@@ -38,6 +39,14 @@ export function registrarRotasInovafarma(app, db) {
       { quantidade: r.ok ? r.confirmadas : 0 });
     res.json(r.ok ? r : { ok: false, erro: r.erro, ...(r.status ? { status: r.status } : {}) },
       r.ok ? 200 : r.status);
+  });
+
+  // Catálogo bruto em lotes do CONECTOR HOMOLOGADO. Entrada autenticada e
+  // desativada por padrão. Não publica produtos nem atualiza o estoque.
+  app.post('/webhooks/inovafarma/catalogo', { maxBodyBytes: 256 * 1024 }, (req, res) => {
+    if (!autenticar(req, res)) return;
+    const r = receberCatalogoInova(db, req.body);
+    res.json(r.ok ? r : { ok: false, erro: r.erro }, r.ok ? 200 : r.status);
   });
 
   // Somente saldos ABSOLUTOS. Operação sem credenciais falha fechada.
