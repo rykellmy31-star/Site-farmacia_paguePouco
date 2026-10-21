@@ -11,7 +11,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { Store } from './store.js';
 
-const SKIP = new Set(['sessions', 'passwordTokens', 'mailOutbox']);
+const SKIP = new Set(['sessions', 'passwordTokens', 'mailOutbox', 'paymentSecrets']);
 const LIMITE_ARQUIVOS = 100_000;
 const LIMITE_DOCUMENTOS = 500_000;
 const LIMITE_BYTES_ARQUIVO = 128 * 1024 * 1024;
