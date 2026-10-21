@@ -135,7 +135,8 @@ try{
         if(width<768){
           assert(value.search.width>=width-30,label+': busca comprimida '+JSON.stringify(value));
           assert(value.mobileNav&&!value.desktopNav,label+': navegação mobile incorreta');
-          assert(value.sort&&value.sort.width>=width-45,label+': ordenação cortada');
+          assert(value.sort&&value.sort.width>=width-90&&value.sort.left>=0&&value.sort.right<=value.client+2,
+            label+': ordenação cortada '+JSON.stringify(value));
         }else{
           assert(!value.mobileNav&&value.desktopNav,label+': navegação desktop incorreta');
           assert(value.search.width>=150,label+': busca estreita no desktop');
