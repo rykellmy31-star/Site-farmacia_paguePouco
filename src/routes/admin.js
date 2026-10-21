@@ -40,6 +40,7 @@ import { UFS, UF_LIST } from '../lib/cep.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
+import { diagnosticoFinanceiro } from '../lib/payments/ops-health.js';
 import { estadoCredenciaisMercadoPago, salvarCredenciaisMercadoPago, removerCredenciaisMercadoPago } from '../lib/payments/credentials.js';
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
@@ -737,6 +738,7 @@ export function registrarRotasAdmin(app, db) {
         logs: db.collection('systemLogs').count(),
         emails: db.collection('mailOutbox').count(),
         backups,
+        conciliacaoFinanceira: diagnosticoFinanceiro(db),
         backupMidias: config.isCloudflare && typeof db.exportMediaManifest === 'function'
           ? db.exportMediaManifest() : null,
       },
