@@ -273,6 +273,27 @@ async function main() {
     return paginas.length + ' páginas com assinatura institucional';
   });
 
+  await testar('Favicon da aba usa a cor vermelha no site, painel e manifesto', async () => {
+    const favicon = await anon.get('/img/favicon.svg?v=20261021-vermelho');
+    assert(favicon.status === 200, 'favicon indisponível');
+    assert(/fill="#8b0000"/i.test(favicon.texto), 'cruz vermelha ausente');
+    assert(!/fill="#0f8b5f"/i.test(favicon.texto), 'cor antiga ainda presente no favicon');
+    for (const rota of ['/', '/admin/login']) {
+      const pagina = await anon.get(rota);
+      assert(pagina.status === 200, 'pagina não carregou: ' + rota);
+      assert(pagina.texto.includes('/img/favicon.svg?v=20261021-vermelho'),
+        'link do novo favicon ausente em ' + rota);
+    }
+    const manifest = await anon.get('/manifest.webmanifest');
+    assert(manifest.status === 200 && manifest.json?.theme_color === '#8b0000',
+      'tema vermelho ausente no manifesto');
+    assert(manifest.headers.get('content-type')?.includes('application/manifest+json'),
+      'tipo de manifesto incorreto');
+    assert(manifest.json.icons[0].src.includes('20261021-vermelho'),
+      'manifesto ainda usa favicon sem versão');
+    return 'ícone vermelho, cache renovado e manifesto validado';
+  });
+
   await testar('Menu de departamentos exibe as categorias', async () => {
     const r = await anon.get('/departamentos');
     assert(r.status === 200, `status ${r.status}`);
