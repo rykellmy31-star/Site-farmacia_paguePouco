@@ -185,7 +185,8 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
       <strong>Este produto não pode ser vendido agora.</strong> Motivo: ${e(podeVender(p).motivo || '')}
     </div>` : ''}
 
-    <form id="formProduto" method="post" action="/admin/produtos${editando ? `/${e(p.id)}` : ''}">
+    ${ctx.req?.query?.get('salvo') === '1' ? '<div class="alerta sucesso" role="status">Produto salvo com sucesso.</div>' : ''}
+    <form id="formProduto" method="post" action="/admin/api/produtos${editando ? `/${e(p.id)}` : ''}">
       <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
 
       <div class="grade-form duas-colunas">

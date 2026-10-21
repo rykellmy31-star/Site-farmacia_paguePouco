@@ -211,6 +211,58 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.ok(media, JSON.stringify(uploadResult));
   assert.equal(await (await call(media.url)).text(), svg);
 
+  // Fluxo real do editor de produtos: a rota GET exibe o formulário,
+  // mas o action POST deve apontar para /admin/api/produtos(/:id).
+  const newProductPage = await call('/admin/produtos/novo');
+  assert.equal(newProductPage.status, 200);
+  const newProductHtml = await newProductPage.text();
+  assert.match(newProductHtml, /id="formProduto" method="post" action="\/admin\/api\/produtos"/);
+  assert.match(newProductHtml, /js\/admin\.js\?v=admin-produtos-salvar-v2/);
+  const adminScript = await (await call('/js/admin.js?v=admin-produtos-salvar-v2')).text();
+  assert.match(adminScript, /form\.id !== 'formProduto'/);
+  assert.match(adminScript, /body: new FormData\(form\)/);
+  const style = await (await call('/styles.css?v=admin-produtos-salvar-v2')).text();
+  assert.match(style, /body \.notificacao[\s\S]*?background: #ffffff !important/);
+  assert.match(style, /body \.notificacao,[\s\S]*?color: #171717 !important/);
+
+  // O navegador envia FormData (inclusive CSRF), não uma rota POST inexistente.
+  const novo = new FormData();
+  for (const [key, value] of Object.entries({
+    _csrf: adminToken, nome: 'Produto de teste com imagem', preco: '19.90',
+    quantidade: '4', estoqueMinimo: '1', classificacao: 'nao_aplicavel', ativo: '1',
+  })) novo.append(key, value);
+  const created = await call('/admin/api/produtos', { method: 'POST', body: novo });
+  assert.equal(created.status, 200);
+  const productCreated = await created.json();
+  assert.equal(productCreated.ok, true);
+  assert.ok(productCreated.id);
+  assert.equal(productCreated.url, '/admin/produtos/' + productCreated.id);
+  const editPage = await call(productCreated.url);
+  assert.equal(editPage.status, 200);
+  assert.match(await editPage.text(), new RegExp('action="/admin/api/produtos/' + productCreated.id + '"'));
+  const edit = new FormData();
+  for (const [key, value] of Object.entries({
+    _csrf: adminToken, nome: 'Produto editado com imagem',
+    preco: '17.50', quantidade: '4', estoqueMinimo: '1',
+    classificacao: 'nao_aplicavel', ativo: '1',
+  })) edit.append(key, value);
+  edit.append('imagens[]', media.url);
+  edit.append('imagemLegenda[]', 'Imagem do teste');
+  const edited = await call('/admin/api/produtos/' + productCreated.id, { method: 'POST', body: edit });
+  assert.equal(edited.status, 200, 'Editar produto não deve retornar 404.');
+  assert.equal((await edited.json()).id, productCreated.id);
+  const successPage = await call(productCreated.url + '?salvo=1');
+  assert.match(await successPage.text(), /Produto salvo com sucesso/);
+
+  const afterEdit = await call('/admin/api/sistema/backup', {
+    method: 'POST', body: new URLSearchParams({ _csrf: adminToken }),
+  });
+  assert.equal(afterEdit.status, 200);
+  const updatedProduct = (await afterEdit.json()).collections.products.find(p => p.id === productCreated.id);
+  assert.equal(updatedProduct.nome, 'Produto editado com imagem');
+  assert.equal(updatedProduct.precoCentavos, 1750);
+  assert.equal(updatedProduct.imagens?.[0]?.url, media.url);
+
   await stop();
   await start();
   assert.equal((await call('/admin')).status, 200, 'sessão persiste após reinicialização');
@@ -224,4 +276,8 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(recovered.collections.admins.length, 1, 'bootstrap não duplica usuários');
   assert.equal(recovered.collections.settings.find(x => x.id === 'seo')?.tituloPadrao, 'Teste de edição persistente', 'Edição de texto persiste após reiniciar o Worker.');
   assert.equal(recovered.collections.midia.filter(item => item.id === media.id).length, 1);
+  const persistedProduct = recovered.collections.products.find(p => p.id === productCreated.id);
+  assert.equal(persistedProduct.nome, 'Produto editado com imagem', 'Edição de produto persiste após reiniciar.');
+  assert.equal(persistedProduct.precoCentavos, 1750);
+  assert.equal(persistedProduct.imagens?.[0]?.url, media.url, 'Imagem associada continua persistente.');
 });

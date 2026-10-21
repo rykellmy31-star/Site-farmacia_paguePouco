@@ -670,3 +670,26 @@ input::placeholder, textarea::placeholder {
   height: 36px;
 }
 .carrossel.com-controles .pontos { bottom: 19px; }
+
+/* Notificações administrativas legíveis: fundo branco e texto preto,
+   inclusive quando a identidade visual aplica vermelho global ao texto. */
+body .notificacao {
+  background: #ffffff !important;
+  color: #171717 !important;
+  border: 1px solid #d0d0d0;
+  border-left: 5px solid #8b0000;
+  border-radius: 12px;
+  padding: 14px 18px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  font-weight: 600;
+  text-align: left;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .20);
+}
+body .notificacao,
+body .notificacao * { color: #171717 !important; }
+body .notificacao.erro { border-left-color: #b3261e; }
+body .notificacao.sucesso { border-left-color: #0b7a3d; }

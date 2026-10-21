@@ -13,7 +13,10 @@
     const el = $('#notificacaoAdmin');
     if (!el) return;
     el.textContent = msg;
-    el.style.background = tipo === 'erro' ? 'var(--erro)' : 'var(--primaria-escura)';
+    // Notificações legíveis sobre fundo branco; erros se distinguem pela borda.
+    el.classList.toggle('erro', tipo === 'erro');
+    el.classList.toggle('sucesso', tipo !== 'erro');
+    el.style.removeProperty('background');
     el.classList.add('visivel');
     clearTimeout(el._t);
     el._t = setTimeout(() => el.classList.remove('visivel'), 3600);
@@ -147,6 +150,40 @@
     if (edDesc && $('#campoDescricao') && form.contains(edDesc)) {
       $('#campoDescricao').value = edDesc.innerHTML;
     }
+
+    // Produtos são salvos pela API, não pela rota GET de edição.
+    // Sem este envio controlado, o navegador acabava numa página 404 ou JSON.
+    if (form.id !== 'formProduto') return;
+    ev.preventDefault();
+    if (form.dataset.salvando === '1') return;
+    form.dataset.salvando = '1';
+    const botao = form.querySelector('button[type="submit"]');
+    const rotulo = botao?.textContent;
+    if (botao) {
+      botao.disabled = true;
+      botao.textContent = 'Salvando...';
+    }
+    (async () => {
+      try {
+        const resposta = await api(form.getAttribute('action'), {
+          method: 'POST',
+          body: new FormData(form),
+        });
+        if (!resposta?.id) throw new Error('O servidor não confirmou o salvamento do produto.');
+        notificar('Produto salvo com sucesso.');
+        // Ao criar, abre o cadastro recém-criado; ao editar, reabre o mesmo.
+        const destino = resposta.url || '/admin/produtos/' + encodeURIComponent(resposta.id);
+        setTimeout(() => { window.location.assign(destino + '?salvo=1'); }, 500);
+      } catch (erro) {
+        notificar(erro.message || 'Não foi possível salvar o produto.', 'erro');
+      } finally {
+        delete form.dataset.salvando;
+        if (botao) {
+          botao.disabled = false;
+          botao.textContent = rotulo;
+        }
+      }
+    })();
   });
 
   /* ------------------------- características --------------------------- */
