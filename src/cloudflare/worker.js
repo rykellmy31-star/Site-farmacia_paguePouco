@@ -8,6 +8,7 @@ import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
 import { CloudStore } from './store.js';
 import { RequestQueue } from './request-queue.js';
+import { executarAlarmeFinanceiro } from '../lib/payments/alarm-runner.js';
 import {
   reconciliarPix, temPixPendente, reconciliarEstornos, temEstornoPendente,
 } from '../lib/payments/reconciliation.js';
@@ -92,12 +93,14 @@ export class LojaDurableObject extends DurableObject {
       await this.ready;
       configureCloudflare(this.bindings, this.bindings.PUBLIC_BASE_URL || 'https://localhost.invalid', this.secret);
       if (!this.app) this.app = createApplication(this.db);
-      const pix = await reconciliarPix(this.db);
-      if (pix.erros) console.warn('[pix] cobranças aguardando conciliação:', pix.erros);
-      const estornos = await reconciliarEstornos(this.db);
-      if (estornos.erros) console.warn('[estornos] casos exigindo conciliação:', estornos.erros);
-      await this.db.flush();
-      await this.programarAlarmeFinanceiro();
+      await executarAlarmeFinanceiro({
+        pix: () => reconciliarPix(this.db),
+        estornos: () => reconciliarEstornos(this.db),
+        persistir: () => this.db.flush(),
+        reagendar: () => this.programarAlarmeFinanceiro(),
+        registrar: (fluxo, problema) =>
+          console.warn('[alarme financeiro]', fluxo, problema),
+      });
     });
   }
 }
