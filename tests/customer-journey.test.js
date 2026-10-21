@@ -470,6 +470,15 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     const change = await alterar(status);
     assert.equal(change.status, 200, 'etapa ' + status + ' deve funcionar');
     assert.equal((await change.json()).ok, true);
+    if (status === 'enviado') {
+      const cancelShipped = await admin.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
+      assert.equal(cancelShipped.status, 409, 'pedido enviado não pode ser cancelado pelo formulário');
+      assert.equal((await cancelShipped.json()).ok, false);
+      const unchanged = await snapshot();
+      assert.equal(unchanged.payments.find(p => p.id === payment.id).status, 'approved',
+        'pedido enviado não pode ter a cobrança estornada antes de rejeitar cancelamento');
+      assert.equal(unchanged.orders.find(p => p.id === order.id).statusFinanceiro, 'aprovado');
+    }
   }
   for (const status of ['em_separacao', 'enviado', 'aguardando_pagamento']) {
     const change = await alterar(status);
