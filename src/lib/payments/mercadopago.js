@@ -78,7 +78,7 @@ export async function createPayment({ db, order, method, payer, installments = 1
   const notificationUrl = returnUrls.notificationUrl || '';
   const valor = Number((order.totalCentavos / 100).toFixed(2));
 
-  if (method === 'pix' && !/^[0-9]{11}$/.test(String(payer?.cpf || '').replace(/\\D/g, ''))) {
+  if (method === 'pix' && !/^[0-9]{11}$/.test(String(payer?.cpf || '').replace(/\D/g, ''))) {
     return { ok: false, erro: 'Informe um CPF válido no pagamento para gerar o Pix.' };
   }
   const payerPayload = {
@@ -189,7 +189,7 @@ export async function createPayment({ db, order, method, payer, installments = 1
   const d = res.data;
   // Um 2xx sem identificador válido não prova que a cobrança falhou;
   // não cancele o pedido e não crie outra cobrança automaticamente.
-  if (!d || !/^\\d{1,30}$/.test(String(d.id ?? ''))) {
+  if (!d || !/^\d{1,30}$/.test(String(d.id ?? ''))) {
     return { ok: false, indeterminado: true,
       erro: 'O provedor confirmou a solicitação sem devolver a identificação. Conciliação necessária.' };
   }
