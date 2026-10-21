@@ -344,7 +344,7 @@ export class Store {
     await fsp.mkdir(destDir, { recursive: true });
     // Copiar todos os snapshots, mesmo de coleções que não foram acessadas
     // desde o início do processo; o código antigo omitía essas tabelas.
-    const colecoesTransitorias = new Set(['sessions.json', 'passwordTokens.json', 'mailOutbox.json']);
+    const colecoesTransitorias = new Set(['sessions.json', 'passwordTokens.json', 'mailOutbox.json', 'paymentSecrets.json']);
     for (const entry of await fsp.readdir(this.dbDir, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith('.json') ||
           colecoesTransitorias.has(entry.name)) continue;
