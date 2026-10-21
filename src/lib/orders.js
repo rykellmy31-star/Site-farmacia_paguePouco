@@ -527,7 +527,7 @@ export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = 
   // O fluxo financeiro pode ter encerrado a operação no mesmo evento.
   // Evita um segundo cancelamento/histórico/alteração de estoque.
   if (pedido?.statusOperacional === 'cancelado' &&
-      ['recusado','expirado','estornado'].includes(pedido.statusFinanceiro)) {
+      pedido.statusFinanceiro === 'estornado') {
     return { ok: true, pedido, semAlteracao: true };
   }
   const admissivel = validarCancelamentoOperacional(pedido);
@@ -538,6 +538,11 @@ export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = 
   if (pedido.statusFinanceiro === 'pendente') {
     const r = atualizarStatusFinanceiro(db, pedido.id, 'recusado', { obs: 'Cancelamento antes da aprovação.', por });
     if (!r.ok) return r;
+    // A recusa já encerrou a entrega no mesmo evento financeiro.
+    const encerrado = db.collection('orders').get(pedidoId);
+    if (encerrado.statusOperacional === 'cancelado') {
+      return { ok: true, pedido: encerrado };
+    }
   }
   db.collection('orders').update(pedidoId, { statusOperacional: 'cancelado', atualizadoEm: nowISO() });
   adicionarHistorico(db, db.collection('orders').get(pedidoId), { tipo: 'operacional', status: 'cancelado', obs: motivo, por });
