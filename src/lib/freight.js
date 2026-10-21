@@ -15,7 +15,7 @@
  * NUNCA são inventados valores ou prazos: se o destino não tem configuração
  * ativa, o sistema bloqueia a finalização e informa o motivo.
  */
-import { UF_LIST, UF_NAMES, ufFromCep, normalizeCep } from './cep.js';
+import { UF_LIST, UF_NAMES, ufFromCep, normalizeCep, isValidCep } from './cep.js';
 import { toCents, fromCents } from './format.js';
 
 export const DEFAULT_STATE_PRICE = {
@@ -128,7 +128,8 @@ function deadlineText(min, max) {
 export function calcularFrete({ config: rawCfg, cep, uf, cidade, items = [], subtotalCents = 0, cupomFreteGratis = false }) {
   const cfg = normalizeFreightConfig(rawCfg);
   const cepNorm = normalizeCep(cep);
-  const ufFinal = (uf && UF_LIST.includes(String(uf).toUpperCase()) ? String(uf).toUpperCase() : ufFromCep(cepNorm));
+  const ufFinal = ufFromCep(cepNorm);
+  const ufInformada = String(uf || '').trim().toUpperCase();
 
   const pesoTotalKg = items.reduce((acc, it) => acc + (Number(it.peso) || 0) * (Number(it.quantidade) || 1), 0);
   const volumeM3 = items.reduce((acc, it) => {
@@ -147,6 +148,16 @@ export function calcularFrete({ config: rawCfg, cep, uf, cidade, items = [], sub
     volumeM3: Math.round(volumeM3 * 100000) / 100000,
     opcoes: [],
   };
+
+  // Evita precificar um destino inválido ou aceitar UF forjada pelo navegador.
+  if (!isValidCep(cepNorm) || !ufFinal) {
+    result.motivo = 'Informe um CEP válido com 8 dígitos para calcular o frete.';
+    return result;
+  }
+  if (ufInformada && ufInformada !== ufFinal) {
+    result.motivo = 'O estado (UF) informado não corresponde ao CEP. Confira o endereço de entrega.';
+    return result;
+  }
 
   // 1) Bloqueios por produto / categoria
   const bloqProd = new Set((cfg.bloqueios?.produtos || []).map(String));
