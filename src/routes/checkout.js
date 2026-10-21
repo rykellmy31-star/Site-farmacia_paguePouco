@@ -5,7 +5,7 @@ import {
   getCart, calcularTotais, normalizeCart, aplicarCupom, removerCupom, clearCart, attachCartCookie,
 } from '../lib/cart.js';
 import { calcularFrete, resolverFreteEscolhido } from '../lib/freight.js';
-import { criarPedido, cancelarPedido } from '../lib/orders.js';
+import { criarPedido, cancelarCriacaoComRecusaDefinitiva } from '../lib/orders.js';
 import { createPayment, installmentOptions, enabledMethods, providerPublicInfo } from '../lib/payments/index.js';
 import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '../lib/security.js';
 import { lookupCep, UF_LIST } from '../lib/cep.js';
@@ -292,9 +292,7 @@ export function registrarRotasCheckout(app, db) {
         });
         return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
       }
-      const cancelado = cancelarPedido(db, pedido.id, {
-        motivo: 'Cobrança não criada; estoque liberado.', por: 'sistema',
-      });
+      const cancelado = cancelarCriacaoComRecusaDefinitiva(db, pedido.id);
       if (!cancelado.ok) {
         // Nunca reabra o checkout caso a reserva ainda esteja comprometida.
         db.collection('orders').update(pedido.id, {
