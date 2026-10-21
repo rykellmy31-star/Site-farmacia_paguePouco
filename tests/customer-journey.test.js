@@ -470,6 +470,15 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     const change = await alterar(status);
     assert.equal(change.status, 200, 'etapa ' + status + ' deve funcionar');
     assert.equal((await change.json()).ok, true);
+    if (status === 'enviado') {
+      const cancelShipped = await admin.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
+      assert.equal(cancelShipped.status, 409, 'pedido enviado não pode ser cancelado pelo formulário');
+      assert.equal((await cancelShipped.json()).ok, false);
+      const unchanged = await snapshot();
+      assert.equal(unchanged.payments.find(p => p.id === payment.id).status, 'approved',
+        'pedido enviado não pode ter a cobrança estornada antes de rejeitar cancelamento');
+      assert.equal(unchanged.orders.find(p => p.id === order.id).statusFinanceiro, 'aprovado');
+    }
   }
   for (const status of ['em_separacao', 'enviado', 'aguardando_pagamento']) {
     const change = await alterar(status);
@@ -480,4 +489,12 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(finished.statusOperacional, 'entregue');
   const cancelledFinished = await admin.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
   assert.equal(cancelledFinished.status, 409, 'entrega finalizada não pode ser cancelada pelo formulário');
+  assert.equal((await cancelledFinished.json()).ok, false);
+  const afterForbiddenCancellation = await snapshot();
+  assert.equal(afterForbiddenCancellation.payments.find(p => p.id === payment.id).status, 'approved',
+    'cancelamento de entrega finalizada NUNCA deve estornar a cobrança');
+  assert.equal(afterForbiddenCancellation.orders.find(p => p.id === order.id).statusFinanceiro, 'aprovado',
+    'pedido entregue mantém estado financeiro sem solicitação de reembolso');
+  assert.equal(afterForbiddenCancellation.products.find(p => p.id === produto.id).estoque.quantidade, 8,
+    'nenhuma tentativa de cancelamento mexe no estoque entregue');
 });

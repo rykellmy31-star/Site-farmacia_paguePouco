@@ -217,13 +217,25 @@ export async function getStatus({ db, payment, config }) {
       (d.metadata?.pedido_id && String(d.metadata.pedido_id) !== String(pedido.id))) {
     return { ok: false, erro: 'Consulta retornou cobrança incompatível com o pedido. Conciliação necessária.' };
   }
+  const status = String(d.status || payment.status).toLowerCase();
+  // Também em consultas manuais, nunca retroceda um estorno em andamento
+  // ou concluído para "approved" devido a uma resposta antiga.
+  if ((['refund_pending', 'refunded'].includes(payment.status) ||
+      ['estorno_solicitado', 'estornado'].includes(pedido.statusFinanceiro)) &&
+      status !== 'refunded') {
+    return { ok: true, status: payment.status, statusDetalhe: payment.statusDetalhe,
+      pagamento: payment, ignorado: true };
+  }
+  if (payment.status === status) {
+    return { ok: true, status, statusDetalhe: payment.statusDetalhe, pagamento: payment };
+  }
   const upd = db.collection('payments').update(payment.id, {
-    status: d.status || payment.status,
+    status,
     statusDetalhe: d.status_detail || null,
     atualizadoEm: nowISO(),
     raw: d,
   });
-  return { ok: true, status: d.status, statusDetalhe: d.status_detail, pagamento: upd, raw: d };
+  return { ok: true, status, statusDetalhe: d.status_detail, pagamento: upd };
 }
 
 /**
@@ -283,11 +295,25 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
     return { ok: false, erro: 'Cobrança não corresponde ao pedido (identidade, valor ou moeda).' };
   }
   const status = String(remoto.status || '').toLowerCase();
-  db.collection('payments').update(pagamento.id, {
-    status, statusDetalhe: remoto.status_detail || null,
-    atualizadoEm: nowISO(), raw: remoto,
-    eventos: [...(pagamento.eventos || []), { status, em: nowISO(), origem: 'webhook' }],
-  });
+  // Respostas antigas podem chegar depois de solicitar/confirmar um estorno.
+  // A consulta autenticada confirma o estado observado no provedor, mas
+  // não deve APAGAR a intenção de estorno nem reverter a confirmação local.
+  // Mantemos esses casos para conciliação sem alterar o status financeiro.
+  const emEstorno = ['refund_pending', 'refunded'].includes(pagamento.status) ||
+    ['estorno_solicitado', 'estornado'].includes(pedido.statusFinanceiro);
+  if (emEstorno && status !== 'refunded') {
+    return { ok: true, pagamentoId: pagamento.id, pedidoId: pedido.id,
+      status: 'ignored', ignorado: true, idempotencyKey: dataId };
+  }
+  // Reentrega de evento igual ainda pode completar o pedido que ficou
+  // pendente na tentativa anterior, mas não cria outro evento da cobrança.
+  if (pagamento.status !== status) {
+    db.collection('payments').update(pagamento.id, {
+      status, statusDetalhe: remoto.status_detail || null,
+      atualizadoEm: nowISO(), raw: remoto,
+      eventos: [...(pagamento.eventos || []), { status, em: nowISO(), origem: 'webhook' }],
+    });
+  }
   return { ok: true, pagamentoId: pagamento.id, pedidoId: pedido.id, status, idempotencyKey: dataId };
 }
 
