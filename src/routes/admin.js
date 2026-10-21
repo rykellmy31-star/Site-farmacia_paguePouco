@@ -885,6 +885,19 @@ function registrarApi(app, db) {
     if (!preflight.ok) return void res.json(preflight, 409);
     if (pedido.statusFinanceiro === 'estorno_solicitado') {
       if (!guardApi(req, res, 'pagamentos.estornar')) return;
+      if (!pedido.cancelamentoPendenteEstorno) {
+        // O estorno já pode ter sido solicitado separadamente. O usuário
+        // pode optar por cancelar sem repetir a requisição ao provedor.
+        db.collection('orders').update(pedido.id, {
+          cancelamentoPendenteEstorno: {
+            solicitadoEm: new Date().toISOString(),
+            motivo: 'Cancelado pelo painel administrativo.',
+            por: req.adminUser.nome,
+          },
+        });
+        logAdmin(db, req.adminUser, 'aguardando_estorno_para_cancelar', 'pedido',
+          pedido.id, { codigo: pedido.codigo }, req);
+      }
       return void res.json({
         ok: true, aguardandoEstorno: true,
         mensagem: 'O estorno está pendente de confirmação. Nenhuma nova solicitação foi enviada.',
