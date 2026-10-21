@@ -10,6 +10,7 @@ import {
   validators as v, cleanText, onlyDigits, randomToken, escapeHtml,
 } from '../lib/security.js';
 import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
+import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
 import { sendMail } from '../lib/mailer.js';
 import { vincularCarrinhoAoCliente } from '../lib/cart.js';
 import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
@@ -225,12 +226,16 @@ export function registrarRotasConta(app, db) {
     res.html(telaPedidos(ctx, { pedidos: pedidosDoCliente(db, req.user.id) }));
   });
 
-  app.get('/conta/pedidos/:codigo', (req, res) => {
+  app.get('/conta/pedidos/:codigo', async (req, res) => {
     if (!exigirLogin(req, res)) return;
-    const ctx = criarContexto(req, db);
     const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
     if (!pedido) return void res.redirect('/conta/pedidos');
-    res.html(telaPedidoDetalhe(ctx, { pedido }));
+    // A identificação do cliente já foi validada. O GET externo apenas consulta
+    // o status de uma cobrança existente; nunca cria outra ou estorna.
+    await reconciliarPixAoConsultarPedido(db, pedido.id);
+    const ctx = criarContexto(req, db);
+    res.set('Cache-Control', 'no-store');
+    res.html(telaPedidoDetalhe(ctx, { pedido: db.collection('orders').get(pedido.id) }));
   });
 
   app.post('/conta/pedidos/:codigo/cancelar', (req, res) => {
