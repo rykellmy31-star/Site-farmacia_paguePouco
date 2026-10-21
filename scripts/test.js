@@ -721,6 +721,42 @@ async function main() {
     return 'ok';
   });
 
+  await testar('Mercado Pago exige CPF antes de criar pedido ou chamar API', async () => {
+    const cred = await admin.post('/admin/api/mercadopago/credenciais', { form: {
+      accessToken: 'TEST-token-ficticio-sem-acesso-externo-12345678', ambiente: 'testes',
+      publicKey: 'TEST-public', webhookSecret: 'webhook-teste-ficticio',
+    } });
+    assert(cred.status === 302 || cred.status === 303, 'não habilitou cofre de teste');
+    const selec = await admin.post('/admin/api/config/pagamentos', { form: {
+      provedor: 'mercadopago', ambienteTestes: '1', meios_pix: '1',
+      parcelasSemJuros: '3', parcelamentoMaximo: '6', valorMinimoParcela: '5',
+    } });
+    assert(selec.status === 302 || selec.status === 303, 'não habilitou MP de teste');
+    try {
+      const pagina = await cliente.get('/checkout/pagamento');
+      assert(pagina.status === 200 && pagina.texto.includes('name="cpfPix"'),
+        'CPF não aparece no checkout quando Mercado Pago está habilitado');
+      const carrinhoAntes = await cliente.get('/api/carrinho');
+      const resposta = await cliente.post('/checkout/finalizar', { form: {
+        metodoPagamento: 'pix', cpfPix: '000.000.000-00',
+      } });
+      assert([302, 303].includes(resposta.status), 'status inesperado ' + resposta.status);
+      assert(resposta.location.includes('/checkout/pagamento?erro='),
+        'CPF inválido não bloqueou checkout antes do pedido: ' + resposta.location);
+      const carrinhoDepois = await cliente.get('/api/carrinho');
+      assert.equal(carrinhoDepois.json.itens.length, carrinhoAntes.json.itens.length,
+        'carrinho foi alterado apesar de dados Pix inválidos');
+    } finally {
+      await admin.post('/admin/api/config/pagamentos', { form: {
+        provedor: 'internal', ambienteTestes: '1',
+        meios_pix: '1', meios_credit_card: '1',
+        parcelasSemJuros: '3', parcelamentoMaximo: '6', valorMinimoParcela: '5',
+      } });
+      await admin.post('/admin/api/mercadopago/remover', { form: {} });
+    }
+    return 'pedido não criado, carrinho intacto e nenhuma cobrança realizada';
+  });
+
   await testar('Finalização cria o pedido, reserva estoque e gera cobrança Pix', async () => {
     const antes = await cliente.get('/api/carrinho');
     const itensAntes = antes.json.itens.length;
