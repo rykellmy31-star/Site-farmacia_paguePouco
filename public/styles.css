@@ -856,3 +856,82 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
 @media (min-width: 960px) {
   .checkout-grade { grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); }
 }
+
+/* ==========================================================================
+   AÇÕES COMPACTAS DE COMPRA — SEM ÍCONES SVG EXPANDINDO O GRID
+   Design do catálogo e detalhe de produto, com alvos de toque mobile >=44px.
+   ========================================================================== */
+.compra-produto {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.compra-produto .quantidade { flex: 0 0 auto; }
+.botao-adicionar-cesta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  gap: 7px;
+  font-size: .9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.botao-adicionar-cesta .icone-cesta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+.botao-adicionar-cesta .icone-cesta svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+  flex: none;
+}
+.beneficios-entrega { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.beneficio-entrega {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border: 1px solid var(--borda);
+  border-radius: 999px; background: #fff;
+  color: var(--primaria-escura); font-size: .78rem; font-weight: 600;
+  line-height: 1.25; white-space: normal;
+}
+.beneficio-entrega svg {
+  display: block; width: 15px; height: 15px; max-width: 15px;
+  max-height: 15px; flex: 0 0 15px;
+}
+.beneficio-entrega.beneficio-link { background: var(--primaria-clara); color: var(--primaria-escura); }
+.beneficio-entrega.beneficio-link:hover { text-decoration: underline; }
+
+@media (min-width: 768px) {
+  .compra-produto .botao-adicionar-cesta { flex: 0 0 auto; min-width: 0; }
+  .produto .acoes .botao-adicionar-cesta {
+    width: auto; min-height: 38px; padding: 8px 11px;
+    font-size: .8rem; border-radius: 8px;
+  }
+  .produto .acoes .botao-adicionar-cesta .icone-cesta,
+  .produto .acoes .botao-adicionar-cesta .icone-cesta svg {
+    width: 16px; height: 16px; max-width: 16px; max-height: 16px;
+    flex-basis: 16px;
+  }
+}
+@media (max-width: 767px) {
+  .compra-produto .botao-adicionar-cesta {
+    flex: 1 1 170px; min-width: 0;
+    padding-inline: 10px; white-space: normal;
+  }
+  .produto .acoes .botao-adicionar-cesta { width: 100%; font-size: .84rem; padding-inline: 7px; }
+  .beneficio-entrega { font-size: .75rem; }
+}
