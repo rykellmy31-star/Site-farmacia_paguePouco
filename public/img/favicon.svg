@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" rx="12" fill="#0f8b5f"/>
-  <path d="M26 14h12v12h12v12H38v12H26V38H14V26h12z" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Farmácia Pague Pouco">
+  <rect width="64" height="64" rx="12" fill="#fff0f0"/>
+  <path d="M26 14h12v12h12v12H38v12H26V38H14V26h12z" fill="#8b0000"/>
 </svg>
