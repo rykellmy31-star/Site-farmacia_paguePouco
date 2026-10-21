@@ -37,6 +37,7 @@ import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
+import { revogarSessoes } from '../lib/session-revocation.js';
 import { validarNovoCupom } from '../lib/coupon-validation.js';
 
 const CARTAO_403 = (req) => ({
@@ -163,6 +164,9 @@ export function registrarRotasAdmin(app, db) {
     logAdmin(db, admin, 'login_admin', 'admin', admin.id, {}, req);
     res.cookie('pp_admin_sess', sessionId, { maxAge: config.adminSessionTTLHours * 3600, path: '/' });
     const next = String(req.body.next || '/admin');
+    // Senha provisória é uma barreira de autenticação: nunca use next para
+    // contorná-la, mesmo se o link for uma rota interna do painel.
+    if (admin.deveTrocarSenha === true) return void res.redirect('/admin/alterar-senha');
     // Apenas caminhos internos do painel; evita open redirect e "/admin.evil".
     res.redirect(/^\/admin(?:\/|\?|$)/.test(next) && !next.startsWith('//') &&
       !/[\\\r\n]/.test(next) ? next : '/admin');
@@ -175,6 +179,55 @@ export function registrarRotasAdmin(app, db) {
     }
     res.clearCookie('pp_admin_sess');
     res.redirect('/admin/login');
+  });
+
+  /* =================== TROCA OBRIGATÓRIA DE SENHA ==================== */
+  app.get('/admin/alterar-senha', (req, res) => {
+    if (!req.adminUser || !req.adminSession) return void res.redirect('/admin/login');
+    const obrigatoria = req.adminUser.deveTrocarSenha === true;
+    res.set('Cache-Control', 'no-store');
+    res.html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Alterar senha — Farmácia Pague Pouco</title>
+      <link rel="stylesheet" href="/styles.css"></head>
+      <body style="background:var(--fundo);display:flex;align-items:center;justify-content:center;min-height:100vh">
+      <main class="pagina-conteudo" style="max-width:480px;width:100%">
+        <h1>${obrigatoria ? 'Troca de senha obrigatória' : 'Alterar minha senha'}</h1>
+        <p>${obrigatoria ? 'Sua senha é provisória. Defina uma senha pessoal antes de acessar o painel.'
+          : 'Para continuar com segurança, confirme a senha atual.'}</p>
+        <form method="post" action="/admin/alterar-senha">
+          <input type="hidden" name="_csrf" value="${e(csrfToken(req))}">
+          <div class="campo"><label for="senhaAtual">Senha atual</label>
+            <input type="password" id="senhaAtual" name="senhaAtual" required autocomplete="current-password"></div>
+          <div class="campo"><label for="senhaNova">Nova senha (12+ caracteres, letras e números)</label>
+            <input type="password" id="senhaNova" name="senhaNova" minlength="12" required autocomplete="new-password"></div>
+          <div class="campo"><label for="senha2">Confirme a nova senha</label>
+            <input type="password" id="senha2" name="senha2" minlength="12" required autocomplete="new-password"></div>
+          <button class="botao destaque" type="submit">Salvar nova senha</button>
+          <a class="botao secundario" href="/admin/sair">Sair</a>
+        </form>
+      </main></body></html>`);
+  });
+
+  app.post('/admin/alterar-senha', (req, res) => {
+    if (!req.adminUser || !req.adminSession) return void res.redirect('/admin/login');
+    const antiga = String(req.body.senhaAtual || '');
+    const nova = String(req.body.senhaNova || '');
+    const confirmar = String(req.body.senha2 || '');
+    if (!verifyPassword(antiga, req.adminUser.senhaHash)) {
+      return void res.html('<h1>Senha atual incorreta.</h1><a href="/admin/alterar-senha">Tentar novamente</a>', 400);
+    }
+    if (nova.length < 12 || !/[A-Za-z]/.test(nova) || !/\d/.test(nova) ||
+        nova !== confirmar || verifyPassword(nova, req.adminUser.senhaHash)) {
+      return void res.html('<h1>Nova senha inválida, repetida ou diferente da confirmação.</h1><a href="/admin/alterar-senha">Tentar novamente</a>', 400);
+    }
+    db.collection('admins').update(req.adminUser.id, {
+      senhaHash: hashPassword(nova), deveTrocarSenha: false,
+      senhaAlteradaEm: new Date().toISOString(),
+    });
+    revogarSessoes(db, 'admin', req.adminUser.id, { preservar: req.adminSession.id });
+    logAdmin(db, req.adminUser, 'alterou_propria_senha', 'admin', req.adminUser.id, {}, req);
+    res.redirect('/admin');
   });
 
   /* ============================== PRODUTOS ============================== */
@@ -1430,9 +1483,7 @@ function registrarApi(app, db) {
     db.collection('admins').update(u.id, { senhaHash: hashPassword(nova), deveTrocarSenha: true });
     // Mudança de senha invalida sessões anteriores para que acesso
     // revogado não continue ativo após o reset administrativo.
-    for (const session of db.collection('sessions').find((s) => s.type === 'admin' && s.userId === u.id)) {
-      db.collection('sessions').remove(session.id);
-    }
+    revogarSessoes(db, 'admin', u.id);
     logAdmin(db, req.adminUser, 'redefiniu_senha_usuario', 'admin', u.id, { email: u.email }, req);
     res.json({ ok: true, senhaProvisoria: nova, aviso: 'Envie esta senha ao usuário por canal seguro e oriente a troca no primeiro acesso.' });
   });

@@ -560,7 +560,9 @@ async function main() {
       admins.insert({
         nome: u.nome, email: u.email, senhaHash: hashPassword(u.senha), role: u.role,
         ativo: true, crf: u.crf || '', criadoEm: nowISO(), ultimoAcesso: null,
-        deveTrocarSenha: true,
+        // Somente a suíte temporária de testes usa contas já habilitadas.
+        // Em desenvolvimento normal, a senha de seed exige troca.
+        deveTrocarSenha: process.env.NODE_ENV !== 'test',
       });
     }
   }

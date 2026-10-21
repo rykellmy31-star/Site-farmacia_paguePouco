@@ -12,6 +12,7 @@ import {
 import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
 import { sendMail } from '../lib/mailer.js';
 import { vincularCarrinhoAoCliente } from '../lib/cart.js';
+import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
 import { config } from '../config.js';
@@ -193,12 +194,14 @@ export function registrarRotasConta(app, db) {
         token, erro: 'As senhas devem coincidir e ter ao menos 8 caracteres, com letras e números.',
       }), 400);
     }
-    db.collection('customers').update(t.clienteId, { senhaHash: hashPassword(senha) });
-    db.collection('passwordTokens').update(t.id, { usado: true, usadoEm: new Date().toISOString() });
-    // encerra sessões existentes do cliente (segurança)
-    for (const s of db.collection('sessions').find((sess) => sess.type === 'customer' && sess.userId === t.clienteId)) {
-      destroySession(db, s.id);
+    const clienteAtual = db.collection('customers').get(t.clienteId);
+    if (!clienteAtual || clienteAtual.ativo === false) {
+      return void res.html(telaRedefinirSenha(ctx, erroBase), 400);
     }
+    db.collection('customers').update(t.clienteId, { senhaHash: hashPassword(senha) });
+    invalidarRecuperacoesSenha(db, t.clienteId);
+    // Senha alterada por token revoga TODAS as sessões antigas.
+    revogarSessoes(db, 'customer', t.clienteId);
     logCustomer(db, t.clienteId, 'redefiniu_senha', 'cliente', t.clienteId, {}, req);
     res.redirect('/conta/login?aviso=Senha+alterada+com+sucesso.+Entre+com+a+nova+senha.');
   });
@@ -338,7 +341,13 @@ export function registrarRotasConta(app, db) {
     if (nova.length < 8 || !/[A-Za-z]/.test(nova) || !/\d/.test(nova)) {
       return void res.html(telaDados(ctx, { erros: { senhaNova: 'A nova senha deve ter 8+ caracteres, com letras e números.' } }), 400);
     }
+    if (verifyPassword(nova, req.user.senhaHash)) {
+      return void res.html(telaDados(ctx, { erros: { senhaNova: 'Escolha uma senha diferente da atual.' } }), 400);
+    }
     db.collection('customers').update(req.user.id, { senhaHash: hashPassword(nova) });
+    // A sessão atual permanece; qualquer outro navegador perde o acesso.
+    revogarSessoes(db, 'customer', req.user.id, { preservar: req.session?.id });
+    invalidarRecuperacoesSenha(db, req.user.id);
     logCustomer(db, req.user.id, 'alterou_senha', 'cliente', req.user.id, {}, req);
     res.redirect('/conta/dados?senha=ok');
   });
