@@ -14,12 +14,14 @@ import { podeVender, precoVigenteCentavos, estoqueDisponivel } from './catalog.j
 import { resolverFreteEscolhido } from './freight.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
 import { logSystem } from './audit.js';
+import { installmentOptions } from './payments/index.js';
 
 export const STATUS_FINANCEIRO = {
   pendente: { id: 'pendente', nome: 'Aguardando pagamento', cor: '#b26a00', bg: '#fff4d6' },
   aprovado: { id: 'aprovado', nome: 'Pagamento aprovado', cor: '#0b7a3d', bg: '#dcf5e6' },
   recusado: { id: 'recusado', nome: 'Pagamento recusado', cor: '#a32020', bg: '#fde3e3' },
   estornado: { id: 'estornado', nome: 'Estornado', cor: '#5a3ea0', bg: '#ece6fb' },
+  estorno_solicitado: { id: 'estorno_solicitado', nome: 'Estorno solicitado', cor: '#a35a00', bg: '#fff4d6' },
   expirado: { id: 'expirado', nome: 'Expirado', cor: '#6b6b6b', bg: '#eeeeee' },
 };
 
@@ -101,6 +103,8 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
  */
 export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cupomCodigo = null, req = null }) {
   const avisos = [];
+  const loja = db.collection('settings').get('loja') || {};
+  if (loja.lojaAberta === false) return { ok: false, erro: 'A loja está fechada para novos pedidos.' };
   if (!cart || !(cart.itens || []).length) return { ok: false, erro: 'Carrinho vazio.' };
   if (!endereco?.cep) return { ok: false, erro: 'Informe o CEP de entrega.' };
 
@@ -168,10 +172,29 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
   if (!frete.ok) return { ok: false, erro: frete.erro, codigo: 'FRETE_INDISPONIVEL' };
 
   const freteCentavos = frete.valor;
-  const totalCentavos = Math.max(0, subtotalCentavos - descontoCentavos + freteCentavos);
+  const baseCentavos = Math.max(0, subtotalCentavos - descontoCentavos + freteCentavos);
+  if (baseCentavos < Number(loja.valorMinimoPedido || 0)) {
+    return { ok: false, erro: 'O pedido não atingiu o valor mínimo da loja.' };
+  }
+  const pagamentos = db.collection('settings').get('pagamentos') || db.collection('settings').get('payments') || {};
+  let descontoPixCentavos = 0;
+  let acrescimoJurosCentavos = 0;
+  let parcelasValidadas = 1;
+  if (metodoPagamento === 'pix') {
+    const percentual = Math.max(0, Math.min(100, Number(pagamentos.descontoPixPercentual) || 0));
+    descontoPixCentavos = Math.round(baseCentavos * percentual / 100);
+  } else if (metodoPagamento === 'credit_card') {
+    if (!Number.isInteger(Number(parcelas)) || Number(parcelas) < 1) return { ok: false, erro: 'Parcelas inválidas.' };
+    const plano = installmentOptions(db, baseCentavos).find((opt) => opt.numero === Number(parcelas));
+    if (!plano) return { ok: false, erro: 'Parcelamento não permitido.' };
+    parcelasValidadas = plano.numero;
+    acrescimoJurosCentavos = plano.total - baseCentavos;
+  } else if (metodoPagamento !== 'debit_card') {
+    return { ok: false, erro: 'Meio de pagamento inválido.' };
+  }
+  const totalCentavos = baseCentavos - descontoPixCentavos + acrescimoJurosCentavos;
 
   // 4) Proteção contra pedido duplicado (mesmo cliente/carrinho nos últimos 60s)
-  const codigo = proximoCodigo(db);
   const agora = Date.now();
   const duplicado = db.collection('orders').findOne((o) =>
     o.clienteId === (cliente?.id || null) &&
@@ -182,6 +205,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     return { ok: false, erro: 'Este pedido já foi registrado. Acompanhe em "Meus pedidos".', codigo: 'DUPLICADO', pedido: duplicado };
   }
 
+  const codigo = proximoCodigo(db);
   // 5) Reserva de estoque
   for (const item of itens) {
     registrarMovimentoEstoque(db, {
@@ -206,7 +230,9 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     },
     itens,
     subtotalCentavos,
-    descontoCentavos,
+    descontoCentavos: descontoCentavos + descontoPixCentavos,
+    descontoPixCentavos,
+    acrescimoJurosCentavos,
     cupom: cupomAplicado,
     freteCentavos,
     freteOpcao: {
@@ -219,7 +245,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     },
     totalCentavos,
     metodoPagamento, // pix | credit_card | debit_card
-    parcelas: metodoPagamento === 'credit_card' ? Math.max(1, Number(parcelas) || 1) : 1,
+    parcelas: parcelasValidadas,
     statusFinanceiro: 'pendente',
     statusOperacional: 'aguardando_pagamento',
     endereco: { ...endereco },
@@ -258,23 +284,77 @@ export function adicionarHistorico(db, pedido, { tipo, status, obs = '', por = '
   return db.collection('orders').update(pedido.id, { historico, atualizadoEm: nowISO() });
 }
 
+
+/**
+ * Cada reserva é contabilizada pela sua movimentação vinculada ao pedido.
+ * O estoque de outro pedido nunca pode ser consumido durante a liberação.
+ */
+function reservaAtiva(db, pedidoId, produtoId) {
+  const movimentos = db.collection('stockMovements').find((m) =>
+    m.pedidoId === pedidoId && m.produtoId === produtoId);
+  const soma = (tipo) => movimentos.filter((m) => m.tipo === tipo)
+    .reduce((v, m) => v + Number(m.quantidade || 0), 0);
+  return Math.max(0, soma('reserva') - soma('liberacao') - soma('saida'));
+}
+
+function liberarReserva(db, pedido) {
+  const itens = [];
+  for (const item of pedido.itens || []) {
+    const qtd = reservaAtiva(db, pedido.id, item.produtoId);
+    if (!qtd) continue;
+    const p = db.collection('products').get(item.produtoId);
+    if (!p || Number(p.estoque?.reservado || 0) < qtd) {
+      return { ok: false, erro: 'Reserva inconsistente; requer conferência manual.' };
+    }
+    itens.push({ produtoId: item.produtoId, quantidade: qtd });
+  }
+  for (const item of itens) registrarMovimentoEstoque(db, {
+    ...item, tipo: 'liberacao', origem: 'pedido_cancelado_ou_expirado', pedidoId: pedido.id,
+    observacao: `Liberação de reserva — pedido ${pedido.codigo}`,
+  });
+  return { ok: true };
+}
+
 export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por = 'sistema', pagamentoId = null } = {}) {
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
+  if (!STATUS_FINANCEIRO[status]) return { ok: false, erro: 'Status financeiro inválido.' };
   const anterior = pedido.statusFinanceiro;
   if (anterior === status) return { ok: true, pedido, semAlteracao: true };
+  const transicoes = {
+    pendente: ['aprovado', 'recusado', 'expirado'],
+    aprovado: ['estorno_solicitado', 'estornado'],
+    estorno_solicitado: ['estornado'],
+    recusado: [], expirado: [], estornado: [],
+  };
+  if (!transicoes[anterior]?.includes(status)) {
+    return { ok: false, erro: `Transição financeira não permitida: ${anterior} → ${status}.` };
+  }
+  if (status === 'aprovado' && pedido.statusOperacional === 'cancelado') {
+    return { ok: false, erro: 'Pedido cancelado não pode ser reativado; exige conciliação.' };
+  }
+  if (status === 'estornado') {
+    const pagamento = db.collection('payments').get(pedido.pagamentoId);
+    if (!pagamento || pagamento.status !== 'refunded') {
+      return { ok: false, erro: 'O provedor ainda não confirmou o estorno.' };
+    }
+  }
 
   const patch = { statusFinanceiro: status, atualizadoEm: nowISO(), pagamentoId: pagamentoId || pedido.pagamentoId };
-
-  if (status === 'aprovado' && anterior !== 'aprovado') {
-    // Converte reserva em saída definitiva e conta como venda
-    for (const item of pedido.itens) {
+  if (status === 'aprovado') {
+    // Valide todos os itens ANTES de modificar o primeiro.
+    for (const item of pedido.itens || []) {
+      const p = db.collection('products').get(item.produtoId);
+      if (!p || reservaAtiva(db, pedido.id, item.produtoId) < item.quantidade ||
+          Number(p.estoque?.reservado || 0) < item.quantidade ||
+          Number(p.estoque?.quantidade || 0) < item.quantidade) {
+        return { ok: false, erro: 'Reserva deste pedido insuficiente; conciliação necessária.' };
+      }
+    }
+    for (const item of pedido.itens || []) {
       registrarMovimentoEstoque(db, {
-        produtoId: item.produtoId,
-        tipo: 'saida',
-        quantidade: item.quantidade,
-        origem: 'pedido_aprovado',
-        pedidoId: pedido.id,
+        produtoId: item.produtoId, tipo: 'saida', quantidade: item.quantidade,
+        origem: 'pedido_aprovado', pedidoId: pedido.id,
         observacao: `Saída referente ao pedido ${pedido.codigo}`,
       });
       const p = db.collection('products').get(item.produtoId);
@@ -282,11 +362,9 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
     }
     patch.statusOperacional = 'em_separacao';
   }
-  if (['recusado', 'cancelado'].includes(status)) {
-    liberarReserva(db, pedido);
-  }
-  if (status === 'expirado') {
-    liberarReserva(db, pedido);
+  if (status === 'recusado' || status === 'expirado') {
+    const liberacao = liberarReserva(db, pedido);
+    if (!liberacao.ok) return liberacao;
   }
 
   const atualizado = db.collection('orders').update(pedidoId, patch);
@@ -298,54 +376,37 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
   if (!STATUS_OPERACIONAL[status]) return { ok: false, erro: 'Status operacional inválido.' };
+  if (status === 'cancelado') return { ok: false, erro: 'Use o fluxo de cancelamento validado.' };
+  if (pedido.statusOperacional === 'cancelado') return { ok: false, erro: 'Pedido cancelado não pode ser reativado.' };
+  if (pedido.statusFinanceiro !== 'aprovado' && status !== pedido.statusOperacional) {
+    return { ok: false, erro: 'Pedido não pago não pode avançar operacionalmente.' };
+  }
   const patch = { statusOperacional: status, atualizadoEm: nowISO() };
   if (rastreio) patch.rastreio = { ...(pedido.rastreio || {}), ...rastreio };
   if (status === 'enviado' && !pedido.enviadoEm) patch.enviadoEm = nowISO();
   if (status === 'entregue' && !pedido.entregueEm) patch.entregueEm = nowISO();
-  if (status === 'cancelado') {
-    patch.statusFinanceiro = pedido.statusFinanceiro === 'aprovado' ? 'estornado' : 'recusado';
-    liberarReserva(db, pedido);
-    if (pedido.statusFinanceiro === 'aprovado') {
-      // devolve ao estoque (já houve baixa)
-      for (const item of pedido.itens) {
-        registrarMovimentoEstoque(db, {
-          produtoId: item.produtoId,
-          tipo: 'entrada',
-          quantidade: item.quantidade,
-          origem: 'cancelamento_pos_aprovacao',
-          pedidoId: pedido.id,
-          observacao: `Devolução ao estoque — pedido ${pedido.codigo} cancelado após aprovação`,
-        });
-      }
-    }
-  }
   db.collection('orders').update(pedidoId, patch);
   adicionarHistorico(db, db.collection('orders').get(pedidoId), { tipo: 'operacional', status, obs, por });
   return { ok: true, pedido: db.collection('orders').get(pedidoId) };
 }
 
-function liberarReserva(db, pedido) {
-  const jaLiberou = (db.collection('stockMovements').all()).some((m) => m.pedidoId === pedido.id && m.tipo === 'liberacao');
-  if (jaLiberou) return;
-  for (const item of pedido.itens) {
-    registrarMovimentoEstoque(db, {
-      produtoId: item.produtoId,
-      tipo: 'liberacao',
-      quantidade: item.quantidade,
-      origem: 'pedido_cancelado_ou_expirado',
-      pedidoId: pedido.id,
-      observacao: `Liberação de reserva — pedido ${pedido.codigo}`,
-    });
-  }
-}
-
 export function cancelarPedido(db, pedidoId, { motivo = '', por = 'sistema' } = {}) {
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
-  if (['entregue', 'cancelado'].includes(pedido.statusOperacional)) {
-    return { ok: false, erro: `Pedido ${pedido.statusOperacional} não pode ser cancelado.` };
+  if (['entregue', 'cancelado', 'enviado', 'saiu_para_entrega'].includes(pedido.statusOperacional)) {
+    return { ok: false, erro: 'Pedido expedido, entregue ou cancelado exige outro fluxo.' };
   }
-  return atualizarStatusOperacional(db, pedidoId, 'cancelado', { obs: motivo, por });
+  if (['aprovado', 'estorno_solicitado'].includes(pedido.statusFinanceiro)) {
+    return { ok: false, erro: 'Pagamento aprovado: confirme o estorno no provedor antes do cancelamento.' };
+  }
+  if (pedido.statusFinanceiro === 'pendente') {
+    const r = atualizarStatusFinanceiro(db, pedido.id, 'recusado', { obs: 'Cancelamento antes da aprovação.', por });
+    if (!r.ok) return r;
+  }
+  db.collection('orders').update(pedidoId, { statusOperacional: 'cancelado', atualizadoEm: nowISO() });
+  adicionarHistorico(db, db.collection('orders').get(pedidoId), { tipo: 'operacional', status: 'cancelado', obs: motivo, por });
+  // O cancelamento não representa uma devolução física de mercadoria.
+  return { ok: true, pedido: db.collection('orders').get(pedidoId) };
 }
 
 export function pedidosDoCliente(db, clienteId) {
