@@ -442,6 +442,23 @@
     }
   });
 
+  /* ------------ Pix pago: consultar status sem nova cobrança ------------ */
+  function iniciarAtualizacaoPix() {
+    if (!document.querySelector('[data-pix-status-auto]')) return;
+    // Recarregar a tela do próprio pedido aciona somente GET autenticado
+    // /v1/payments/{id}; não cria outra cobrança. No servidor há cooldown
+    // persistido de 60s para evitar consultar o provedor em excesso.
+    let ultimaTentativa = Date.now();
+    const atualizar = () => {
+      const agora = Date.now();
+      if (document.visibilityState !== 'visible' || agora - ultimaTentativa < 60_000) return;
+      ultimaTentativa = agora;
+      window.location.reload();
+    };
+    setInterval(atualizar, 15_000);
+    document.addEventListener('visibilitychange', atualizar);
+  }
+
   /* ----------------------------- init ------------------------------- */
   document.addEventListener('DOMContentLoaded', () => {
     iniciarCarrosseis();
@@ -450,6 +467,7 @@
     iniciarCookies();
     iniciarCheckout();
     iniciarPagamento();
+    iniciarAtualizacaoPix();
     atualizarCarrinho();
   });
 })();
