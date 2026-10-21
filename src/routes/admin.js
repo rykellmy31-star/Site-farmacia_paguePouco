@@ -70,7 +70,7 @@ function ctxAdmin(req, db) {
   return {
     req, db, settings,
     adminUser: req.adminUser,
-    csrf: req.session?.csrf || '',
+    csrf: csrfToken(req),
     podeAprovar: can(req.adminUser, 'produtos.aprovar') || can(req.adminUser, 'sanitario.*'),
     permissoes: {
       podeGerenciarUsuarios: req.adminUser?.role === 'super_admin',
