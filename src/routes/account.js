@@ -123,8 +123,11 @@ export function registrarRotasConta(app, db) {
     const ctx = criarContexto(req, db);
     const email = String(req.body.email || '').trim().toLowerCase();
     const cliente = clientes().findOne((c) => String(c.email || '').toLowerCase() === email);
-    // Resposta genérica (não revela se o e-mail existe — boa prática de segurança)
-    if (cliente) {
+    // Sem transporte de e-mail em produção, não gere um token secreto que
+    // jamais chegará ao destinatário. Nos testes locais em DEV_MODE, a fila
+    // permite exercitar recuperação sem provedor externo.
+    // A resposta continua genérica para não revelar contas existentes.
+    if (cliente && (config.mail.enabled || config.isDev)) {
       const token = randomToken(32);
       db.collection('passwordTokens').insert({
         token, clienteId: cliente.id, usado: false,
