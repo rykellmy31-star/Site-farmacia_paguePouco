@@ -168,19 +168,44 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(signed.status, 303);
   assert.equal(signed.headers.get('location'), '/admin');
   assert.ok(cookies.get('pp_admin_sess'));
-  assert.equal((await call('/admin')).status, 200);
+  const dashboard = await call('/admin');
+  assert.equal(dashboard.status, 200);
+  const dashboardHtml = await dashboard.text();
+  const adminCsrf = /window\\.PP_ADMIN=({[^<]+?});<\\/script>/.exec(dashboardHtml);
+  assert.ok(adminCsrf, 'O painel precisa publicar o token CSRF para ações AJAX.');
+  const adminToken = JSON.parse(adminCsrf[1]).csrf;
+  assert.ok(adminToken, 'O token CSRF do administrador não pode ficar vazio.');
+  assert.notEqual(adminToken, csrf, 'O token administrativo não pode ser o do visitante.');
+  const adminFormHtml = await (await call('/admin/configuracoes')).text();
+  assert.match(adminFormHtml, new RegExp('name="_csrf" value="' + adminToken + '"'));
+
+  // Reproduz o erro observado pelo usuário: formulário administrativo real,
+  // com token de visitante, não pode salvar; com token da sessão, deve salvar.
+  const rejectedSave = await call('/admin/api/config/seo', {
+    method: 'POST', body: new URLSearchParams({ _csrf: csrf, tituloPadrao: 'CSRF inválido' }),
+  });
+  assert.equal(rejectedSave.status, 403);
+  const saved = await call('/admin/api/config/seo', {
+    method: 'POST', body: new URLSearchParams({ _csrf: adminToken, tituloPadrao: 'Teste de edição persistente' }),
+  });
+  assert.equal(saved.status, 303);
+  assert.match(saved.headers.get('location'), /\\/admin\\/configuracoes/);
+  const loginAgain = await call('/admin/login');
+  assert.equal(loginAgain.status, 303, 'Sessão administrativa ativa redireciona ao painel.');
+  assert.equal(loginAgain.headers.get('location'), '/admin');
 
   const form = new FormData();
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="green"/></svg>';
-  form.append('_csrf', csrf);
+  form.append('_csrf', adminToken);
   form.append('file', new Blob([svg], { type: 'image/svg+xml' }), 'teste.svg');
   const uploaded = await call('/admin/api/upload', { method: 'POST', body: form });
   assert.equal(uploaded.status, 200);
   const uploadResult = await uploaded.json();
-  const backup = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: csrf }) });
+  const backup = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: adminToken }) });
   assert.equal(backup.status, 200);
   const snapshot = await backup.json();
   assert.equal(snapshot.collections.admins.length, 1);
+  assert.equal(snapshot.collections.settings.find(x => x.id === 'seo')?.tituloPadrao, 'Teste de edição persistente');
   assert.equal('__meta' in snapshot.collections, false);
   const media = snapshot.collections.midia.find(item => item.nome === 'teste.svg');
   assert.ok(media, JSON.stringify(uploadResult));
@@ -196,5 +221,6 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const check = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: csrf }) });
   const recovered = await check.json();
   assert.equal(recovered.collections.admins.length, 1, 'bootstrap não duplica usuários');
+  assert.equal(recovered.collections.settings.find(x => x.id === 'seo')?.tituloPadrao, 'Teste de edição persistente', 'Edição de texto persiste após reiniciar o Worker.');
   assert.equal(recovered.collections.midia.filter(item => item.id === media.id).length, 1);
 });
