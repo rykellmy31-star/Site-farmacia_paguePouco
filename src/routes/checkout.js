@@ -344,7 +344,7 @@ export function registrarRotasCheckout(app, db) {
       html: `<h1>Recebemos seu pedido ${escapeHtml(pedido.codigo)}</h1>
         <p>Olá, ${escapeHtml(String(pedido.cliente?.nome || '').split(' ')[0])}!</p>
         <p>Registramos seu pedido no valor de <strong>${escapeHtml((Number(pedido.totalCentavos) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong>.</p>
-        <p>Assim que o pagamento for confirmado, seu pedido entra em separação e você recebe um novo aviso.</p>
+        <p>Assim que o pagamento for confirmado, seu pedido entra em separação. Acompanhe as atualizações em Meus pedidos; o envio por e-mail depende da configuração de um serviço de entrega.</p>
         <p><a href="${config.publicBaseUrl}/conta/pedidos/${pedido.codigo}">Acompanhar pedido</a></p>`,
     }).catch(() => {});
 
