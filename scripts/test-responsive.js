@@ -160,9 +160,13 @@ try{
         assert(value.buy&&value.buyIcon,label+': CTA do produto ausente');
         assert(value.buyIcon.width>=15&&value.buyIcon.width<=19&&value.buyIcon.height<=19,
           label+': carrinho gigante '+JSON.stringify(value));
-        assert(value.buy.width<=230,label+': botão exagerado '+JSON.stringify(value));
-        if(width>=768)assert(value.buy.width<220,
-          label+': botão de desktop ocupa largura excessiva');
+        if(width>=768) {
+          assert(value.buy.width<220,label+': botão de desktop ocupa largura excessiva '+JSON.stringify(value));
+        } else {
+          // Mobile mantém o botão largo para facilitar o toque, sem recorte.
+          assert(value.buy.width<=value.client+2 && value.buy.left>=0,
+            label+': botão mobile ultrapassa a tela '+JSON.stringify(value));
+        }
       }else{
         assert(value.table&&value.table.width>100,label+': tabela administrativa indisponível');
       }
