@@ -22,7 +22,7 @@ A verificação rejeita arquivos incompletos, hashes SHA-256 divergentes, chaves
 
 - **Não existe botão de restaurar a produção**, nem restauração remota do Durable Object. A cópia temporária serve somente para testar recuperabilidade. Nunca substitua manualmente a instância `loja-principal-v1`.
 - Não há agendamento de backup externo, pacote automatizado completo de mídias, ensaio real de perda de Worker, procedimento de corte/retorno ou restauração atômica homologada no SQLite do Durable Object.
-- Os backups contêm dados pessoais, históricos de pedidos e hashes de senha. Não suba arquivos JSON ou mídias privadas ao GitHub público; use armazenamento seguro com acesso controlado.
+- Os backups contêm dados pessoais, históricos de pedidos e hashes de senha. **Não** incluem sessões autenticadas, tokens ativos de redefinição de senha ou o segredo interno do Worker, pois devem expirar numa recuperação. Não suba arquivos JSON ou mídias privadas ao GitHub público; use armazenamento seguro com acesso controlado.
 - Para declarar a recuperação de desastres em produção **homologada**, ainda serão necessários um destino seguro, controle de versão/retensão, exportação integral automatizada, procedimento ensaiado de restauração atômica e aprovação explícita antes de aplicar qualquer restauração real.
 - Esta rotina **não exige ativar R2** apenas para validar o banco e os arquivos existentes.
 
