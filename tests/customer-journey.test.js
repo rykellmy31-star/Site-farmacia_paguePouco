@@ -143,6 +143,17 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(product.precoCentavos, 1990);
   assert.equal(product.estoque.quantidade, 10);
 
+  // Texto inserido por terceiros nunca vira fórmula executável ao exportar.
+  const csvProbe = await admin.form('/admin/api/produtos', {
+    nome: '=SUM(2,3) Produto Teste', sku: 'CSV-DEFESA-001',
+    preco: '1.00', quantidade: '0', classificacao: 'nao_aplicavel', ativo: '1',
+  });
+  assert.equal(csvProbe.status, 200);
+  const productCsv = await admin.get('/admin/api/produtos/exportar.csv');
+  assert.equal(productCsv.status, 200);
+  assert.ok((await productCsv.text()).includes('"\'=SUM(2,3) Produto Teste"'),
+    'exportação CSV deve neutralizar fórmulas em nomes cadastrados');
+
   const client = new Browser(origin);
   assert.equal((await client.get('/')).status, 200);
   const search = await client.get('/busca?q=Sabonete%20Teste%20Jornada');
@@ -359,6 +370,65 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(afterDuplicate.payments.find(p => p.id === payment.id).eventos.length,
     afterApproval.payments.find(p => p.id === payment.id).eventos.length,
     'notificações duplicadas não devem criar eventos financeiros duplicados');
+
+  // Auditoria de relatórios: datas aplicadas também aos produtos mais
+  // vendidos. Um período futuro não deve exibir o ranking de hoje.
+  const hojeRelatorio = new Date().toISOString().slice(0, 10);
+  const relatorioAtual = await admin.get('/admin/relatorios?de=' + hojeRelatorio + '&ate=' + hojeRelatorio);
+  assert.equal(relatorioAtual.status, 200);
+  assert.match(await relatorioAtual.text(), /Sabonete Teste Jornada/);
+  const relatorioVazio = await admin.get('/admin/relatorios?de=2099-01-01&ate=2099-01-03');
+  assert.equal(relatorioVazio.status, 200);
+  assert.doesNotMatch(await relatorioVazio.text(), /Sabonete Teste Jornada/,
+    'rankings não devem mostrar produtos vendidos fora do período');
+  const relatorioInvalido = await admin.get('/admin/relatorios?de=2099-01-03&ate=2099-01-01');
+  assert.equal(relatorioInvalido.status, 400, 'filtro invertido deve ser recusado');
+  const csvVazio = await admin.get('/admin/api/relatorios/vendas.csv?de=2099-01-01&ate=2099-01-03');
+  assert.equal(csvVazio.status, 200);
+  assert.doesNotMatch(await csvVazio.text(), new RegExp(order.codigo),
+    'CSV de outro período não pode incluir venda atual');
+
+  // Criação de atendente real no SQLite local e teste das permissões de
+  // acesso, estorno, backup e redefinição segura da senha administrativa.
+  const staffEmail = 'atendente-auditoria@tests.example';
+  const staffPassword = 'SomenteAtendente123';
+  const createdStaff = await admin.form('/admin/api/usuarios', {
+    nome: 'Atendente Auditoria', email: staffEmail, senha: staffPassword, role: 'atendente',
+  });
+  assert.equal(createdStaff.status, 303, 'superadministrador cria atendente');
+  const staffRecord = (await snapshot()).admins.find(a => a.email === staffEmail);
+  assert.ok(staffRecord);
+  const staff = new Browser(origin);
+  await staff.token('/admin/login');
+  const staffLogin = await staff.form('/admin/login', { email: staffEmail, senha: staffPassword });
+  assert.equal(staffLogin.status, 303);
+  await staff.token('/admin/pedidos');
+  assert.equal((await staff.get('/admin/pedidos')).status, 200);
+  assert.equal((await staff.get('/admin/sistema')).status, 403, 'backup não deve abrir para atendente');
+  assert.equal((await staff.get('/admin/usuarios')).status, 403, 'atendente não administra usuários');
+  assert.equal((await staff.get('/admin/relatorios')).status, 403, 'relatórios financeiros exigem permissão');
+  assert.equal((await staff.get('/admin/api/relatorios/vendas.csv')).status, 403, 'CSV financeiro deve ser protegido');
+  assert.equal((await staff.get('/admin/api/sistema/backup/midias.json')).status, 403, 'mídia privada de backup exige superadmin');
+  const unauthorizedRefund = await staff.json('/admin/api/pedidos/' + order.id + '/estornar', {});
+  assert.equal(unauthorizedRefund.status, 403, 'atendente não pode estornar cobranças');
+  assert.equal((await unauthorizedRefund.json()).ok, false);
+  const unauthorizedCancel = await staff.json('/admin/api/pedidos/' + order.id + '/cancelar', {});
+  assert.equal(unauthorizedCancel.status, 403, 'cancelar pedido pago exige poder de estorno');
+
+  const weakReset = await admin.json('/admin/api/usuarios/' + staffRecord.id + '/senha', { senha: 'abcdefgh' });
+  assert.equal(weakReset.status, 400, 'superadmin não pode definir senha fraca');
+  const safeReset = await admin.json('/admin/api/usuarios/' + staffRecord.id + '/senha', { senha: '' });
+  assert.equal(safeReset.status, 200);
+  const passwordReset = await safeReset.json();
+  assert.equal(passwordReset.ok, true);
+  assert.ok(passwordReset.senhaProvisoria.length >= 20, 'senha automática deve ter alta entropia');
+  assert.equal((await staff.get('/admin/pedidos')).status, 303, 'reset encerra sessão anterior do atendente');
+  await staff.token('/admin/login');
+  const staffRelogin = await staff.form('/admin/login', {
+    email: staffEmail, senha: passwordReset.senhaProvisoria,
+  });
+  assert.equal(staffRelogin.status, 303);
+  assert.equal((await staff.get('/admin/pedidos')).status, 200, 'nova senha permite acesso após reset');
 
   // Painel de vendas: o pedido aprovado deve aparecer em relatórios e
   // exportações sem permitir acesso anônimo aos dados.

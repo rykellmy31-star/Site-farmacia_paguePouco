@@ -315,6 +315,37 @@ function liberarReserva(db, pedido) {
   return { ok: true };
 }
 
+/**
+ * Pré-validação sem mutações: impede aprovar cobranças simuladas quando
+ * o pedido perdeu produtos, saldo ou reservas. Agrupa linhas repetidas
+ * do mesmo produto para não aprovar uma compra sem estoque suficiente.
+ */
+export function validarReservaParaAprovacao(db, pedidoId) {
+  const pedido = db.collection('orders').get(pedidoId);
+  if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
+  if (pedido.statusFinanceiro !== 'pendente' || pedido.statusOperacional === 'cancelado') {
+    return { ok: false, erro: 'Este pedido não está apto a receber aprovação.' };
+  }
+  if (!(pedido.itens || []).length) return { ok: false, erro: 'Pedido sem itens válidos.' };
+  const quantidades = new Map();
+  for (const item of pedido.itens) {
+    const qtd = Number(item.quantidade);
+    if (!item.produtoId || !Number.isSafeInteger(qtd) || qtd <= 0) {
+      return { ok: false, erro: 'Quantidade inválida em item do pedido.' };
+    }
+    quantidades.set(item.produtoId, (quantidades.get(item.produtoId) || 0) + qtd);
+  }
+  for (const [produtoId, quantidade] of quantidades) {
+    const produto = db.collection('products').get(produtoId);
+    if (!produto || reservaAtiva(db, pedido.id, produtoId) < quantidade ||
+        Number(produto.estoque?.reservado || 0) < quantidade ||
+        Number(produto.estoque?.quantidade || 0) < quantidade) {
+      return { ok: false, erro: 'Reserva deste pedido insuficiente; conciliação necessária.' };
+    }
+  }
+  return { ok: true, pedido };
+}
+
 export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por = 'sistema', pagamentoId = null } = {}) {
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
@@ -342,15 +373,8 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
 
   const patch = { statusFinanceiro: status, atualizadoEm: nowISO(), pagamentoId: pagamentoId || pedido.pagamentoId };
   if (status === 'aprovado') {
-    // Valide todos os itens ANTES de modificar o primeiro.
-    for (const item of pedido.itens || []) {
-      const p = db.collection('products').get(item.produtoId);
-      if (!p || reservaAtiva(db, pedido.id, item.produtoId) < item.quantidade ||
-          Number(p.estoque?.reservado || 0) < item.quantidade ||
-          Number(p.estoque?.quantidade || 0) < item.quantidade) {
-        return { ok: false, erro: 'Reserva deste pedido insuficiente; conciliação necessária.' };
-      }
-    }
+    const reserva = validarReservaParaAprovacao(db, pedidoId);
+    if (!reserva.ok) return reserva;
     for (const item of pedido.itens || []) {
       registrarMovimentoEstoque(db, {
         produtoId: item.produtoId, tipo: 'saida', quantidade: item.quantidade,
@@ -448,9 +472,9 @@ export function metricas(db, { de = null, ate = null } = {}) {
   };
 }
 
-export function vendasPorDia(db, dias = 30) {
+export function vendasPorDia(db, dias = 30, fim = new Date()) {
   const out = [];
-  const hoje = new Date();
+  const hoje = new Date(fim);
   for (let i = dias - 1; i >= 0; i--) {
     const d = new Date(hoje.getTime() - i * 86400000);
     const key = d.toISOString().slice(0, 10);
@@ -466,10 +490,12 @@ export function vendasPorDia(db, dias = 30) {
   return out;
 }
 
-export function produtosMaisVendidos(db, limite = 10) {
+export function produtosMaisVendidos(db, limite = 10, { de = null, ate = null } = {}) {
   const mapa = new Map();
   for (const o of db.collection('orders').all()) {
     if (o.statusFinanceiro !== 'aprovado') continue;
+    const dia = String(o.criadoEm || '').slice(0, 10);
+    if ((de && dia < de) || (ate && dia > ate)) continue;
     for (const it of o.itens || []) {
       const atual = mapa.get(it.produtoId) || { produtoId: it.produtoId, nome: it.nome, quantidade: 0, receitaCentavos: 0 };
       atual.quantidade += it.quantidade;
