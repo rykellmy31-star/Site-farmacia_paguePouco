@@ -207,7 +207,16 @@ export async function getStatus({ db, payment, config }) {
   if (payment.metodo === 'checkout_pro') return { ok: true, status: payment.status, pagamento: payment };
   const res = await mpFetch(`/v1/payments/${mpId}`, { config });
   if (!res.ok) return { ok: false, erro: `Falha ao consultar pagamento: ${res.status}` };
-  const d = res.data;
+  const d = res.data || {};
+  const pedido = db.collection('orders').get(payment.pedidoId);
+  const valor = Math.round(Number(d.transaction_amount) * 100);
+  if (!pedido || pedido.pagamentoId !== payment.id ||
+      String(d.id) !== mpId || d.external_reference !== pedido.codigo ||
+      d.currency_id !== 'BRL' || !Number.isSafeInteger(valor) ||
+      valor !== Number(payment.valorCentavos) || valor !== Number(pedido.totalCentavos) ||
+      (d.metadata?.pedido_id && String(d.metadata.pedido_id) !== String(pedido.id))) {
+    return { ok: false, erro: 'Consulta retornou cobrança incompatível com o pedido. Conciliação necessária.' };
+  }
   const upd = db.collection('payments').update(payment.id, {
     status: d.status || payment.status,
     statusDetalhe: d.status_detail || null,
