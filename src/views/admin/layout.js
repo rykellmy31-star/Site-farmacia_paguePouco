@@ -151,9 +151,10 @@ export function etiquetaStatus(status) {
   const mapa = {
     pendente: 'laranja', aprovado: 'verde', recusado: 'vermelha', estornado: 'azul', expirado: 'cinza',
     aguardando_pagamento: 'laranja', em_separacao: 'azul', preparando_envio: 'azul', enviado: 'azul',
-    saiu_para_entrega: 'azul', entregue: 'verde', cancelado: 'vermelha', ativo: 'verde', inativo: 'cinza',
+    saiu_para_entrega: 'azul', entregue: 'verde', cancelado: 'vermelha', devolucao_em_analise: 'laranja', estorno_em_analise: 'laranja', ativo: 'verde', inativo: 'cinza',
   };
-  return `<span class="etiqueta ${mapa[status] || 'cinza'}">${e(String(status || '').replace(/_/g, ' '))}</span>`;
+  const nome = ({ devolucao_em_analise: 'Devolução em análise', estorno_em_analise: 'Estorno em análise' })[status] || String(status || '').replace(/_/g, ' ');
+  return `<span class="etiqueta ${mapa[status] || 'cinza'}">${e(nome)}</span>`;
 }
 
 export function graficoBarras(dados, { rotulo = 'valor' } = {}) {
