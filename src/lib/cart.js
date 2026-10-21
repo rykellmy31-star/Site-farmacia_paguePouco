@@ -163,9 +163,23 @@ export function validarCupom(db, codigo, { subtotalCentavos, clienteId = null, i
   const cupom = db.collection('coupons').findOne((c) => String(c.codigo || '').toUpperCase() === String(codigo || '').toUpperCase());
   if (!cupom) return { ok: false, erro: 'Cupom não encontrado.' };
   if (!cupom.ativo) return { ok: false, erro: 'Cupom inativo.' };
+  const valor = Number(cupom.valor);
+  if (!['percentual', 'fixo', 'frete_gratis'].includes(cupom.tipo) ||
+      (cupom.tipo !== 'frete_gratis' &&
+        (!Number.isFinite(valor) || valor <= 0 ||
+         (cupom.tipo === 'percentual' && valor > 100)))) {
+    return { ok: false, erro: 'Configuração de desconto inválida.' };
+  }
   const agora = Date.now();
-  if (cupom.validoDe && new Date(cupom.validoDe).getTime() > agora) return { ok: false, erro: 'Cupom ainda não está válido.' };
-  if (cupom.validoAte && new Date(cupom.validoAte).getTime() < agora) return { ok: false, erro: 'Cupom expirado.' };
+  if (cupom.validoDe && (!Number.isFinite(Date.parse(cupom.validoDe + 'T00:00:00.000Z')) ||
+      Date.parse(cupom.validoDe + 'T00:00:00.000Z') > agora)) {
+    return { ok: false, erro: 'Cupom ainda não está válido.' };
+  }
+  // Datas do painel são INCLUSIVAS: o cupom vale durante todo o dia final.
+  if (cupom.validoAte && (!Number.isFinite(Date.parse(cupom.validoAte + 'T23:59:59.999Z')) ||
+      Date.parse(cupom.validoAte + 'T23:59:59.999Z') < agora)) {
+    return { ok: false, erro: 'Cupom expirado.' };
+  }
   if (cupom.usoMaximo != null && Number(cupom.usos || 0) >= Number(cupom.usoMaximo)) return { ok: false, erro: 'Cupom esgotado.' };
   if (cupom.valorMinimo && subtotalCentavos < Number(cupom.valorMinimo)) {
     return { ok: false, erro: `Cupom válido para compras a partir de R$ ${(cupom.valorMinimo / 100).toFixed(2).replace('.', ',')}.` };
