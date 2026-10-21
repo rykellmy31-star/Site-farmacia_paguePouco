@@ -64,7 +64,7 @@ export class CloudStore {
    */
   exportData() {
     const collections = Object.create(null);
-    const proibidas = new Set(['__meta', 'sessions', 'passwordTokens', 'mailOutbox']);
+    const proibidas = new Set(['__meta', 'sessions', 'passwordTokens', 'mailOutbox', 'paymentSecrets']);
     for (const row of this.sql.exec('SELECT collection_name, doc FROM documents ORDER BY collection_name, rowid')) {
       if (proibidas.has(row.collection_name)) continue;
       (collections[row.collection_name] ||= []).push(JSON.parse(row.doc));
