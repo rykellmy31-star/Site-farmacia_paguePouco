@@ -81,7 +81,8 @@ export class LojaDurableObject extends DurableObject {
       await this.programarAlarmeFinanceiro();
       return response;
     }).catch(err => {
-      console.error('[worker] falha ao atender requisição:', err.message);
+      // Erros externos podem carregar URLs e segredos: nunca registrar a mensagem bruta.
+      console.error('[worker] falha ao atender requisição (detalhes omitidos)');
       return new Response('Não foi possível processar a solicitação. Tente novamente.',
         { status: 500, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
     });
