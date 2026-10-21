@@ -447,6 +447,16 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   await staff.token('/admin/login');
   const staffLogin = await staff.form('/admin/login', { email: staffEmail, senha: staffPassword });
   assert.equal(staffLogin.status, 303);
+  const painelAtendente = await staff.get('/admin');
+  assert.equal(painelAtendente.status, 200,
+    'atendente deve acessar painel inicial mesmo sem acesso a relatórios');
+  const painelRestrito = await painelAtendente.text();
+  assert.match(painelRestrito, /Painel da loja/);
+  assert.match(painelRestrito, /\/admin\/pedidos/);
+  assert.doesNotMatch(painelRestrito, /Receita \(pagos\)|Ticket médio|Vendas nos últimos 30 dias|Produtos mais vendidos/,
+    'painel de atendente não pode revelar dados agregados de faturamento');
+  assert.doesNotMatch(painelRestrito, /\/admin\/relatorios/,
+    'atendente não pode receber atalho financeiro');
   await staff.token('/admin/pedidos');
   assert.equal((await staff.get('/admin/pedidos')).status, 200);
   assert.equal((await staff.get('/admin/sistema')).status, 403, 'backup não deve abrir para atendente');
