@@ -263,6 +263,7 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
               ? 'Pedido em verificação' : 'Pedido registrado!'}</span>
         </h1>
         <p class="negrito">Pedido <strong>${e(pedido.codigo)}</strong></p>
+        ${pedido.vendedor?.nome ? `<p>Vendedor responsável: <strong>${e(pedido.vendedor.nome)}</strong></p>` : ''}
         <p>E-mail informado no pedido: <strong>${e(pedido.cliente?.email || '')}</strong>. O envio automático depende de um serviço de e-mail configurado.</p>
       </div>
 
