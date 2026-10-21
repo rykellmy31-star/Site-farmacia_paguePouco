@@ -318,7 +318,7 @@ export function telaCliente(ctx, { cliente, pedidos, enderecos }) {
 }
 
 /* ============================== PAGAMENTOS ============================== */
-export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, configPag }) {
+export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, configPag, credenciais = null, urlWebhook = '' }) {
   return paginaAdmin(ctx, {
     titulo: 'Pagamentos',
     ativo: 'pagamentos',
@@ -342,6 +342,42 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
         </div>`,
     })}
 
+    ${credenciais ? painel({
+      titulo: 'Integração Mercado Pago — Access Token e Pix',
+      corpo: `<p>Cadastre as credenciais da sua aplicação do Mercado Pago para o site gerar o Pix automaticamente e exibir o QR Code e o código Copia e Cola na confirmação do pedido.</p>
+        <p><strong>Credencial atual:</strong> ${credenciais.tokenConfigurado ? 'Configurada' : 'Não configurada'} ·
+          <strong>Origem:</strong> ${e(credenciais.origem)} ·
+          <strong>Ambiente:</strong> ${e(credenciais.ambiente)} ·
+          <strong>Assinatura dos webhooks:</strong> ${credenciais.webhookConfigurado ? 'Configurada' : 'Pendente'}.</p>
+        ${!credenciais.legivel ? '<div class="alerta erro">Não foi possível abrir as credenciais guardadas. Confira a chave de cifragem; cobranças bloqueadas.</div>' : ''}
+        ${!credenciais.cofrePreparado ? `<div class="alerta aviso">Antes de salvar pelo painel, configure uma única vez o secret <code>MP_CREDENTIALS_KEY</code> na Cloudflare, com pelo menos 32 caracteres aleatórios. O Access Token não deve ser colocado no GitHub.</div>` : ''}
+        <form method="post" action="/admin/api/mercadopago/credenciais" autocomplete="off">
+          <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+          <div class="campo-linha">
+            ${campoAdmin({ nome: 'ambiente', rotulo: 'Credenciais para', valor: credenciais.ambiente,
+              opcoes: [{ valor: 'testes', texto: 'Teste — sem cobrar clientes' }, { valor: 'producao', texto: 'Produção — pagamentos reais' }] })}
+          </div>
+          <div class="campo-linha">
+            <div class="campo"><label for="mpAccessToken">Access Token (privado) *</label>
+              <input id="mpAccessToken" name="accessToken" type="password" autocomplete="new-password" minlength="20" maxlength="2048" required placeholder="Cole o Access Token do Mercado Pago">
+              <span class="dica">Nunca será exibido novamente nesta página. Para atualizar, informe a credencial nova.</span></div>
+            <div class="campo"><label for="mpPublicKey">Public Key (opcional para Pix)</label>
+              <input id="mpPublicKey" name="publicKey" type="text" autocomplete="off" maxlength="512" placeholder="Cole a Public Key"></div>
+          </div>
+          <div class="campo"><label for="mpWebhookSecret">Assinatura secreta das notificações (necessária em produção)</label>
+            <input id="mpWebhookSecret" name="webhookSecret" type="password" autocomplete="new-password" maxlength="512" placeholder="Cole o secret de assinatura do webhook"></div>
+          <p class="texto-pequeno"><strong>URL para configurar nas notificações do Mercado Pago:</strong><br>
+            <code>${e(urlWebhook)}</code></p>
+          <button type="submit" class="botao">Salvar credenciais com segurança</button>
+          <p class="texto-pequeno texto-suave">Salvar credenciais não ativa cobranças reais automaticamente. Depois selecione Mercado Pago e confirme o ambiente correto abaixo.</p>
+        </form>
+        ${credenciais.origem === 'painel' ? `<form method="post" action="/admin/api/mercadopago/remover" class="mt-2">
+          <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+          <button type="submit" class="botao secundario">Remover credenciais guardadas no painel</button>
+        </form>` : ''}
+        <div class="alerta info mt-2 mb-0"><strong>Importante:</strong> o Pix real só é gerado após autenticação do Mercado Pago. Cartões reais continuam desativados até homologação da tokenização; o Pix não exige a Public Key no navegador.</div>`,
+    }) : ''}
+
     ${painel({
       titulo: 'Meios de pagamento e parcelamento',
       corpo: `<form method="post" action="/admin/api/config/pagamentos">
@@ -349,9 +385,10 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
         <div class="campo-linha">
           ${campoAdmin({ nome: 'provedor', rotulo: 'Provedor', valor: configPag.provedor || 'internal',
             opcoes: [{ valor: 'internal', texto: 'Provedor interno de testes (padrão)' }, { valor: 'mercadopago', texto: 'Mercado Pago' }],
-            dica: 'Para usar o Mercado Pago é necessário também configurar MP_ACCESS_TOKEN no servidor.' })}
-          ${campoAdmin({ nome: 'ambienteTestes', rotulo: 'Ambiente de testes', tipo: 'checkbox', valor: configPag.ambienteTestes !== false })}
+            dica: 'Configure o Access Token no formulário acima (Super Administrador) ou pelo secret MP_ACCESS_TOKEN na Cloudflare. Pix real só após ativação e homologação.' })}
+          ${campoAdmin({ nome: 'ambienteTestes', rotulo: 'Ambiente de testes (sem cobrar clientes)', tipo: 'checkbox', valor: configPag.ambienteTestes !== false })}
         </div>
+        <label class="check"><input type="checkbox" name="habilitarProducao" value="1"> Confirmo que verifiquei as credenciais de produção e autorizo cobranças reais quando o modo de testes estiver desmarcado.</label>
         <h4>Meios habilitados</h4>
         <div class="campo-linha">
           ${campoAdmin({ nome: 'meios_pix', rotulo: 'Pix', tipo: 'checkbox', valor: configPag.meios?.pix !== false })}
