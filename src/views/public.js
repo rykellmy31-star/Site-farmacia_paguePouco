@@ -339,13 +339,13 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
           </div>
 
           ${venda.ok && disponivel > 0 ? `
-          <div class="linha centro" style="gap:10px;flex-wrap:wrap">
+          <div class="linha centro acoes-compra-produto" style="gap:10px;flex-wrap:wrap">
             <div class="quantidade">
               <button type="button" data-qtd="-1" aria-label="Diminuir quantidade">−</button>
               <input type="number" id="quantidadeProduto" value="1" min="1" max="${Math.min(99, disponivel)}" aria-label="Quantidade">
               <button type="button" data-qtd="1" aria-label="Aumentar quantidade">+</button>
             </div>
-            <button class="botao destaque cresce" data-adicionar-carrinho="${e(produto.id)}" data-quantidade-input="quantidadeProduto">
+            <button class="botao destaque cresce botao-adicionar-cesta" data-adicionar-carrinho="${e(produto.id)}" data-quantidade-input="quantidadeProduto">
               ${ICONES.carrinho} Adicionar à cesta
             </button>
           </div>
