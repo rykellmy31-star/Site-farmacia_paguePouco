@@ -32,6 +32,10 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros })
           <option value="7" ${filtros.periodo === '7' ? 'selected' : ''}>Últimos 7 dias</option>
           <option value="30" ${filtros.periodo === '30' ? 'selected' : ''}>Últimos 30 dias</option>
         </select>
+        <label class="texto-pequeno" style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" name="pendencia" value="1" ${filtros.pendencia === '1' ? 'checked' : ''}>
+          Somente pagamentos a conferir
+        </label>
         <button class="botao secundario" type="submit">Filtrar</button>
         <a class="botao secundario" href="/admin/api/pedidos/exportar.csv" download>Exportar CSV</a>
       </form>`,
@@ -45,7 +49,11 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros })
           <td>${e(p.cliente?.nome || '—')}<br><span class="texto-pequeno texto-suave">${e(p.cliente?.email || '')}</span></td>
           <td>${(p.itens || []).reduce((a, i) => a + i.quantidade, 0)}</td>
           <td>${money(p.totalCentavos)}</td>
-          <td>${etiquetaStatus(p.statusFinanceiro)}</td>
+          <td>${etiquetaStatus(p.statusFinanceiro)}
+            ${p.statusFinanceiro === 'pendente' &&
+              ['criacao_em_andamento', 'conciliacao_necessaria'].includes(p.pendenciaPagamento)
+              ? '<div class="texto-pequeno"><strong>Conferir cobrança</strong></div>' : ''}
+          </td>
           <td>${etiquetaStatus(p.statusOperacional)}</td>
           <td>${formatDateTime(p.criadoEm)}</td>
           <td><a class="botao pequeno secundario" href="/admin/pedidos/${e(p.id)}">Abrir</a></td>
