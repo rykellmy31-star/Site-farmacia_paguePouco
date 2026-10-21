@@ -15,6 +15,7 @@ import { sendMail } from '../lib/mailer.js';
 import { config } from '../config.js';
 import { uid } from '../lib/store.js';
 import { vendedoresAtivos } from '../lib/sellers.js';
+import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 
 function exigirLoginCompra(req, res, db) {
   if (req.user) return true;
@@ -380,7 +381,7 @@ export function registrarRotasCheckout(app, db) {
 
   app.get('/checkout/confirmacao/:codigo', async (req, res) => {
     if (!exigirLoginCompra(req, res, db)) return;
-    const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id);
+    const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id && !pedidoOcultoDoCliente(o));
     if (!pedido) return void res.redirect('/conta/pedidos');
     await reconciliarPixAoConsultarPedido(db, pedido.id);
     const atualizado = db.collection('orders').get(pedido.id);
