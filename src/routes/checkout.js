@@ -223,7 +223,16 @@ export function registrarRotasCheckout(app, db) {
     const ctx = criarContexto(req, db);
     let cart = normalizeCart(db, ctx.cart).cart;
     ctx.cart = cart;
-    if (!cart.itens.length) return void res.redirect('/carrinho');
+    if (!cart.itens.length) {
+      // Em uma interrupção após registrar o pedido, a cesta original pode
+      // estar vazia enquanto o navegador ainda possui seu identificador.
+      // Redirecione SOMENTE o proprietário para o pedido já existente.
+      const anterior = req.user && db.collection('orders').findOne(o =>
+        o.carrinhoId === cart.id && o.clienteId === req.user.id &&
+        Date.now() - Date.parse(o.criadoEm) >= 0 &&
+        Date.now() - Date.parse(o.criadoEm) < 15 * 60_000);
+      return void res.redirect(anterior ? `/checkout/confirmacao/${anterior.codigo}` : '/carrinho');
+    }
     if (!cart.frete?.endereco) return void res.redirect('/checkout/endereco');
 
     const metodo = String(req.body.metodoPagamento || 'pix');
@@ -242,6 +251,13 @@ export function registrarRotasCheckout(app, db) {
     });
 
     if (!resultado.ok) {
+      // POST repetido de uma cesta registrada não deve confundir o cliente
+      // nem gerar cobrança adicional. A regra do pedido já validou o carrinho.
+      if (resultado.codigo === 'DUPLICADO' && resultado.pedido &&
+          req.user?.id === resultado.pedido.clienteId &&
+          resultado.pedido.carrinhoId === cart.id) {
+        return void res.redirect(`/checkout/confirmacao/${resultado.pedido.codigo}`);
+      }
       return void res.redirect('/checkout/pagamento?erro=' + encodeURIComponent(resultado.erro));
     }
 
@@ -296,7 +312,9 @@ export function registrarRotasCheckout(app, db) {
 
     if (cobranca && cobranca.ok && cobranca.pagamento) {
       const pagamentoId = cobranca.pagamento.id;
-      db.collection('orders').update(pedido.id, { pagamentoId });
+      db.collection('orders').update(pedido.id, {
+        pagamentoId, pendenciaPagamento: null,
+      });
       pedido.pagamentoId = pagamentoId;
     }
     db.collection('orders').update(pedido.id, {
