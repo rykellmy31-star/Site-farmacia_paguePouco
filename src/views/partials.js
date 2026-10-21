@@ -30,7 +30,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, parcelas = 3 } =
       ${bloqueio
         ? `<p class="aviso-sanitario mb-0">${e(bloqueio)}</p>`
         : disponivel > 0
-          ? `<button class="botao bloquinho botao-adicionar-cesta" data-adicionar-carrinho="${e(produto.id)}">${ICONES.carrinho}<span>Adicionar à cesta</span></button>`
+          ? `<button class="botao bloquinho" data-adicionar-carrinho="${e(produto.id)}">Adicionar à cesta</button>`
           : `<p class="sem-estoque mb-0">Produto esgotado</p>`}
     </div>
   </article>`;
