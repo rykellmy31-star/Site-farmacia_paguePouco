@@ -76,6 +76,11 @@ export const config = {
   sessionTTLHours: int(process.env.SESSION_TTL_HOURS, 24 * 30),
   adminSessionTTLHours: int(process.env.ADMIN_SESSION_TTL_HOURS, 12),
   trustProxy: bool(process.env.TRUST_PROXY, true),
+  inova: {
+    enabled: bool(process.env.INOVA_STOCK_ENABLED, false),
+    token: process.env.INOVA_STOCK_TOKEN || '',
+    maxAgeMinutes: int(process.env.INOVA_STOCK_MAX_AGE_MINUTES, 15),
+  },
   payments: {
     credentialsKey: process.env.MP_CREDENTIALS_KEY || '',
     provider: (process.env.PAYMENT_PROVIDER || 'internal').toLowerCase(),
@@ -126,6 +131,11 @@ export function configureCloudflare(env, origin, persistentSecret) {
   config.publicBaseUrl = String(env.PUBLIC_BASE_URL || origin).replace(/\/$/, '');
   config.sessionSecret = env.SESSION_SECRET || persistentSecret;
   config.trustProxy = true;
+  config.inova = {
+    enabled: bool(env.INOVA_STOCK_ENABLED, false),
+    token: env.INOVA_STOCK_TOKEN || '',
+    maxAgeMinutes: int(env.INOVA_STOCK_MAX_AGE_MINUTES, 15),
+  };
   config.payments.provider = String(env.PAYMENT_PROVIDER || 'internal').toLowerCase();
   config.payments.credentialsKey = env.MP_CREDENTIALS_KEY || '';
   config.payments.mp = {
