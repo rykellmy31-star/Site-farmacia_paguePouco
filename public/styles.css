@@ -472,9 +472,6 @@ body.com-menu-mobile { padding-bottom: 62px; }
 }
 .credito-desenvolvedor strong { font-weight: 600; }
 body.admin .credito-desenvolvedor { background: #f5f7f6; }
-@media (max-width: 767px) {
-  body.com-menu-mobile .credito-desenvolvedor { margin-bottom: 56px; }
-}
 .selos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .selo { background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .16); padding: 5px 10px; border-radius: 6px; font-size: .74rem; }
 
