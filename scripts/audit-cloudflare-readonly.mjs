@@ -55,9 +55,47 @@ if (result.worker_found) {
   const settings = await request(prefix + '/' + WORKER + '/settings');
   result.worker_settings_http = settings.status;
   if (settings.status === 200) {
-    const bindings = settings.json?.result?.bindings || [];
-    result.binding_LOJA = bindings.some(x => x.name === 'LOJA' && x.type === 'durable_object_namespace');
-    result.binding_ASSETS = bindings.some(x => x.name === 'ASSETS');
+    const meta = settings.json?.result || {};
+    const bindings = Array.isArray(meta.bindings) ? meta.bindings : [];
+    const possui = (nome, tipo) => bindings.some(x =>
+      x.name === nome && (!tipo || x.type === tipo));
+    const segredo = (nome) => possui(nome, 'secret_text') || possui(nome, 'secret_key');
+    const plain = (nome) => bindings.find(x => x.name === nome && x.type === 'plain_text');
+    result.binding_LOJA = bindings.some(x => x.name === 'LOJA' && x.type === 'durable_object_namespace' &&
+      x.class_name === 'LojaDurableObject');
+    result.binding_ASSETS = possui('ASSETS', 'assets');
+    result.bindings_prod = {
+      MP_CREDENTIALS_KEY: segredo('MP_CREDENTIALS_KEY'),
+      MP_ACCESS_TOKEN_alternativa: segredo('MP_ACCESS_TOKEN'),
+      MP_WEBHOOK_SECRET_alternativa: segredo('MP_WEBHOOK_SECRET'),
+      ADMIN_PASSWORD_bootstrap: segredo('ADMIN_PASSWORD'),
+      PUBLIC_BASE_URL_configurada: !!plain('PUBLIC_BASE_URL'),
+      PUBLIC_BASE_URL_esperada: String(plain('PUBLIC_BASE_URL')?.text || '').replace(/\\/$/, '') ===
+        'https://site.farmaciapaguepouco.app',
+      SESSION_SECRET: segredo('SESSION_SECRET'),
+      EMAIL_SENDER: segredo('MAIL_API_KEY') || segredo('RESEND_API_KEY'),
+    };
+    result.runtime = {
+      compatibilidade_definida: /^\\d{4}-\\d{2}-\\d{2}$/.test(String(meta.compatibility_date || '')),
+      nodejs_compat: Array.isArray(meta.compatibility_flags) &&
+        meta.compatibility_flags.includes('nodejs_compat'),
+    };
+    // Os metadados da API podem incluir valores sensíveis; NUNCA adicionar à saída.
   }
+  const schedules = await request(prefix + '/' + WORKER + '/schedules');
+  result.cron_triggers_http = schedules.status;
+  if (schedules.status === 200) {
+    result.cron_triggers_count = Array.isArray(schedules.json?.result?.schedules)
+      ? schedules.json.result.schedules.length : null;
+    result.durable_object_alarm_model = 'configurado_no_codigo_nao_auditavel_via_API_de_scripts';
+  }
+  const deployments = await request(prefix + '/' + WORKER + '/deployments');
+  result.deployments_http = deployments.status;
+  if (deployments.status === 200) {
+    result.existe_deployment = Array.isArray(deployments.json?.result?.deployments)
+      ? deployments.json.result.deployments.length > 0 : null;
+  }
+  result.backup_externo = 'nao_verificavel_com_este_token';
+  result.pix_mp_integracao = 'credenciais_do_painel_nao_sao_verificadas_por_API_Workers';
 }
 console.log('CLOUDFLARE_AUDIT=' + JSON.stringify(result));
