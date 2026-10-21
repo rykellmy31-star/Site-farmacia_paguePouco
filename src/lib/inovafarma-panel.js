@@ -143,7 +143,13 @@ export function diagnosticoInova(db) {
       desatualizado: estoqueDesatualizado,
     },
     vendas: { pendentes: fila.length, confirmadas: confirmadas.length,
-      conferir: faltaEANnaFila },
+      conferir: faltaEANnaFila,
+      pendentesDetalhes: fila.slice(0, 25).map(p => ({
+        id: p.id, codigo: String(p.codigo || ''), criadoEm: p.criadoEm,
+        statusFinanceiro: p.statusFinanceiro, totalCentavos: p.totalCentavos,
+        vendedorCodigo: p.vendedor?.codigoInova || null,
+      })),
+    },
     eventos, auditoria: erros,
   };
 }
