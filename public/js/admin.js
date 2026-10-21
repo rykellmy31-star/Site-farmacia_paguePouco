@@ -486,6 +486,17 @@
       return;
     }
 
+    const usarFundoBanner = alvo('[data-usar-fundo-banner]');
+    if (usarFundoBanner) {
+      const campo = document.getElementById('campoBannerImagem');
+      if (campo) {
+        campo.value = usarFundoBanner.getAttribute('data-usar-fundo-banner');
+        campo.focus();
+        notificar('Fundo vermelho selecionado. Preencha o título e salve o banner.');
+      }
+      return;
+    }
+
     const altBanner = alvo('[data-alternar-banner]');
     if (altBanner) {
       try { await post(`/admin/api/banners/${altBanner.getAttribute('data-alternar-banner')}/ativar`); location.reload(); } catch (err) { notificar(err.message, 'erro'); }
@@ -519,6 +530,18 @@
         await post(`/admin/api/pedidos/${pedidoId}/simular-pagamento`, { status });
         notificar('Pagamento atualizado. O estoque e o status foram processados.');
         setTimeout(() => location.reload(), 800);
+      } catch (err) { notificar(err.message, 'erro'); }
+      return;
+    }
+
+    const entregar = alvo('[data-marcar-entregue]');
+    if (entregar) {
+      if (!confirm('Confirmar que o pedido foi realmente entregue ao cliente?')) return;
+      try {
+        const pedidoId = entregar.getAttribute('data-marcar-entregue');
+        await post(`/admin/api/pedidos/${pedidoId}/status`, { status: 'entregue' });
+        notificar('Pedido marcado como entregue.');
+        setTimeout(() => location.reload(), 500);
       } catch (err) { notificar(err.message, 'erro'); }
       return;
     }
