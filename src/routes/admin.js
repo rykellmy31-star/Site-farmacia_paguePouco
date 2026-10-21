@@ -35,6 +35,7 @@ import { UFS, UF_LIST } from '../lib/cep.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
+import { estadoCredenciaisMercadoPago, salvarCredenciaisMercadoPago, removerCredenciaisMercadoPago } from '../lib/payments/credentials.js';
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
 import { revogarSessoes } from '../lib/session-revocation.js';
@@ -410,10 +411,13 @@ export function registrarRotasAdmin(app, db) {
     const ctx = ctxAdmin(req, db);
     const pagamentos = db.collection('payments').all().sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 100);
     const aprovados = pagamentos.filter((p) => p.status === 'approved');
+    res.set('Cache-Control', 'no-store');
     res.html(telaPagamentosAdmin(ctx, {
       pagamentos,
       provedor: providerPublicInfo(db),
       configPag: ctx.settings.pagamentos || {},
+      credenciais: req.adminUser.role === 'super_admin' ? estadoCredenciaisMercadoPago(db) : null,
+      urlWebhook: `${config.publicBaseUrl}/webhooks/mercadopago`,
       metricas: {
         total: pagamentos.length,
         aprovadas: aprovados.length,
@@ -1252,8 +1256,37 @@ function registrarApi(app, db) {
     res.redirect('/admin/configuracoes?salvo=rodape');
   });
 
+  app.post('/admin/api/mercadopago/credenciais', { maxBodyBytes: 12 * 1024 }, (req, res) => {
+    if (!guardApi(req, res, 'integracoes.editar')) return;
+    res.set('Cache-Control', 'no-store');
+    const resultado = salvarCredenciaisMercadoPago(db, {
+      accessToken: req.body.accessToken,
+      publicKey: req.body.publicKey,
+      webhookSecret: req.body.webhookSecret,
+      ambiente: req.body.ambiente,
+    });
+    if (!resultado.ok) return void res.json(resultado, 400);
+    logAdmin(db, req.adminUser, 'atualizou_credenciais_mp', 'integracao', 'mercadopago',
+      { ambiente: String(req.body.ambiente || 'testes') }, req);
+    res.redirect('/admin/pagamentos?salvo=credenciais');
+  });
+
+  app.post('/admin/api/mercadopago/remover', { maxBodyBytes: 1024 }, (req, res) => {
+    if (!guardApi(req, res, 'integracoes.editar')) return;
+    res.set('Cache-Control', 'no-store');
+    removerCredenciaisMercadoPago(db);
+    // Sem credenciais no cofre, o pagamento real só pode usar um secret de ambiente existente.
+    logAdmin(db, req.adminUser, 'removeu_credenciais_mp', 'integracao', 'mercadopago', {}, req);
+    res.redirect('/admin/pagamentos?salvo=removidas');
+  });
+
   app.post('/admin/api/config/pagamentos', (req, res) => {
     if (!guardApi(req, res, 'pagamentos.editar')) return;
+    if (req.body.provedor === 'mercadopago' && req.body.ambienteTestes !== '1' &&
+        req.body.habilitarProducao !== '1') {
+      return void res.json({ ok: false,
+        erro: 'Para habilitar cobranças reais, marque a confirmação explícita de produção.' }, 400);
+    }
     patchSetting(db, 'pagamentos', {
       provedor: req.body.provedor || 'internal',
       ambienteTestes: req.body.ambienteTestes === '1',

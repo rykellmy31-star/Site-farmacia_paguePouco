@@ -77,6 +77,7 @@ export const config = {
   adminSessionTTLHours: int(process.env.ADMIN_SESSION_TTL_HOURS, 12),
   trustProxy: bool(process.env.TRUST_PROXY, true),
   payments: {
+    credentialsKey: process.env.MP_CREDENTIALS_KEY || '',
     provider: (process.env.PAYMENT_PROVIDER || 'internal').toLowerCase(),
     mp: {
       accessToken: process.env.MP_ACCESS_TOKEN || '',
@@ -126,6 +127,7 @@ export function configureCloudflare(env, origin, persistentSecret) {
   config.sessionSecret = env.SESSION_SECRET || persistentSecret;
   config.trustProxy = true;
   config.payments.provider = String(env.PAYMENT_PROVIDER || 'internal').toLowerCase();
+  config.payments.credentialsKey = env.MP_CREDENTIALS_KEY || '';
   config.payments.mp = {
     accessToken: env.MP_ACCESS_TOKEN || '', publicKey: env.MP_PUBLIC_KEY || '',
     webhookSecret: env.MP_WEBHOOK_SECRET || '', pixKey: env.MP_PIX_KEY || '',

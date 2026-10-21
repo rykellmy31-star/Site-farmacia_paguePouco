@@ -118,20 +118,54 @@ server {
 
 ---
 
-## 4. Ativar o Mercado Pago (pagamentos reais)
+## 4. Configurar Mercado Pago e gerar Pix pelo painel
 
-1. Crie a conta da empresa em `mercadopago.com.br` (**pode haver custo por venda —
-   ver `docs/06`**; a criação da conta em si é gratuita, mas a decisão é do lojista).
-2. Em *Suas integrações → Credenciais*, copie a **Public Key** e o **Access Token**
-   de **testes** primeiro.
-3. Coloque no `.env`: `PAYMENT_PROVIDER=mercadopago`, `MP_SANDBOX=true`, as duas
-   credenciais de teste e um `MP_WEBHOOK_SECRET` forte.
-4. Cadastre a URL de notificação: `https://seudominio.com.br/webhooks/mercadopago`.
-5. Faça uma compra real com cartão/Pix **de teste** e confirme que o pedido muda para
-   *Pagamento aprovado* automaticamente pelo webhook.
-6. Só então troque para as credenciais de **produção** e `MP_SANDBOX=false`.
+**Fluxo seguro de configuração (sem escrever credenciais no GitHub):**
 
-**Nunca** coloque o Access Token em arquivos do front-end ou no repositório.
+1. Na Cloudflare, abra o Worker `site-farmacia-paguepouco` → **Settings → Variables and Secrets**.
+   Crie o segredo **`MP_CREDENTIALS_KEY`**, gerado aleatoriamente, com no mínimo 32 caracteres.
+   Por exemplo, em computador seguro: `openssl rand -hex 32`. Nunca compartilhe
+   a chave ou a registre no repositório. Ela precisa continuar igual após deploys.
+2. Acesse o site como **Super Administrador** → **Pagamentos** →
+   **Integração Mercado Pago — Access Token e Pix**.
+3. Na área <https://www.mercadopago.com.br/developers/pt>, entre em
+   **Suas integrações → sua aplicação → Credenciais de teste**.
+   Cole o **Access Token**. A Public Key é opcional para o Pix atual.
+   Cole também a assinatura secreta em **Notificações/Webhooks**.
+4. Selecione **Credenciais para: Teste**, salve e, no painel
+   **Meios de pagamento e parcelamento**, selecione **Mercado Pago**,
+   deixe **Ambiente de testes** habilitado e marque **Pix**.
+5. No painel do Mercado Pago configure o webhook exibido na tela
+   (normalmente `https://seu-dominio/webhooks/mercadopago`). O checkout
+   usa a API autenticada para solicitar um Pix. O QR Code e o código
+   Copia e Cola são mostrados na confirmação do pedido. O pedido só
+   é aprovado por confirmação autenticada; não use os códigos de teste
+   como comprovante financeiro.
+6. Antes de vender de verdade, verifique titularidade da conta, chave Pix
+   habilitada no Mercado Pago, webhook, retornos e conciliação em ambiente
+   de homologação. **Não habilite produção até terminar essa validação.**
+7. Para ativar cobranças reais: substitua pelo Access Token e a assinatura
+   de webhook de **produção** (selecionando **Produção** no cofre).
+   Em seguida, selecione **Mercado Pago**, desmarque **Ambiente de testes**,
+   marque a confirmação explícita de autorização de cobranças reais e salve.
+
+**Segurança:** Access Token e segredo de webhook ficam cifrados com AES-256-GCM
+numa coleção exclusiva; a chave `MP_CREDENTIALS_KEY` fica somente no runtime.
+O conteúdo do cofre nunca é exibido em HTML nem incluído nos backups
+operacionais. Se você perder `MP_CREDENTIALS_KEY`, os segredos salvos
+deixam de ser decifráveis — gere novos tokens e atualize o cofre.
+Somente o Super Administrador pode escrever/remover credenciais.
+
+**Alternativa para infraestrutura:** É possível continuar usando secrets
+`MP_ACCESS_TOKEN`, `MP_PUBLIC_KEY`, `MP_WEBHOOK_SECRET` e `MP_SANDBOX`
+na Cloudflare/servidor. As credenciais cadastradas pelo painel têm
+precedência sobre as de ambiente; se o cofre estiver ilegível, o checkout
+é bloqueado (não recorre silenciosamente a outro token).
+
+**Limitação atual:** Cartões reais não são habilitados: exigem a homologação
+da tokenização no navegador. **Pix** é o método Mercado Pago disponível
+nesta etapa. Taxas de processamento são cobradas conforme o acordo com o provedor.
+Nenhum teste automático deste projeto movimenta dinheiro real.
 
 ---
 

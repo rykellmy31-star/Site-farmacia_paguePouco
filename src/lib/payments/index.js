@@ -20,6 +20,7 @@
 import { config } from '../../config.js';
 import * as internalProvider from './internal.js';
 import * as mercadoPago from './mercadopago.js';
+import { credenciaisMercadoPago } from './credentials.js';
 
 export const PROVIDERS = {
   internal: {
@@ -52,10 +53,17 @@ export function getProviderInfo(db) {
   const settings = paymentSettings(db) || {};
   const id = String(settings.provedor || config.payments.provider || 'internal').toLowerCase();
   if (!PROVIDERS[id]) return { ...PROVIDERS.internal, configurado: false, motivo: 'Provedor inválido.', efetivo: id };
-  const configurado = id !== 'mercadopago' || Boolean(config.payments.mp.accessToken);
+  const mp = credenciaisMercadoPago(db);
+  const tokenConfigurado = !!mp.accessToken && mp.legivel !== false;
+  const modoCoerente = mp.origem !== 'painel' ||
+    (mp.sandbox === (settings.ambienteTestes !== false));
+  const configurado = id !== 'mercadopago' || (tokenConfigurado && modoCoerente);
   return {
     ...PROVIDERS[id], configurado, efetivo: id,
-    motivo: configurado ? null : 'Credenciais do Mercado Pago ausentes. Checkout bloqueado; nenhuma cobrança simulada será criada.',
+    motivo: configurado ? null : (mp.legivel === false
+      ? 'Cofre Mercado Pago indisponível. Verifique MP_CREDENTIALS_KEY antes de vender.'
+      : !modoCoerente ? 'O ambiente de testes/produção não corresponde às credenciais armazenadas.'
+      : 'Credenciais do Mercado Pago ausentes. Checkout bloqueado; nenhuma cobrança simulada será criada.'),
   };
 }
 
@@ -102,6 +110,10 @@ export function installmentOptions(db, totalCents) {
   return opts;
 }
 
+function mpConfigEfetiva(db) {
+  return { ...config, payments: { ...config.payments, mp: credenciaisMercadoPago(db) } };
+}
+
 function resolve(db) {
   const info = getProviderInfo(db);
   return info.efetivo === 'mercadopago' ? mercadoPago : internalProvider;
@@ -116,19 +128,19 @@ export async function createPayment(db, { order, method, payer, installments = 1
   if (!info.configurado) return { ok: false, erro: info.motivo || 'Provedor não configurado.' };
   if (!enabledMethods(db)[method]) return { ok: false, erro: 'Meio de pagamento indisponível ou não homologado.' };
   const provider = resolve(db);
-  return provider.createPayment({ db, order, method, payer, installments, cardToken, issuerId, paymentMethodId, returnUrls, config });
+  return provider.createPayment({ db, order, method, payer, installments, cardToken, issuerId, paymentMethodId, returnUrls, config: mpConfigEfetiva(db) });
 }
 
 /** Consulta o status de uma cobrança no provedor. */
 export async function getPaymentStatus(db, payment) {
   const provider = payment.provedor === 'mercadopago' ? mercadoPago : internalProvider;
-  return provider.getStatus({ db, payment, config });
+  return provider.getStatus({ db, payment, config: mpConfigEfetiva(db) });
 }
 
 /** Processa notificação (webhook) do provedor. */
 export async function handleWebhook(db, { provider, headers, body, rawBody, dataId = null }) {
   const id = String(provider || '').toLowerCase();
-  if (id === 'mercadopago') return mercadoPago.handleWebhook({ db, headers, body, rawBody, dataId, config });
+  if (id === 'mercadopago') return mercadoPago.handleWebhook({ db, headers, body, rawBody, dataId, config: mpConfigEfetiva(db) });
   return internalProvider.handleWebhook({ db, headers, body, rawBody, config });
 }
 
@@ -141,7 +153,7 @@ export async function refundPayment(db, payment, amountCents = null) {
   const provider = payment.provedor === 'mercadopago' ? mercadoPago :
     payment.provedor === 'internal' ? internalProvider : null;
   if (!provider) return { ok: false, erro: 'Provedor do pagamento desconhecido.' };
-  return provider.refund({ db, payment, amountCents: null, config });
+  return provider.refund({ db, payment, amountCents: null, config: mpConfigEfetiva(db) });
 }
 
 export function providerPublicInfo(db) {
@@ -152,7 +164,7 @@ export function providerPublicInfo(db) {
     real: !!info.real && info.configurado,
     configurado: !!info.configurado,
     motivo: info.motivo || null,
-    publicKey: info.efetivo === 'mercadopago' ? (config.payments.mp.publicKey || '') : '',
-    sandbox: config.payments.mp.sandbox,
+    publicKey: info.efetivo === 'mercadopago' && info.configurado ? (credenciaisMercadoPago(db).publicKey || '') : '',
+    sandbox: credenciaisMercadoPago(db).sandbox,
   };
 }
