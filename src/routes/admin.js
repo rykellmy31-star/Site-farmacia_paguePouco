@@ -285,7 +285,13 @@ export function registrarRotasAdmin(app, db) {
   app.get('/admin/pedidos', (req, res) => {
     if (!guard(req, res, 'pedidos.ver')) return;
     const ctx = ctxAdmin(req, db);
-    const filtros = { q: req.query.get('q') || '', financeiro: req.query.get('financeiro') || '', operacional: req.query.get('operacional') || '', periodo: req.query.get('periodo') || '' };
+    const filtros = {
+      q: req.query.get('q') || '',
+      financeiro: req.query.get('financeiro') || '',
+      operacional: req.query.get('operacional') || '',
+      periodo: req.query.get('periodo') || '',
+      pendencia: req.query.get('pendencia') === '1' ? '1' : '',
+    };
     let pedidos = db.collection('orders').all();
     if (filtros.q) {
       const b = String(filtros.q).toLowerCase();
@@ -293,6 +299,9 @@ export function registrarRotasAdmin(app, db) {
     }
     if (filtros.financeiro) pedidos = pedidos.filter((p) => p.statusFinanceiro === filtros.financeiro);
     if (filtros.operacional) pedidos = pedidos.filter((p) => p.statusOperacional === filtros.operacional);
+    if (filtros.pendencia) pedidos = pedidos.filter((p) =>
+      p.statusFinanceiro === 'pendente' &&
+      ['criacao_em_andamento', 'conciliacao_necessaria'].includes(p.pendenciaPagamento));
     if (filtros.periodo) {
       const dias = filtros.periodo === 'hoje' ? 1 : Number(filtros.periodo);
       const limite = new Date(Date.now() - (dias - 1) * 86400000).toISOString().slice(0, 10);
