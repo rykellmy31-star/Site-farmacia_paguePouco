@@ -160,6 +160,28 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(afterRegistration.status, 200);
   assert.equal((await afterRegistration.json()).quantidade, 2, 'carrinho preservado ao cadastrar');
 
+  // Promoção restrita deve respeitar as categorias, nunca descontar
+  // produtos que não participam da promoção.
+  const restricted = await admin.form('/admin/api/cupons', {
+    codigo: 'TESTECATEGORIAVAZIA', tipo: 'percentual',
+    valor: '50', ativo: '1', categoriasPermitidas: 'categoria-inexistente',
+  });
+  assert.equal(restricted.status, 200);
+  const ineligible = await client.json('/api/carrinho/cupom', { codigo: 'TESTECATEGORIAVAZIA' });
+  assert.equal(ineligible.status, 400, 'cupom não deve descontar categoria não elegível');
+  assert.equal((await ineligible.json()).ok, false);
+
+  const couponAdmin = await admin.form('/admin/api/cupons', {
+    codigo: 'TESTEJORNADA10', tipo: 'percentual',
+    valor: '10', ativo: '1', usoMaximo: '1',
+  });
+  assert.equal(couponAdmin.status, 200);
+  const couponClient = await client.json('/api/carrinho/cupom', { codigo: 'TESTEJORNADA10' });
+  assert.equal(couponClient.status, 200);
+  const applied = await couponClient.json();
+  assert.equal(applied.ok, true);
+  assert.equal(applied.desconto, 398, 'cupom de 10% deve aplicar sobre R$ 39,80');
+
   const address = await client.form('/conta/enderecos', {
     nome: 'Comprador Jornada Teste', apelido: 'Casa',
     cep: '01001000', logradouro: 'Rua de teste', numero: '55',
@@ -197,6 +219,8 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(order.statusFinanceiro, 'pendente', 'checkout do cliente nunca aprova pagamento sozinho');
   assert.equal(order.itens[0].precoUnitarioCentavos, 1990);
   assert.equal(order.itens[0].quantidade, 2);
+  assert.equal(order.descontoCentavos, 398, 'pedido deve preservar desconto válido calculado no servidor');
+  assert.equal(data.coupons.find(c => c.codigo === 'TESTEJORNADA10').usos, 1);
   assert.equal(order.pagamentoId != null, true);
   const payment = data.payments.find(p => p.id === order.pagamentoId);
   assert.ok(payment);
