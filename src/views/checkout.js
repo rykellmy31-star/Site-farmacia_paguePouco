@@ -144,7 +144,7 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
   });
 }
 
-export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = {}, endereco, frete }) {
+export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = {}, endereco, frete, vendedores = [] }) {
   const cfg = ctx.settings.pagamentos || {};
   const infoPag = ctx.infoPagamento || {};
   const pctPix = Math.max(0, Math.min(100, Number(cfg.descontoPixPercentual) || 0));
@@ -160,6 +160,17 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
       <div class="checkout-grade">
         <form method="post" action="/checkout/finalizar" id="formPagamento">
           <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+          <div class="cartao">
+            <h3>SELECIONE SEU VENDEDOR</h3>
+            ${vendedores.length ? `<div class="campo">
+              <label for="vendedorId">Selecione seu vendedor</label>
+              <select id="vendedorId" name="vendedorId" required aria-required="true">
+                <option value="">Selecione um vendedor</option>
+                ${vendedores.map(v => `<option value="${e(v.id)}">${e(v.nome)}</option>`).join('')}
+              </select>
+              <p class="texto-pequeno texto-suave">Escolha o profissional responsável por seu atendimento.</p>
+            </div>` : '<p class="texto-suave">Atendimento geral da Farmácia Pague Pouco. Nenhum vendedor está disponível para seleção no momento.</p>'}
+          </div>
           <div class="cartao">
             <h3>${ICONES.cadeado} Como você quer pagar?</h3>
             ${infoPag.real && formasPagamento.pix ? `<div class="campo">
