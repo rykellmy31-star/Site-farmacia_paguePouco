@@ -1332,6 +1332,40 @@ async function main() {
     return 'preço recalculado no servidor (R$ 7,49)';
   });
 
+  await testar('Superadmin oculta somente pedido encerrado e mantém contabilidade, auditoria e restauração', async () => {
+    const visivel=await admin.get('/admin/pedidos?q='+codigoPedido);
+    assert(visivel.texto.includes('Ocultar pedido '+codigoPedido), 'lixeira não aparece no superadmin');
+    const naoPodeAtendente=await atendente.post('/admin/pedidos/'+idPedido+'/ocultar',{form:{}});
+    assert(naoPodeAtendente.status===403,'atendente conseguiu ocultar pedido');
+    const antesCliente=await cliente.get('/conta/pedidos');
+    assert(antesCliente.texto.includes(codigoPedido),'pedido original não aparece');
+    const ocultou=await admin.post('/admin/pedidos/'+idPedido+'/ocultar',{form:{}});
+    assert([302,303].includes(ocultou.status),'ocultação falhou: '+ocultou.status);
+    assert(ocultou.location.includes('/admin/pedidos'),'redirecionamento incorreto');
+    const depoisCliente=await cliente.get('/conta/pedidos');
+    assert(!depoisCliente.texto.includes(codigoPedido),'pedido oculto visível em Meus pedidos');
+    const conta=await cliente.get('/conta');
+    assert(!conta.texto.includes(codigoPedido),'pedido oculto aparece no resumo');
+    const url=await cliente.get('/conta/pedidos/'+codigoPedido);
+    assert([302,303].includes(url.status),'detalhe direto permitiu pedido oculto');
+    const confirmacao=await cliente.get('/checkout/confirmacao/'+codigoPedido);
+    assert([302,303].includes(confirmacao.status),'confirmacao checkout vazou pedido oculto');
+    const normal=await admin.get('/admin/pedidos?q='+codigoPedido);
+    assert(!normal.texto.includes('PP'+codigoPedido.slice(2)+'</strong>'),'pedido oculto aparece na lista normal');
+    const arquivo=await admin.get('/admin/pedidos?visibilidade=ocultos&q='+codigoPedido);
+    assert(arquivo.status===200&&arquivo.texto.includes(codigoPedido)&&
+      arquivo.texto.includes('Restaurar pedido '+codigoPedido),
+      'arquivo do Super Administrador não apresenta pedido oculto');
+    const restaurou=await admin.post('/admin/pedidos/'+idPedido+'/restaurar',{form:{}});
+    assert([302,303].includes(restaurou.status),'não restaurou o pedido');
+    const clienteFinal=await cliente.get('/conta/pedidos');
+    assert(clienteFinal.texto.includes(codigoPedido),'pedido não voltou ao cliente');
+    const audit=await admin.get('/admin/auditoria');
+    assert(audit.texto.includes('ocultou_pedido_do_cliente') &&
+      audit.texto.includes('restaurou_pedido_ao_cliente'),'operações sem auditoria');
+    return 'ocultação reversível, CSRF, Super Administrador, cliente/URLs bloqueados, sem apagar pedido';
+  });
+
   /* ============================= PERSISTÊNCIA =========================== */
   secao('Persistência dos dados');
   console.log('\n[Persistência dos dados]');
