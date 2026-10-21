@@ -1219,6 +1219,17 @@ async function main() {
     return 'protegido';
   });
 
+  await testar('Atendente sem permissão não acessa integração InovaFarma', async () => {
+    await loginAdmin(atendente, 'atendente@paguepouco.local', 'Atende@123');
+    const tela=await atendente.get('/admin/inovafarma');
+    assert(tela.status===403, 'atendente acessou integração: '+tela.status);
+    const tentar=await atendente.post('/admin/inovafarma/configuracao',{form:{
+      urlConector:'https://conector.fornecedor.com.br/',intervaloMinutos:'15',
+    }});
+    assert(tentar.status===403, 'atendente alterou integração: '+tentar.status);
+    return '403 em leitura e escrita para atendente';
+  });
+
   await testar('Perfil ATENDENTE não acessa usuários nem cria produtos (permissão no servidor)', async () => {
     await atendente.get('/admin/login');
     const login = await atendente.post('/admin/login', { form: { email: 'atendente@paguepouco.local', senha: 'Atende@123' } });
