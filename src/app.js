@@ -18,6 +18,7 @@ import { registrarRotasApi } from './routes/api.js';
 import { registrarRotasConta } from './routes/account.js';
 import { registrarRotasCheckout } from './routes/checkout.js';
 import { registrarRotasWebhook } from './routes/webhooks.js';
+import { registrarRotasInovafarma } from './routes/inovafarma.js';
 import { registrarRotasAdmin } from './routes/admin.js';
 
 export function createApplication(db) {
@@ -184,6 +185,7 @@ registrarRotasConta(app, db);
 registrarRotasCheckout(app, db);
 registrarRotasAdmin(app, db);
 registrarRotasWebhook(app, db);
+registrarRotasInovafarma(app, db);
 
 /* Arquivos estáticos (css, js, imagens e uploads) — ficam por último para
    que as rotas da aplicação tenham prioridade; o que não for arquivo nem
