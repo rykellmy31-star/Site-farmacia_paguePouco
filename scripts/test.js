@@ -167,6 +167,7 @@ function iniciarServidor() {
       PUBLIC_BASE_URL: BASE,
       DEV_MODE: 'true',
       RATE_LIMIT_LOGIN: '25',
+      MP_CREDENTIALS_KEY: 'chave-mestra-local-exclusiva-de-testes-mercado-pago-2026',
       NODE_ENV: 'test',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -538,6 +539,25 @@ async function main() {
     const r = await admin.get('/admin');
     assert(r.status === 200 && r.texto.includes('Painel da loja'), `dashboard ${r.status}`);
     return 'sessão ativa';
+  });
+
+  await testar('Super Administrador configura Mercado Pago sem expor token em HTML ou logs', async () => {
+    const painel = await admin.get('/admin/pagamentos');
+    assert(painel.status === 200 && painel.texto.includes('Access Token (privado)'), 'formulário de credenciais ausente');
+    const token = 'TEST-Integracao-Cofre-Token-Exclusivo-Teste-2026';
+    const salvo = await admin.post('/admin/api/mercadopago/credenciais', {
+      form: { ambiente: 'testes', accessToken: token, publicKey: 'TEST-Chave-Publica', webhookSecret: 'segredo-webhook-teste-longo' },
+    });
+    assert(salvo.status === 303 || salvo.status === 302, 'salvar credenciais retornou ' + salvo.status);
+    const apos = await admin.get('/admin/pagamentos');
+    assert(apos.texto.includes('Credencial atual:'), 'status de credencial ausente');
+    assert(apos.texto.includes('Configurada'), 'credencial não foi salva');
+    assert(!apos.texto.includes(token), 'Access Token vazou no HTML do painel');
+    const removeu = await admin.post('/admin/api/mercadopago/remover', { form: {} });
+    assert(removeu.status === 303 || removeu.status === 302, 'não removeu credenciais');
+    const final = await admin.get('/admin/pagamentos');
+    assert(!final.texto.includes(token), 'Access Token apareceu após remoção');
+    return 'cadastro, ocultação e exclusão validados sem pagamentos reais';
   });
 
   await testar('Identificação de UF por CEP (4 estados diferentes)', async () => {
