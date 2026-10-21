@@ -93,6 +93,22 @@ app.use(async (req, res) => {
   if (!config.isDev) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 });
 
+// Uma senha provisória não permite utilizar endpoints administrativos,
+// nem consultar pedidos, exports ou ações de gerenciamento. A restrição
+// vale no servidor para HTML, JSON e downloads, não apenas para menus.
+app.use(async (req, res) => {
+  if (!req.path.startsWith('/admin') || req.adminUser?.deveTrocarSenha !== true) return;
+  if (['/admin/login', '/admin/sair', '/admin/alterar-senha'].includes(req.path)) return;
+  res.set('Cache-Control', 'no-store');
+  if (req.path.startsWith('/admin/api/')) {
+    return void res.json({
+      ok: false, erro: 'Defina sua senha pessoal antes de utilizar o painel.',
+      alterarSenha: '/admin/alterar-senha',
+    }, 403);
+  }
+  return void res.redirect('/admin/alterar-senha');
+});
+
 // Injeta automaticamente o campo oculto de CSRF em TODO formulário POST
 // renderizado pelo servidor (evita esquecimento e garante a proteção na prática)
 app.use(async (req, res) => {
