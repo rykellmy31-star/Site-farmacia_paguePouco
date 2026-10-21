@@ -536,4 +536,54 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   const afterRetry = await snapshot();
   assert.equal(afterRetry.payments.find(p => p.id === refundedPayment.id).eventos.length,
     refundedPayment.eventos.length, 'reenvio do cancelamento não duplica reembolso');
+
+  // Compra com promoção de uso único: se o pagamento for recusado,
+  // a reserva e o uso do cupom voltam sem exigir trabalho do lojista.
+  const newPromotion = await admin.form('/admin/api/cupons', {
+    codigo: 'RECUPERA-CHECKOUT-1', tipo: 'percentual', valor: '20', usoMaximo: '1', ativo: '1',
+  });
+  assert.equal(newPromotion.status, 200);
+  assert.equal((await client.json('/api/carrinho/adicionar', { produtoId: produto.id, quantidade: 1 })).status, 200);
+  const appliedRecoveredCoupon = await client.json('/api/carrinho/cupom', {
+    codigo: 'RECUPERA-CHECKOUT-1',
+  });
+  assert.equal(appliedRecoveredCoupon.status, 200);
+  await client.token('/checkout/endereco');
+  const shippingRejected = await client.form('/checkout/endereco', {
+    nome: 'Comprador Jornada Teste', telefone: '11988887777',
+    cep: '01001000', logradouro: 'Rua de teste', numero: '55',
+    bairro: 'Centro', cidade: 'São Paulo', uf: 'SP',
+  });
+  assert.equal(shippingRejected.status, 303);
+  await client.token('/checkout/pagamento');
+  const checkoutRejected = await client.form('/checkout/finalizar', { metodoPagamento: 'pix' });
+  assert.equal(checkoutRejected.status, 303);
+  const dataRejectedBefore = await snapshot();
+  const rejectedOrder = dataRejectedBefore.orders.find(p =>
+    p.cliente?.email === 'comprador-jornada@tests.example' &&
+    p.id !== order.id && p.id !== refundOrder.id);
+  assert.ok(rejectedOrder, 'tentativa com cupom é gravada e fica pendente de pagamento');
+  assert.equal(rejectedOrder.cupomUsoReservado, true);
+  assert.equal(dataRejectedBefore.coupons.find(c => c.codigo === 'RECUPERA-CHECKOUT-1').usos, 1);
+  const rejectPayment = await admin.json('/admin/api/pedidos/' + rejectedOrder.id + '/simular-pagamento',
+    { status: 'rejected' });
+  assert.equal(rejectPayment.status, 200);
+  const dataRejectedAfter = await snapshot();
+  assert.equal(dataRejectedAfter.orders.find(p => p.id === rejectedOrder.id).statusFinanceiro, 'recusado');
+  assert.equal(dataRejectedAfter.coupons.find(c => c.codigo === 'RECUPERA-CHECKOUT-1').usos, 0,
+    'cupom de uso único precisa voltar para quem fizer nova tentativa');
+  assert.equal(dataRejectedAfter.products.find(p => p.id === produto.id).estoque.reservado, 0,
+    'pedido recusado libera toda a reserva');
+  assert.equal((await client.json('/api/carrinho/adicionar', {
+    produtoId: produto.id, quantidade: 1,
+  })).status, 200);
+  const retryCupom = await client.json('/api/carrinho/cupom', { codigo: 'RECUPERA-CHECKOUT-1' });
+  assert.equal(retryCupom.status, 200, 'cupom torna a funcionar após recusa de pagamento');
+
+  // E-mail não configurado nunca deve ser marcado como entregue.
+  const fila = (await snapshot()).mailOutbox || [];
+  assert.ok(fila.some(m => m.assunto?.includes(rejectedOrder.codigo)),
+    'confirmação do pedido deve entrar na fila privada');
+  assert.equal(fila.some(m => m.assunto?.includes(rejectedOrder.codigo) && m.status === 'enviado'),
+    false, 'fila local sem provedor não pode afirmar que entregou e-mail');
 });
