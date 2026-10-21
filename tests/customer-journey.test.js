@@ -15,14 +15,23 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+let numeroNavegador = 0;
 class Browser {
   constructor(origin) {
     this.origin = origin;
     this.cookies = new Map();
     this.csrf = null;
+    // Wrangler local não recebe a identidade real de cada conexão pela
+    // borda da Cloudflare. Simula IPs de clientes diferentes sem desativar
+    // o rate limit (cada navegador continua limitado individualmente).
+    this.ipTeste = '198.51.100.' + (++numeroNavegador);
   }
   async request(url, opts = {}) {
-    const headers = { Cookie: [...this.cookies].map(([k, v]) => k + '=' + v).join('; '), ...opts.headers };
+    const headers = {
+      'CF-Connecting-IP': this.ipTeste,
+      Cookie: [...this.cookies].map(([k, v]) => k + '=' + v).join('; '),
+      ...opts.headers,
+    };
     const response = await fetch(this.origin + url, { ...opts, redirect: 'manual', headers });
     for (const c of response.headers.getSetCookie()) {
       const part = c.split(';')[0];
