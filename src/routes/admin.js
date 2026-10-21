@@ -1511,6 +1511,9 @@ function reqAdmin() {
 }
 
 function csv(valor) {
-  const s = String(valor ?? '').replace(/"/g, '""');
-  return `"${s}"`;
+  const texto = String(valor ?? '');
+  // CSV aberto no Excel/LibreOffice pode executar fórmulas vindas de
+  // nomes de produtos, categorias ou clientes, mesmo entre aspas.
+  const protegido = /^[\s\u0000-\u001f]*[=+@-]/.test(texto) ? "'" + texto : texto;
+  return '"' + protegido.replace(/"/g, '""') + '"';
 }
