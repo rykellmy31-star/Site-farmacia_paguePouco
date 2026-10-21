@@ -378,7 +378,12 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
   if (!STATUS_OPERACIONAL[status]) return { ok: false, erro: 'Status operacional inválido.' };
   if (status === 'cancelado') return { ok: false, erro: 'Use o fluxo de cancelamento validado.' };
   if (pedido.statusOperacional === 'cancelado') return { ok: false, erro: 'Pedido cancelado não pode ser reativado.' };
-  if (pedido.statusFinanceiro !== 'aprovado' && status !== pedido.statusOperacional) {
+  if (status === pedido.statusOperacional && !rastreio) return { ok: true, pedido, semAlteracao: true };
+  if (status !== pedido.statusOperacional &&
+      STATUS_OPERACIONAL[status].ordem <= (STATUS_OPERACIONAL[pedido.statusOperacional]?.ordem || 0)) {
+    return { ok: false, erro: 'Não é permitido retroceder etapas da entrega.' };
+  }
+  if (pedido.statusFinanceiro !== 'aprovado' && (status !== pedido.statusOperacional || rastreio)) {
     return { ok: false, erro: 'Pedido não pago não pode avançar operacionalmente.' };
   }
   const patch = { statusOperacional: status, atualizadoEm: nowISO() };
