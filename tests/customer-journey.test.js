@@ -215,6 +215,28 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(beforeCheckout.passwordTokens?.length || 0, 0,
     'sem serviço de e-mail não se deve gerar token de recuperação inacessível');
 
+  // Altera senha com segundo navegador simultâneo: sessões anteriores
+  // devem ser revogadas sem derrubar a sessão que autorizou a troca.
+  const outraSessaoCliente = new Browser(origin);
+  await outraSessaoCliente.token('/conta/login');
+  const abriuSegunda = await outraSessaoCliente.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
+  });
+  assert.equal(abriuSegunda.status, 303);
+  assert.equal((await outraSessaoCliente.get('/conta')).status, 200);
+  await client.token('/conta/dados');
+  const trocouCliente = await client.form('/conta/senha', {
+    senhaAtual: 'ClienteTeste123', senhaNova: 'ClienteSenhaNova2026',
+  });
+  assert.equal(trocouCliente.status, 303);
+  assert.equal((await client.get('/conta')).status, 200);
+  assert.equal((await outraSessaoCliente.get('/conta')).status, 303,
+    'mudança de senha encerra outras sessões do cliente');
+  await outraSessaoCliente.token('/conta/login');
+  assert.equal((await outraSessaoCliente.form('/conta/login', {
+    email: 'comprador-jornada@tests.example', senha: 'ClienteTeste123',
+  })).status, 401, 'senha antiga não pode continuar válida');
+
 
   // A API administrativa recusa regras promocionais inválidas antes de
   // persistir qualquer desconto que poderia afetar o checkout.
@@ -516,6 +538,27 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   await staff.token('/admin/login');
   const staffLogin = await staff.form('/admin/login', { email: staffEmail, senha: staffPassword });
   assert.equal(staffLogin.status, 303);
+  assert.equal(staffLogin.headers.get('location'), '/admin/alterar-senha',
+    'usuário recém-criado deve trocar a senha provisória');
+  const barradoHTML = await staff.get('/admin/pedidos');
+  assert.equal(barradoHTML.status, 303);
+  assert.equal(barradoHTML.headers.get('location'), '/admin/alterar-senha');
+  assert.equal((await staff.get('/admin/api/pedidos/exportar.csv')).status, 403,
+    'senha provisória não permite exportar pedidos');
+  await staff.token('/admin/alterar-senha');
+  const invalida = await staff.form('/admin/alterar-senha', {
+    senhaAtual: 'senha-incorreta', senhaNova: 'NovaSenhaAtendente2026',
+    senha2: 'NovaSenhaAtendente2026',
+  });
+  assert.equal(invalida.status, 400);
+  assert.equal((await staff.get('/admin')).status, 303,
+    'tentativa inválida não libera o painel');
+  const trocou = await staff.form('/admin/alterar-senha', {
+    senhaAtual: staffPassword, senhaNova: 'NovaSenhaAtendente2026',
+    senha2: 'NovaSenhaAtendente2026',
+  });
+  assert.equal(trocou.status, 303);
+  assert.equal(trocou.headers.get('location'), '/admin');
   const painelAtendente = await staff.get('/admin');
   assert.equal(painelAtendente.status, 200,
     'atendente deve acessar painel inicial mesmo sem acesso a relatórios');
@@ -552,7 +595,17 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     email: staffEmail, senha: passwordReset.senhaProvisoria,
   });
   assert.equal(staffRelogin.status, 303);
-  assert.equal((await staff.get('/admin/pedidos')).status, 200, 'nova senha permite acesso após reset');
+  assert.equal(staffRelogin.headers.get('location'), '/admin/alterar-senha');
+  assert.equal((await staff.get('/admin/pedidos')).status, 303,
+    'senha provisória do reset não concede acesso aos pedidos');
+  await staff.token('/admin/alterar-senha');
+  const depoisDoReset = await staff.form('/admin/alterar-senha', {
+    senhaAtual: passwordReset.senhaProvisoria, senhaNova: 'OutraSenhaPessoal2026',
+    senha2: 'OutraSenhaPessoal2026',
+  });
+  assert.equal(depoisDoReset.status, 303);
+  assert.equal((await staff.get('/admin/pedidos')).status, 200,
+    'após definir senha pessoal, o atendente pode acessar pedidos');
 
   // Painel de vendas: o pedido aprovado deve aparecer em relatórios e
   // exportações sem permitir acesso anônimo aos dados.
