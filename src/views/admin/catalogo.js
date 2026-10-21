@@ -100,6 +100,7 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       <div class="linha" style="gap:6px">
         <a class="botao" href="/admin/produtos/novo">+ Novo produto</a>
         <a class="botao secundario" href="/admin/produtos/importar">Importar/exportar</a>
+        ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/produtos/inovafarma">Importar da InovaFarma</a>' : ''}
       </div>
     </div>
 

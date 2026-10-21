@@ -9,6 +9,8 @@ import { config } from '../config.js';
 import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { diagnosticoInova, salvarConfiguracaoInova, armazenarCredencialInova, apagarCredencialInova } from '../lib/inovafarma-panel.js';
 import { telaIntegracaoInova } from '../views/admin/inovafarma.js';
+import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
+import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-catalog-import.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
 import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
 import { paginaAdmin } from '../views/admin/layout.js';
@@ -276,6 +278,49 @@ export function registrarRotasAdmin(app, db) {
   app.get('/admin/produtos/importar', (req, res) => {
     if (!guard(req, res, 'produtos.criar')) return;
     res.html(telaImportar(ctxAdmin(req, db)));
+  });
+
+  // Revisão do catálogo recebido da InovaFarma. Permissão exclusiva de Super
+  // Administrador: todos os demais perfis são bloqueados NO SERVIDOR.
+  // Esta página não contata o ERP e não aciona publicações automáticas.
+  app.get('/admin/produtos/inovafarma', (req, res) => {
+    if (!guard(req, res, 'inovafarma.ver')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('403 — Somente Super Administrador pode revisar o catálogo InovaFarma.');
+    const busca=String(req.query.get('q')||'').slice(0,100);
+    const situacao=String(req.query.get('situacao')||'').slice(0,40);
+    const saldo=req.query.get('saldo')==='todos'?'todos':'disponivel';
+    const lista=listarCandidatosInova(db,{
+      busca,situacao,saldo,pagina:req.query.get('pagina'),
+    });
+    res.set('Cache-Control','no-store');
+    res.html(telaImportacaoCatalogoInova(ctxAdmin(req,db),{
+      lista,busca,situacao,saldo,erro:req.query.get('erro')||'',
+    }));
+  });
+
+  app.post('/admin/produtos/inovafarma/revisar', { maxBodyBytes: 6 * 1024 }, (req, res) => {
+    if (!guard(req, res, 'inovafarma.ver')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('403 — Sem autorização para importar produtos.');
+    const eansRaw=req.body['eans[]'];
+    const eans=Array.isArray(eansRaw)?eansRaw:eansRaw?[eansRaw]:[];
+    const acao=String(req.body.acao||'');
+    if (!['importar','ignorar'].includes(acao) || eans.length===0 || eans.length>50 ||
+        eans.some(e => !/^[0-9]{8,14}$/.test(String(e))) ||
+        new Set(eans).size !== eans.length)
+      return void res.status(400).html('Seleção inválida. Escolha de 1 a 50 EANs distintos.');
+    const resultados=[];
+    for(const ean of eans) {
+      const r=revisarCandidatoInova(db,String(ean),acao);
+      resultados.push(r);
+    }
+    const ok=resultados.filter(r=>r.ok).length;
+    const erros=resultados.length-ok;
+    logAdmin(db,req.adminUser,'revisou_catalogo_inova','integracao','inovafarma',
+      {acao,quantidade:ok,erros},req);
+    res.redirect('/admin/produtos/inovafarma?resultado='+ok+
+      (erros?'&erro='+encodeURIComponent(erros+' produto(s) não puderam ser revisados.'):''));
   });
 
   app.get('/admin/produtos/:id', (req, res) => {

@@ -231,7 +231,7 @@ async function main() {
   /** Localiza o id de um produto pela busca do painel (funciona inclusive para os bloqueados). */
   async function idProdutoPorTermo(termo) {
     const r = await admin.get(`/admin/produtos?q=${encodeURIComponent(termo)}`);
-    const ignorar = new Set(['novo', 'importar', 'exportar']);
+    const ignorar = new Set(['novo', 'importar', 'exportar', 'inovafarma']);
     for (const m of r.texto.matchAll(/\/admin\/produtos\/([A-Za-z0-9_-]{4,})"/g)) {
       if (!ignorar.has(m[1])) return m[1];
     }
@@ -1008,6 +1008,26 @@ async function main() {
     const f = await admin.get('/admin/produtos?status=bloqueado');
     assert(f.status === 200 && /Amoxicilina|Loratadina|aguardando farmacêutico/i.test(f.texto), 'filtro de bloqueados não funcionou');
     return 'listagem, busca e filtros ok';
+  });
+
+  await testar('InovaFarma: importação em lote só é permitida ao superadmin e sem publicar automaticamente', async () => {
+    const r=await admin.get('/admin/produtos/inovafarma');
+    assert(r.status===200&&r.texto.includes('Importação de produtos') &&
+      r.texto.includes('Aguardando') && r.texto.includes('Importar selecionados (inativos)'),
+      'tela de revisão InovaFarma indisponível');
+    const semAutorizacao=await anon.get('/admin/produtos/inovafarma');
+    assert([302,303].includes(semAutorizacao.status), 'consulta anônima permitida');
+    const nenhum=await admin.post('/admin/produtos/inovafarma/revisar',
+      {form:{acao:'importar'}});
+    assert(nenhum.status===400, 'aceitou lote de seleção vazio');
+    const falso=await admin.post('/admin/produtos/inovafarma/revisar',
+      {form:{acao:'importar','eans[]':'7891234567890'}});
+    assert([302,303].includes(falso.status)&&falso.location.includes('erro='),
+      'aceitou cadastrar sem produto vindo da InovaFarma');
+    const publico=await anon.get('/');
+    assert(!publico.texto.includes('Sabonete Inova Nao Importado'),
+      'pré-cadastro não deve publicar produtos na vitrine');
+    return 'revisão autenticada; importação inexistente negada; nenhum produto publicado';
   });
 
   await testar('Criação de produto pelo painel', async () => {
