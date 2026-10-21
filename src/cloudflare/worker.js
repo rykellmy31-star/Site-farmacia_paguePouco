@@ -8,6 +8,7 @@ import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
 import { CloudStore } from './store.js';
 import { RequestQueue } from './request-queue.js';
+import { adicionarCreditoDesenvolvedor } from '../lib/developer-credit.js';
 import { executarAlarmeFinanceiro } from '../lib/payments/alarm-runner.js';
 import {
   reconciliarPix, temPixPendente, reconciliarEstornos, temEstornoPendente,
@@ -63,10 +64,11 @@ export class LojaDurableObject extends DurableObject {
           { headers: { 'Cache-Control': 'no-store' } });
       }
       if ((url.pathname === '/admin' || url.pathname.startsWith('/admin/')) && !admins.count()) {
-        return new Response('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Configurar administrador</title>' +
+        return new Response(adicionarCreditoDesenvolvedor('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Configurar administrador</title>' +
+          '<link rel="stylesheet" href="/styles.css"><body>' +
           '<h1>Configure o primeiro administrador</h1><p>No painel da Cloudflare, em Configurações → Variáveis e segredos, ' +
           'adicione ADMIN_EMAIL e o segredo ADMIN_PASSWORD, com pelo menos 12 caracteres. Salve e implante a nova versão.</p>' +
-          '<p>Depois, volte a /admin. Nenhuma senha de demonstração é aceita neste ambiente.</p></html>',
+          '<p>Depois, volte a /admin. Nenhuma senha de demonstração é aceita neste ambiente.</p></body></html>'),
           { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': '60' } });
       }
       const response = await this.app.fetch(request, {
