@@ -74,6 +74,7 @@ function ctxAdmin(req, db) {
     podeAprovar: can(req.adminUser, 'produtos.aprovar') || can(req.adminUser, 'sanitario.*'),
     permissoes: {
       podeGerenciarUsuarios: req.adminUser?.role === 'super_admin',
+      podeEditarPedidos: can(req.adminUser, 'pedidos.editar'),
       podeEstornar: can(req.adminUser, 'pagamentos.estornar'),
       podeSimularPagamento: can(req.adminUser, 'pagamentos.estornar') || req.adminUser?.role === 'super_admin',
     },
