@@ -74,6 +74,12 @@ if (result.worker_found) {
         'https://site.farmaciapaguepouco.app',
       SESSION_SECRET: segredo('SESSION_SECRET'),
       EMAIL_SENDER: segredo('MAIL_API_KEY') || segredo('RESEND_API_KEY'),
+      INOVA_CREDENTIALS_KEY: segredo('INOVA_CREDENTIALS_KEY'),
+      // Apenas flags calculadas. NUNCA incluir valores no relatório.
+      INOVA_STOCK_ENABLED_DESATIVADO: !plain('INOVA_STOCK_ENABLED') ||
+        ['false', '0', 'off', 'no', ''].includes(
+          String(plain('INOVA_STOCK_ENABLED')?.text || '').toLowerCase()),
+      WORKER_DEVE_SER_MANTIDO: result.worker_found === true,
     };
     result.runtime = {
       compatibilidade_definida: /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(meta.compatibility_date || '')),
