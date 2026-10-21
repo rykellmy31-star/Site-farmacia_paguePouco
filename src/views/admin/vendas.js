@@ -84,6 +84,14 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
         ou nova tentativa. Não aprovar manualmente uma cobrança real.
       </div>` : ''}
 
+    ${pedido.falhaPagamento && ctx.adminUser?.role === 'super_admin' ? `<div class="alerta aviso" role="status">
+      <strong>Diagnóstico da última falha no Mercado Pago:</strong>
+      ${e(pedido.falhaPagamento.motivo || 'Falha não classificada')}.
+      HTTP: ${e(String(pedido.falhaPagamento.httpStatus || 'não disponível'))} ·
+      Código: ${e(pedido.falhaPagamento.codigo || 'não informado')}.
+      Confira credenciais, dados do pagador e habilitação do Pix antes de uma nova tentativa.
+    </div>` : ''}
+
     <div class="cartoes">
       ${cartaoMetrica('Total', money(pedido.totalCentavos), `${(pedido.itens || []).reduce((a, i) => a + i.quantidade, 0)} itens`)}
       ${cartaoMetrica('Pagamento', STATUS_FINANCEIRO[pedido.statusFinanceiro]?.nome || pedido.statusFinanceiro)}
