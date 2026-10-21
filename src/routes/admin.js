@@ -1390,6 +1390,46 @@ function registrarApi(app, db) {
     res.redirect('/admin/sistema?salvo=backup');
   });
 
+  // Backup de mídia separado do JSON: evita carregar todos os arquivos
+  // na memória do Worker e mantém cada download restrito ao superadministrador.
+  app.get('/admin/api/sistema/backup/midias.json', (req, res) => {
+    if (!guardApi(req, res, 'sistema.*')) return;
+    if (!config.isCloudflare || typeof db.exportMediaManifest !== 'function') {
+      return void res.json({ ok: false, erro: 'Manifesto de mídia disponível no Cloudflare Worker.' }, 501);
+    }
+    logAdmin(db, req.adminUser, 'exportou_manifesto_midia', 'sistema', null, {}, req);
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Disposition', 'attachment; filename="pague-pouco-midias-manifest.json"');
+    res.json(db.exportMediaManifest());
+  });
+
+  app.get('/admin/api/sistema/backup/arquivo/:chave', async (req, res) => {
+    if (!guardApi(req, res, 'sistema.*')) return;
+    if (!config.isCloudflare || typeof db.fileResponse !== 'function') {
+      return void res.json({ ok: false, erro: 'Exportação de arquivo disponível no Cloudflare Worker.' }, 501);
+    }
+    const chave = String(req.params.chave || '');
+    if (!/^[a-zA-Z0-9_-]{1,500}$/.test(chave)) {
+      return void res.json({ ok: false, erro: 'Chave de arquivo inválida.' }, 400);
+    }
+    const caminho = Buffer.from(chave, 'base64url').toString('utf8');
+    if (Buffer.from(caminho, 'utf8').toString('base64url') !== chave ||
+        !caminho || caminho.startsWith('/') ||
+        caminho.split('/').some(p => p === '.' || p === '..')) {
+      return void res.json({ ok: false, erro: 'Chave de arquivo inválida.' }, 400);
+    }
+    const arquivo = db.fileResponse(caminho, new Request('https://backup.invalid/' + chave));
+    if (!arquivo) return void res.json({ ok: false, erro: 'Arquivo não encontrado.' }, 404);
+    const nome = caminho.split('/').at(-1).replace(/[^a-zA-Z0-9._-]/g, '_');
+    logAdmin(db, req.adminUser, 'exportou_arquivo_midia', 'sistema', null, { caminho }, req);
+    res.set('Content-Type', 'application/octet-stream');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Disposition', 'attachment; filename="' + nome + '"');
+    res.end(Buffer.from(await arquivo.arrayBuffer()));
+  });
+
   app.get('/admin/api/relatorios/vendas.csv', (req, res) => {
     if (!req.adminUser || !can(req.adminUser, 'relatorios.ver')) return void res.json({ ok: false, erro: 'Sem permissão.' }, 403);
     const de = req.query.get('de') || '';
