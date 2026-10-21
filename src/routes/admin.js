@@ -26,7 +26,7 @@ import {
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
   registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro,
-  cancelarPedido, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
+  cancelarPedido, validarCancelamentoOperacional, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
@@ -879,6 +879,10 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'pedidos.editar')) return;
     const pedido = db.collection('orders').get(req.params.id);
     if (!pedido) return void res.json({ ok: false, erro: 'Pedido não encontrado.' }, 404);
+    // Nunca tente estornar uma venda já expedida/entregue: o cancelamento
+    // seria recusado depois e o dinheiro já poderia ter sido devolvido.
+    const preflight = validarCancelamentoOperacional(pedido);
+    if (!preflight.ok) return void res.json(preflight, 409);
     if (pedido.statusFinanceiro === 'aprovado') {
       if (!guardApi(req, res, 'pagamentos.estornar')) return;
       const pagamento = db.collection('payments').get(pedido.pagamentoId);
