@@ -128,3 +128,63 @@ export async function reconciliarEstornos(db, { limit = 50 } = {}) {
   }
   return { ...resumo, conferidoEm: nowISO() };
 }
+
+
+/**
+ * Identifica pedidos que sobreviveram a uma interrupção entre a reserva
+ * do estoque e o vínculo da cobrança. Não interpreta a ausência de
+ * resposta como recusa: nunca libera estoque nem tenta cobrar de novo.
+ *
+ * Caso exista exatamente uma cobrança interna com vínculo/valor corretos,
+ * reconecta o pedido e deixa a conciliação normal consultar o provedor.
+ * Nos demais casos encaminha o pedido para conferência administrativa.
+ */
+const LIMITE_INTERRUPCAO_MS = 5 * 60_000;
+
+export function temCheckoutInterrompido(db) {
+  return db.collection('orders').all().some(p =>
+    p.statusFinanceiro === 'pendente' && !p.pagamentoId &&
+    (p.pendenciaPagamento == null || p.pendenciaPagamento === 'criacao_em_andamento'));
+}
+
+export function reconciliarCheckoutsInterrompidos(db, { limit = 50, agora = Date.now() } = {}) {
+  const pedidos = db.collection('orders').find(p =>
+    p.statusFinanceiro === 'pendente' && !p.pagamentoId &&
+    (p.pendenciaPagamento == null || p.pendenciaPagamento === 'criacao_em_andamento'))
+    .slice(0, Math.max(1, Math.min(100, limit)));
+  const resumo = { verificados: 0, recuperados: 0, sinalizados: 0, recentes: 0 };
+  for (const pedido of pedidos) {
+    const criadoEm = Date.parse(pedido.criadoEm);
+    // Registros recentes ainda podem estar em processamento normal.
+    if (!Number.isFinite(criadoEm) || agora - criadoEm < LIMITE_INTERRUPCAO_MS) {
+      resumo.recentes++;
+      continue;
+    }
+    resumo.verificados++;
+    const candidatos = db.collection('payments').find(p =>
+      p.pedidoId === pedido.id && ['internal', 'mercadopago'].includes(p.provedor) &&
+      Number(p.valorCentavos) === Number(pedido.totalCentavos));
+    const inconsistentes = db.collection('payments').find(p =>
+      p.pedidoId === pedido.id).length !== candidatos.length;
+    if (candidatos.length === 1 && !inconsistentes) {
+      db.collection('orders').update(pedido.id, {
+        pagamentoId: candidatos[0].id,
+        pendenciaPagamento: null,
+        atualizadoEm: nowISO(),
+      });
+      resumo.recuperados++;
+    } else {
+      db.collection('orders').update(pedido.id, {
+        pendenciaPagamento: 'conciliacao_necessaria',
+        atualizadoEm: nowISO(),
+        historico: [...(pedido.historico || []), {
+          tipo: 'financeiro', status: 'conciliacao_necessaria',
+          em: nowISO(), por: 'sistema',
+          obs: 'Compra interrompida antes de vincular cobrança. Verificar o provedor antes de qualquer cancelamento ou nova tentativa.',
+        }],
+      });
+      resumo.sinalizados++;
+    }
+  }
+  return { ...resumo, conferidoEm: nowISO() };
+}
