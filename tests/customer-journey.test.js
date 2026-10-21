@@ -298,7 +298,8 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   // Aprovação duplicada não pode baixar o estoque duas vezes.
   const secondApproval = await admin.json('/admin/api/pedidos/' + order.id + '/simular-pagamento',
     { status: 'approved' });
-  assert.equal(secondApproval.status, 200);
+  assert.equal(secondApproval.status, 409, 'A API deve recusar simulação de pagamento finalizado.');
+  assert.equal((await secondApproval.json()).ok, false);
   const afterDuplicate = await snapshot();
   assert.equal(afterDuplicate.products.find(p => p.id === produto.id).estoque.quantidade, 8);
   assert.equal(afterDuplicate.orders.find(o => o.id === order.id).statusFinanceiro, 'aprovado');
