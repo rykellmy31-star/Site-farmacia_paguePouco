@@ -173,8 +173,10 @@ export function registrarRotasConta(app, db) {
     const t = db.collection('passwordTokens').findOne((x) => x.token === token && !x.usado);
     const erroBase = { token, erro: 'Link inválido ou expirado. Solicite um novo.' };
     if (!t || new Date(t.expiraEm).getTime() < Date.now()) return void res.html(telaRedefinirSenha(ctx, erroBase), 400);
-    if (senha.length < 8 || senha !== senha2) {
-      return void res.html(telaRedefinirSenha(ctx, { token, erro: 'As senhas não coincidem ou têm menos de 8 caracteres.' }), 400);
+    if (senha.length < 8 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha) || senha !== senha2) {
+      return void res.html(telaRedefinirSenha(ctx, {
+        token, erro: 'As senhas devem coincidir e ter ao menos 8 caracteres, com letras e números.',
+      }), 400);
     }
     db.collection('customers').update(t.clienteId, { senhaHash: hashPassword(senha) });
     db.collection('passwordTokens').update(t.id, { usado: true, usadoEm: new Date().toISOString() });
