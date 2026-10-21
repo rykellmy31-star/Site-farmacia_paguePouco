@@ -449,7 +449,9 @@ export function registrarRotasAdmin(app, db) {
 
   /* =============================== SISTEMA ============================== */
   app.get('/admin/sistema', (req, res) => {
-    if (!guard(req, res, 'auditoria.ver')) return;
+    // Sistema revela fila de e-mails, destinatários e opções de backup.
+    // Somente superadministradores podem consultar esse conteúdo sensível.
+    if (!guard(req, res, 'sistema.*')) return;
     const ctx = ctxAdmin(req, db);
     let backups = [];
     try {
@@ -465,6 +467,8 @@ export function registrarRotasAdmin(app, db) {
         logs: db.collection('systemLogs').count(),
         emails: db.collection('mailOutbox').count(),
         backups,
+        backupMidias: config.isCloudflare && typeof db.exportMediaManifest === 'function'
+          ? db.exportMediaManifest() : null,
       },
       versao: { node: process.version, app: '1.0.0' },
     }));
