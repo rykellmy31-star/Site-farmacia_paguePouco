@@ -12,6 +12,26 @@ export function novoCarrinhoId() {
   return `c_${crypto.randomBytes(12).toString('base64url')}`;
 }
 
+/**
+ * Somente uma cesta anônima pode ser vinculada ao cliente autenticado.
+ * Quando o cookie pertence a OUTRO cliente, gera uma cesta vazia nova:
+ * evita vazar itens, cupons e endereço de entrega entre contas.
+ */
+export function vincularCarrinhoAoCliente(db, cartId, clienteId) {
+  if (!cartId || !clienteId) return null;
+  const carts = db.collection('carts');
+  const cart = carts.get(cartId);
+  if (!cart) return null;
+  if (cart.clienteId && cart.clienteId !== clienteId) {
+    return carts.insert({
+      id: novoCarrinhoId(), clienteId, itens: [], cupom: null, frete: null,
+      criadoEm: nowISO(), atualizadoEm: nowISO(),
+    }).id;
+  }
+  if (cart.clienteId !== clienteId) carts.update(cart.id, { clienteId });
+  return cart.id;
+}
+
 export function getCart(db, req) {
   const carts = db.collection('carts');
   let id = req.cookies?.[config.cartCookie] || req.session?.cartId || null;
@@ -21,18 +41,9 @@ export function getCart(db, req) {
     req.setCartCookie = cart.id;
   }
   if (req.user?.id && cart.clienteId !== req.user.id) {
-    if (cart.clienteId) {
-      // Outro usuário pode ter utilizado este navegador/cookie. Não
-      // transfira carrinho e dados do cliente anterior para a sessão atual.
-      cart = carts.insert({
-        id: novoCarrinhoId(), clienteId: req.user.id, itens: [],
-        cupom: null, frete: null, criadoEm: nowISO(), atualizadoEm: nowISO(),
-      });
-      req.setCartCookie = cart.id;
-    } else {
-      // Apenas carrinhos anônimos podem ser assumidos após login.
-      cart = carts.update(cart.id, { clienteId: req.user.id });
-    }
+    const idSeguro = vincularCarrinhoAoCliente(db, cart.id, req.user.id);
+    if (idSeguro !== cart.id) req.setCartCookie = idSeguro;
+    cart = carts.get(idSeguro);
   }
   return cart;
 }
