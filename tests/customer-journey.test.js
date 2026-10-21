@@ -216,6 +216,22 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
     'sem serviço de e-mail não se deve gerar token de recuperação inacessível');
 
 
+  // A API administrativa recusa regras promocionais inválidas antes de
+  // persistir qualquer desconto que poderia afetar o checkout.
+  for (const [codigo, tipo, valor, limite] of [
+    ['PROMO-ABUSIVA', 'percentual', '150', '1'],
+    ['PROMO-NEGATIVA', 'fixo', '-10', '1'],
+    ['PROMO-LIMITE', 'percentual', '10', '1.5'],
+    ['PROMO-TIPO', 'desconhecido', '10', '1'],
+  ]) {
+    const invalid = await admin.form('/admin/api/cupons', {
+      codigo, tipo, valor, usoMaximo: limite, ativo: '1',
+    });
+    assert.equal(invalid.status, 400, 'cupom inválido deve falhar: ' + codigo);
+  }
+  const aposInvalidos = await snapshot();
+  assert.equal(aposInvalidos.coupons.some(c => String(c.codigo).startsWith('PROMO-')), false);
+
   // Promoção restrita deve respeitar as categorias, nunca descontar
   // produtos que não participam da promoção.
   const restricted = await admin.form('/admin/api/cupons', {
@@ -246,6 +262,41 @@ test('jornada integral: catálogo, carrinho, cadastro, entrega, Pix simulado e p
   assert.equal(address.status, 303, 'cliente pode salvar endereço');
   const addressPage = await client.get('/conta/enderecos');
   assert.match(await addressPage.text(), /Rua de teste/);
+
+  // Endereços: duas residências, troca de principal, requisição forjada
+  // e exclusão do principal, sem jamais deixar a conta sem padrão.
+  const enderecoPrimeiro = (await snapshot()).customers
+    .find(x => x.email === 'comprador-jornada@tests.example').enderecos[0];
+  assert.equal(enderecoPrimeiro.padrao, true);
+  const segundo = await client.form('/conta/enderecos', {
+    nome: 'Comprador Jornada Teste', apelido: 'Trabalho',
+    cep: '01001000', logradouro: 'Rua Segundo', numero: '22',
+    bairro: 'Centro', cidade: 'São Paulo', uf: 'SP', padrao: '1',
+  });
+  assert.equal(segundo.status, 303);
+  const pegarEnderecos = async () => (await snapshot()).customers
+    .find(x => x.email === 'comprador-jornada@tests.example').enderecos;
+  const aposSegundo = await pegarEnderecos();
+  const enderecoSegundo = aposSegundo.find(x => x.apelido === 'Trabalho');
+  assert.ok(enderecoSegundo);
+  assert.deepEqual(aposSegundo.filter(x => x.padrao).map(x => x.id), [enderecoSegundo.id]);
+  const dadosForjados = {
+    nome: 'Tentativa indevida', apelido: 'Forjado', cep: '01001000',
+    logradouro: 'Rua Forjada', numero: '99', bairro: 'Centro',
+    cidade: 'São Paulo', uf: 'SP', padrao: '1',
+  };
+  const edicaoForjada = await client.form('/conta/enderecos/nao-existe', dadosForjados);
+  assert.equal(edicaoForjada.status, 404);
+  assert.deepEqual(await pegarEnderecos(), aposSegundo,
+    'ID inexistente não pode desmarcar principal nem alterar dados');
+  const exclusaoForjada = await client.form('/conta/enderecos/nao-existe/excluir', {});
+  assert.equal(exclusaoForjada.status, 404);
+  assert.deepEqual(await pegarEnderecos(), aposSegundo);
+  const excluiuPrincipal = await client.form('/conta/enderecos/' + enderecoSegundo.id + '/excluir', {});
+  assert.equal(excluiuPrincipal.status, 303);
+  const aposExcluir = await pegarEnderecos();
+  assert.equal(aposExcluir.length, 1);
+  assert.deepEqual(aposExcluir.filter(x => x.padrao).map(x => x.id), [enderecoPrimeiro.id]);
   await client.token('/checkout/endereco');
   const frete = await client.form('/checkout/endereco', {
     nome: 'Comprador Jornada Teste', telefone: '11988887777',
