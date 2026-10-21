@@ -29,13 +29,14 @@ test('backup Node inclui todas as coleções e mídias, sem alterar os dados ori
   await writeFile(path.join(folder, 'db', 'mailOutbox.json'), JSON.stringify([{
     id: 'm1', html: 'https://exemplo.test/conta/redefinir/TOKEN-SENHA',
   }]));
+  await writeFile(path.join(folder, 'db', 'paymentSecrets.json'), JSON.stringify([{ id: 'mercadopago', cifra: 'SEGREDO_CRIPTOGRAFADO' }]));
   const backup = path.join(folder, 'backups', 'teste');
   await db.backup(backup);
   const orders = JSON.parse(await readFile(path.join(backup, 'orders.json'), 'utf8'));
   assert.equal(orders[0].id, 'pedido-teste');
   const unloaded = JSON.parse(await readFile(path.join(backup, 'unloaded.json'), 'utf8'));
   assert.equal(unloaded[0].id, 'nao-acessada');
-  for (const transitorio of ['sessions.json', 'passwordTokens.json', 'mailOutbox.json']) {
+  for (const transitorio of ['sessions.json', 'passwordTokens.json', 'mailOutbox.json', 'paymentSecrets.json']) {
     await assert.rejects(readFile(path.join(backup, transitorio), 'utf8'), { code: 'ENOENT' },
       'backup não deve exportar ' + transitorio);
     assert.ok((await readFile(path.join(folder, 'db', transitorio), 'utf8')).length > 0,
