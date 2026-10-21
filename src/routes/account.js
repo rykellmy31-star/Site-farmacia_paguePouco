@@ -12,6 +12,7 @@ import {
 import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
 import { sendMail } from '../lib/mailer.js';
 import { vincularCarrinhoAoCliente } from '../lib/cart.js';
+import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
 import { config } from '../config.js';
 import { UF_LIST } from '../lib/cep.js';
@@ -261,11 +262,13 @@ export function registrarRotasConta(app, db) {
     if (Object.keys(erros).length) {
       return void res.html(telaEnderecos(ctx, { enderecos: req.user.enderecos || [], erros }), 400);
     }
-    const enderecos = [...(req.user.enderecos || [])];
-    if (dados.padrao) enderecos.forEach((e) => { e.padrao = false; });
-    if (!enderecos.length) dados.padrao = true;
-    enderecos.push({ id: `end_${crypto.randomBytes(6).toString('hex')}`, ...dados });
-    db.collection('customers').update(req.user.id, { enderecos });
+    const resultado = adicionarEndereco(req.user.enderecos, {
+      id: `end_${crypto.randomBytes(6).toString('hex')}`, ...dados,
+    });
+    if (!resultado.ok) return void res.html(telaEnderecos(ctx, {
+      enderecos: req.user.enderecos || [], erros: { endereco: resultado.erro },
+    }), 400);
+    db.collection('customers').update(req.user.id, { enderecos: resultado.enderecos });
     res.redirect('/conta/enderecos');
   });
 
@@ -277,15 +280,19 @@ export function registrarRotasConta(app, db) {
     if (Object.keys(erros).length) {
       return void res.html(telaEnderecos(ctx, { enderecos: req.user.enderecos || [], erros, editando: { id: req.params.id, ...dados } }), 400);
     }
-    const enderecos = (req.user.enderecos || []).map((e) => (e.id === req.params.id ? { ...e, ...dados } : { ...e, padrao: dados.padrao ? false : e.padrao }));
-    db.collection('customers').update(req.user.id, { enderecos });
+    const resultado = editarEndereco(req.user.enderecos, req.params.id, dados);
+    if (!resultado.ok) return void res.html(telaEnderecos(ctx, {
+      enderecos: req.user.enderecos || [], erros: { endereco: resultado.erro },
+    }), 404);
+    db.collection('customers').update(req.user.id, { enderecos: resultado.enderecos });
     res.redirect('/conta/enderecos');
   });
 
   app.post('/conta/enderecos/:id/excluir', (req, res) => {
     if (!exigirLogin(req, res)) return;
-    const enderecos = (req.user.enderecos || []).filter((e) => e.id !== req.params.id);
-    db.collection('customers').update(req.user.id, { enderecos });
+    const resultado = excluirEndereco(req.user.enderecos, req.params.id);
+    if (!resultado.ok) return void res.text('Endereço não encontrado.', 404);
+    db.collection('customers').update(req.user.id, { enderecos: resultado.enderecos });
     res.redirect('/conta/enderecos');
   });
 
