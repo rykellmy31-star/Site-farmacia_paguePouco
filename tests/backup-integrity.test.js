@@ -23,12 +23,24 @@ test('backup Node inclui todas as coleções e mídias, sem alterar os dados ori
   await writeFile(path.join(mediaDir, 'imagem.png.json'), '{"original":"imagem.png"}');
   // Uma coleção existente ainda não aberta neste processo não pode sumir.
   await writeFile(path.join(folder, 'db', 'unloaded.json'), JSON.stringify([{ id: 'nao-acessada' }]));
+  // Dados transitórios NÃO podem vazar em uma cópia operacional.
+  await writeFile(path.join(folder, 'db', 'sessions.json'), JSON.stringify([{ id: 'sid', token: 'SESSAO-SECRETA' }]));
+  await writeFile(path.join(folder, 'db', 'passwordTokens.json'), JSON.stringify([{ id: 'r1', token: 'TOKEN-SENHA' }]));
+  await writeFile(path.join(folder, 'db', 'mailOutbox.json'), JSON.stringify([{
+    id: 'm1', html: 'https://exemplo.test/conta/redefinir/TOKEN-SENHA',
+  }]));
   const backup = path.join(folder, 'backups', 'teste');
   await db.backup(backup);
   const orders = JSON.parse(await readFile(path.join(backup, 'orders.json'), 'utf8'));
   assert.equal(orders[0].id, 'pedido-teste');
   const unloaded = JSON.parse(await readFile(path.join(backup, 'unloaded.json'), 'utf8'));
   assert.equal(unloaded[0].id, 'nao-acessada');
+  for (const transitorio of ['sessions.json', 'passwordTokens.json', 'mailOutbox.json']) {
+    await assert.rejects(readFile(path.join(backup, transitorio), 'utf8'), { code: 'ENOENT' },
+      'backup não deve exportar ' + transitorio);
+    assert.ok((await readFile(path.join(folder, 'db', transitorio), 'utf8')).length > 0,
+      'backup deve manter original intacto: ' + transitorio);
+  }
   assert.deepEqual(await readFile(path.join(backup, 'uploads', '2026', '10', 'imagem.png')), originalMedia);
   assert.equal(await readFile(path.join(backup, 'uploads', '2026', '10', 'imagem.png.json'), 'utf8'),
     '{"original":"imagem.png"}');
