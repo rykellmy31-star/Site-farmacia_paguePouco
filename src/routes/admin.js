@@ -786,8 +786,21 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'estoque.movimentar')) return;
     const { produtoId, tipo, quantidade, lote, validade, observacao } = req.body;
     if (!produtoId) return void res.json({ ok: false, erro: 'Selecione o produto.' }, 400);
-    const qtd = Math.abs(Number(quantidade) || 0);
-    if (!qtd) return void res.json({ ok: false, erro: 'Informe a quantidade.' }, 400);
+    const qtd = Number(quantidade);
+    if (!Number.isSafeInteger(qtd) || qtd <= 0) {
+      return void res.json({ ok: false, erro: 'Informe uma quantidade inteira e positiva.' }, 400);
+    }
+    if (!['entrada', 'saida', 'ajuste'].includes(tipo || 'entrada')) {
+      return void res.json({ ok: false, erro: 'Tipo de movimentação inválido.' }, 400);
+    }
+    const produto = db.collection('products').get(produtoId);
+    if (!produto) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
+    const saldo = Number(produto.estoque?.quantidade || 0);
+    const reservado = Number(produto.estoque?.reservado || 0);
+    if ((tipo === 'saida' && qtd > saldo - reservado) ||
+        (tipo === 'ajuste' && qtd < reservado)) {
+      return void res.json({ ok: false, erro: 'Movimentação excede estoque disponível ou compromete reservas de pedidos.' }, 409);
+    }
     const mov = registrarMovimentoEstoque(db, {
       produtoId, tipo: tipo || 'entrada', quantidade: qtd,
       origem: 'painel', lote: lote || null, validade: validade || null,
