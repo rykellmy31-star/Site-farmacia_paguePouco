@@ -42,18 +42,27 @@ export function fromCents(cents) {
   return Math.round(Number(cents ?? 0)) / 100;
 }
 
+// Toda data/hora exibida ao cliente e à equipe segue o horário da farmácia;
+// registros persistidos continuam em UTC para conciliação, segurança e ordenação.
+export const FUSO_LOJA = 'America/Bahia';
+
 export function formatDate(iso, opts = {}) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', ...opts });
+  // Datas puras são calendários, não instantes UTC: não mudar seu dia.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) {
+    const [ano, mes, dia] = String(iso).split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+  return d.toLocaleDateString('pt-BR', { timeZone: FUSO_LOJA, day: '2-digit', month: '2-digit', year: 'numeric', ...opts });
 }
 
 export function formatDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  return `${d.toLocaleDateString('pt-BR', { timeZone: FUSO_LOJA, day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('pt-BR', { timeZone: FUSO_LOJA, hour: '2-digit', minute: '2-digit', hour12: false })}`;
 }
 
 export function formatNumber(value, decimals = 0) {

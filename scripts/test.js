@@ -560,6 +560,36 @@ async function main() {
     return 'sessão ativa';
   });
 
+  await testar('Integração InovaFarma: painel superadmin, configuração segura sem conectar ERP', async () => {
+    const abertura=await admin.get('/admin/inovafarma');
+    assert(abertura.status===200 && abertura.texto.includes('Integração InovaFarma'),
+      'painel não abriu');
+    assert(abertura.texto.includes('name="urlConector"') &&
+      abertura.texto.includes('Sincronizar estoque agora'), 'seções do painel ausentes');
+    const bloqueio=await admin.post('/admin/inovafarma/configuracao', { form: {
+      urlConector:'https://127.0.0.1/admin',estabelecimento:'loja-1',intervaloMinutos:'15',
+    }});
+    assert([302,303].includes(bloqueio.status)&&bloqueio.location.includes('erro='),
+      'endereço local não foi rejeitado');
+    const salvar=await admin.post('/admin/inovafarma/configuracao',{form:{
+      urlConector:'https://conector.fornecedor.com.br/api',estabelecimento:'LOJA-1',
+      intervaloMinutos:'15',
+    }});
+    assert([302,303].includes(salvar.status)&&salvar.location.includes('salvo='),
+      'não salvou metadados: '+salvar.location);
+    const pagina=await admin.get('/admin/inovafarma');
+    assert(pagina.texto.includes('conector.fornecedor.com.br') &&
+      pagina.texto.includes('LOJA-1'), 'metadados não persistidos');
+    assert(pagina.texto.includes('Ativar integração — indisponível'),
+      'painel não bloqueia ativação');
+    const segredo='TOKEN-FICTICIO-CI-SEM-ERP-1234567890';
+    const tentativa=await admin.post('/admin/inovafarma/credencial',{form:{credencial:segredo}});
+    assert(tentativa.location.includes('erro='), 'sem chave Cloudflare deveria bloquear');
+    const proteger=await admin.get('/admin/inovafarma');
+    assert(!proteger.texto.includes(segredo), 'credencial vazou no HTML');
+    return 'configuração persistida, sem SSRF, token bloqueado sem chave';
+  });
+
   await testar('Super Administrador configura Mercado Pago sem expor token em HTML ou logs', async () => {
     const painel = await admin.get('/admin/pagamentos');
     assert(painel.status === 200 && painel.texto.includes('Access Token (privado)'), 'formulário de credenciais ausente');
@@ -1187,6 +1217,17 @@ async function main() {
     assert(r.status === 303 || r.status === 302, `status ${r.status}`);
     assert(r.location.includes('/admin/login'), `location ${r.location}`);
     return 'protegido';
+  });
+
+  await testar('Atendente sem permissão não acessa integração InovaFarma', async () => {
+    await loginAdmin(atendente, 'atendente@paguepouco.local', 'Atende@123');
+    const tela=await atendente.get('/admin/inovafarma');
+    assert(tela.status===403, 'atendente acessou integração: '+tela.status);
+    const tentar=await atendente.post('/admin/inovafarma/configuracao',{form:{
+      urlConector:'https://conector.fornecedor.com.br/',intervaloMinutos:'15',
+    }});
+    assert(tentar.status===403, 'atendente alterou integração: '+tentar.status);
+    return '403 em leitura e escrita para atendente';
   });
 
   await testar('Perfil ATENDENTE não acessa usuários nem cria produtos (permissão no servidor)', async () => {

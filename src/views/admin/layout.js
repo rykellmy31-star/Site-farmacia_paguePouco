@@ -25,6 +25,7 @@ const MENU = [
   { separador: 'Configurações' },
   { id: 'fretes', rotulo: 'Configuração de fretes', href: '/admin/fretes', perm: 'fretes.ver', icone: '🚚' },
   { id: 'configuracoes', rotulo: 'Configurações gerais', href: '/admin/configuracoes', perm: 'configuracoes.ver', icone: '⚙️' },
+  { id: 'inovafarma', rotulo: 'Integração InovaFarma', href: '/admin/inovafarma', perm: 'inovafarma.ver', icone: '🔗' },
   { id: 'usuarios', rotulo: 'Usuários e permissões', href: '/admin/usuarios', perm: 'usuarios.ver', icone: '🔐' },
   { id: 'auditoria', rotulo: 'Auditoria', href: '/admin/auditoria', perm: 'auditoria.ver', icone: '🕵️' },
   { id: 'sistema', rotulo: 'Sistema e backups', href: '/admin/sistema', perm: 'sistema.ver', icone: '🛠️' },
