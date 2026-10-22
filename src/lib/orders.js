@@ -85,6 +85,11 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
     case 'entrada':
       estoque.quantidade = antes + q;
       break;
+    case 'entrada_quarentena':
+      // Recebimento físico. Nunca libera automaticamente para nova venda.
+      estoque.quantidade = antes + q;
+      estoque.quarentena = Math.max(0, Number(estoque.quarentena || 0)) + q;
+      break;
     case 'saida':
       estoque.quantidade = Math.max(0, antes - q);
       estoque.reservado = Math.max(0, reservadoAntes - q);
@@ -485,9 +490,46 @@ export function concluirDevolucaoEstornada(db, pedidoId, { decisao, justificativ
     return { ok: false, erro: 'Informe justificativa de 10 a 500 caracteres.' };
   const status = decisao === 'recebida' ? 'devolucao_recebida' : 'encerrado_sem_devolucao';
   const registro = { decisao, justificativa: motivo, por: String(por).slice(0,120), em: nowISO() };
+  const retorno = [];
+  if (decisao === 'recebida') {
+    // Valida TODOS os itens antes de movimentar qualquer saldo físico.
+    // Agrupar IDs impede lançamentos confusos em pedidos com linhas repetidas.
+    const itens = new Map();
+    for (const item of pedido.itens || []) {
+      const quantidade = Number(item.quantidade);
+      if (!item.produtoId || !Number.isSafeInteger(quantidade) || quantidade <= 0)
+        return { ok: false, erro: 'Itens de devolução inconsistentes; faça conferência manual.' };
+      itens.set(item.produtoId, (itens.get(item.produtoId) || 0) + quantidade);
+    }
+    if (!itens.size) return { ok: false, erro: 'Pedido sem itens para devolver.' };
+    for (const [produtoId, quantidade] of itens) {
+      const produto = db.collection('products').get(produtoId);
+      const estoque = produto?.estoque || {};
+      if (!produto || !Number.isSafeInteger(quantidade) || quantidade <= 0 ||
+          !Number.isSafeInteger(Number(estoque.quantidade || 0)) ||
+          !Number.isSafeInteger(Number(estoque.quarentena || 0)) ||
+          Number(estoque.quantidade || 0) + quantidade > Number.MAX_SAFE_INTEGER ||
+          Number(estoque.quarentena || 0) + quantidade > Number.MAX_SAFE_INTEGER)
+        return { ok: false, erro: 'Produto ausente ou saldo inválido; conferir antes de receber.' };
+      retorno.push({ produtoId, quantidade });
+    }
+  }
+  // Primeiramente encerra a conferência com marcador idempotente; a operação é
+  // síncrona dentro do Durable Object. Não repetir recebimento após conclusão.
   const atualizado = db.collection('orders').update(pedidoId, {
-    statusOperacional: status, conferenciaDevolucao: registro, atualizadoEm: nowISO(),
+    statusOperacional: status, conferenciaDevolucao: {
+      ...registro, itensRecebidos: retorno,
+      destino: decisao === 'recebida' ? 'segregado_conferencia_sanitaria' : 'sem_retorno',
+    }, atualizadoEm: nowISO(),
   });
+  for (const item of retorno) {
+    registrarMovimentoEstoque(db, {
+      produtoId: item.produtoId, quantidade: item.quantidade,
+      tipo: 'entrada_quarentena', origem: 'devolucao_estornada_recebida',
+      pedidoId: pedido.id,
+      observacao: 'Retorno físico após estorno; separado e não liberado para venda. ' + motivo,
+    });
+  }
   adicionarHistorico(db, atualizado, { tipo: 'operacional', status, obs: motivo, por: registro.por });
   enfileirarAvisoPedido(db, atualizado, 'operacional', status);
   // Medicamentos devolvidos exigem conferência sanitária antes de qualquer eventual reposição.
