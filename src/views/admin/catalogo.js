@@ -578,7 +578,7 @@ export function telaMidia(ctx, { arquivos, stats, filtro }) {
 }
 
 /* ============================== BANNERS ============================== */
-export function telaBanners(ctx, { banners, midias, categorias = [] }) {
+export function telaBanners(ctx, { banners, midias, categorias = [], editando = null }) {
   return paginaAdmin(ctx, {
     titulo: 'Banners',
     ativo: 'banners',
@@ -598,44 +598,45 @@ export function telaBanners(ctx, { banners, midias, categorias = [] }) {
       </div>
     `})}
     ${painel({
-      titulo: 'Novo banner',
-      corpo: `<form method="post" id="formNovoBanner" action="/admin/api/banners">
+      titulo: editando ? 'Editar banner' : 'Novo banner',
+      corpo: `<form method="post" id="formNovoBanner" action="${editando ? `/admin/api/banners/${e(editando.id)}/editar` : '/admin/api/banners'}">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'titulo', rotulo: 'Título que aparece no banner', obrigatorio: true })}
+          ${campoAdmin({ nome: 'titulo', rotulo: 'Título que aparece no banner', valor: editando?.titulo || '', obrigatorio: true })}
           <div class="campo">
             <label for="bannerDestino">Destino ao clicar</label>
             <select id="bannerDestino" aria-label="Selecionar destino do banner">
-              <option value="/ofertas">Ofertas</option>
-              <option value="/">Página inicial</option>
-              <option value="/categorias">Todas as categorias</option>
+              <option value="/ofertas" ${(!editando || editando.link === '/ofertas') ? 'selected' : ''}>Ofertas</option>
+              <option value="/" ${editando?.link === '/' ? 'selected' : ''}>Página inicial</option>
+              <option value="/categorias" ${editando?.link === '/categorias' ? 'selected' : ''}>Todas as categorias</option>
               ${categorias.filter(c => c.ativa !== false && c.slug).map(c =>
-                `<option value="/categoria/${e(c.slug)}">Categoria: ${e(c.nome)}</option>`).join('')}
-              <option value="personalizado">Link personalizado</option>
+                `<option value="/categoria/${e(c.slug)}" ${editando?.link === `/categoria/${c.slug}` ? 'selected' : ''}>Categoria: ${e(c.nome)}</option>`).join('')}
+              <option value="personalizado" ${editando && !['/ofertas', '/', '/categorias', ...categorias.map(c => `/categoria/${c.slug}`)].includes(editando.link) ? 'selected' : ''}>Link personalizado</option>
             </select>
             <span class="dica">Selecione uma página ou categoria cadastrada. Para outra rota, escolha Link personalizado.</span>
           </div>
         </div>
         <div id="bannerLinkPersonalizado" hidden>
-          ${campoAdmin({ nome: 'linkPersonalizado', rotulo: 'URL personalizada', valor: '', dica: 'Use /pagina ou https://site-confiavel; selecione Link personalizado acima.' })}
+          ${campoAdmin({ nome: 'linkPersonalizado', rotulo: 'URL personalizada', valor: editando?.link || '', dica: 'Use /pagina ou https://site-confiavel; selecione Link personalizado acima.' })}
         </div>
-        <input type="hidden" id="bannerLinkFinal" name="link" value="/ofertas">
+        <input type="hidden" id="bannerLinkFinal" name="link" value="${e(editando?.link || '/ofertas')}">
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'imagem', rotulo: 'Imagem (URL)', valor: '/img/fundo-banner-vermelho.svg', dica: 'O fundo vermelho já está disponível, sem necessidade de enviar outro arquivo.' })}
-          ${campoAdmin({ nome: 'imagemMobile', rotulo: 'Imagem para celular (opcional)' })}
+          ${campoAdmin({ nome: 'imagem', rotulo: 'Imagem (URL)', valor: editando?.imagem || '/img/fundo-banner-vermelho.svg', dica: 'O fundo vermelho já está disponível, sem necessidade de enviar outro arquivo.' })}
+          ${campoAdmin({ nome: 'imagemMobile', rotulo: 'Imagem para celular (opcional)', valor: editando?.imagemMobile || '' })}
         </div>
-        ${campoAdmin({ nome: 'descricao', rotulo: 'Descrição abaixo do título (opcional)', tipo: 'textarea', dica: 'Será mostrada sobre o fundo vermelho.' })}
+        ${campoAdmin({ nome: 'descricao', rotulo: 'Descrição abaixo do título (opcional)', tipo: 'textarea', valor: editando?.descricao || '', dica: 'Será mostrada sobre o fundo vermelho.' })}
         <div class="campo">
           <label>Prévia do banner</label>
-          <img id="previewNovoBanner" hidden src="/img/fundo-banner-vermelho.svg" alt="Prévia do fundo selecionado"
+          <img id="previewNovoBanner" ${editando ? '' : 'hidden'} src="${e(editando?.imagem || '/img/fundo-banner-vermelho.svg')}" alt="Prévia do fundo selecionado"
             style="max-width:100%;width:480px;height:auto;border-radius:10px">
         </div>
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
-          <p class="texto-pequeno texto-suave">Ordem automática: o próximo banner será inserido depois dos banners existentes nessa posição.</p>
+          ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', valor: editando?.posicao || 'principal', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
+          <p class="texto-pequeno texto-suave">${editando ? `Ordem atual: ${e(editando.ordem)}. Ao mudar de posição, o banner irá para o final da nova posição.` : 'Ordem automática: o próximo banner será inserido depois dos banners existentes nessa posição.'}</p>
         </div>
-        ${campoAdmin({ nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox', valor: true })}
-        <button class="botao" type="submit">Salvar banner</button>
+        ${campoAdmin({ nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox', valor: editando ? editando.ativo !== false : true })}
+        <button class="botao" type="submit">${editando ? 'Salvar alterações' : 'Salvar banner'}</button>
+        ${editando ? '<a class="botao secundario" href="/admin/banners">Cancelar edição</a>' : ''}
       </form>
       <div class="zona-upload mt-2" id="zonaUploadBanner" role="button" tabindex="0">
         <strong>Enviar imagem do banner</strong>
@@ -654,6 +655,7 @@ export function telaBanners(ctx, { banners, midias, categorias = [] }) {
           <td>${e(String(b.ordem ?? 99))}</td>
           <td>${b.ativo !== false ? etiquetaStatus('ativo') : etiquetaStatus('inativo')}</td>
           <td class="acoes-linha">
+            <a class="botao pequeno secundario" href="/admin/banners?editar=${e(b.id)}#formNovoBanner">Editar</a>
             <button class="botao pequeno" data-alternar-banner="${e(b.id)}">${b.ativo !== false ? 'Desativar' : 'Ativar'}</button>
             <button class="botao pequeno perigo" data-excluir-banner="${e(b.id)}">Excluir</button>
           </td>
