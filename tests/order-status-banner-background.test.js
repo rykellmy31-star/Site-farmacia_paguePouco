@@ -123,6 +123,12 @@ test('modelo vermelho pode ser baixado e reutilizado sem textos originais',()=>{
   assert.match(html,/Baixar somente o fundo vermelho/);
   assert.match(html,/download="fundo-banner-vermelho-pague-pouco.svg"/);
   assert.match(html,/data-usar-fundo-banner="\/img\/fundo-banner-vermelho.svg"/);
+  assert.match(html,/id="formNovoBanner"/);
+  assert.match(html,/id="bannerDestino"/);
+  assert.match(html,/option value="\/ofertas"/);
+  assert.match(html,/option value="\/categorias"/);
+  assert.match(html,/id="bannerLinkFinal"/);
+  assert.match(html,/id="previewNovoBanner"/);
 });
 
 test('administrador confirma devolucao, registra estoque fisico em quarentena, sem liberar venda',()=>{
@@ -186,4 +192,21 @@ test('devolucao multiplos itens agrega entradas por produto de modo auditavel',(
   assert.equal(estoqueDisponivel(db.collection('products').get('p1')),8);
   assert.equal(db.collection('stockMovements').count(),1);
   assert.equal(r.pedido.conferenciaDevolucao.itensRecebidos[0].quantidade,3);
+});
+
+test('seletor de banners mostra categorias reais e nao oferece categorias inativas',()=>{
+  const db=new DB();
+  const html=telaBanners({...ctx(db),adminUser:{role:'super_admin',nome:'Admin'}},{
+    banners:[], midias:[], categorias:[
+      {id:'cat1',nome:'Vitaminas',slug:'vitaminas',ativa:true},
+      {id:'cat2',nome:'Oculta',slug:'oculta',ativa:false},
+    ],
+  });
+  assert.match(html,/option value="\/categoria\/vitaminas">Categoria: Vitaminas/);
+  assert.doesNotMatch(html,/option value="\/categoria\/oculta"/);
+  const js=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
+  assert.match(js,/data-usar-fundo-banner/);
+  assert.match(js,/querySelector\('#formNovoBanner \[name="imagem"\]'\)/);
+  assert.match(js,/atualizarPreviaBanner\(url\)/);
+  assert.match(js,/atualizarLinkBanner/);
 });

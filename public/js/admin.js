@@ -113,9 +113,46 @@
 
   configurarUpload('#zonaUpload', '#inputUpload', adicionarAoFormProduto);
   configurarUpload('#zonaUploadMidia', '#inputUploadMidia', () => setTimeout(() => location.reload(), 900));
+  function atualizarPreviaBanner(url) {
+    const previa = document.querySelector('#previewNovoBanner');
+    if (!previa) return;
+    const valor = String(url || '').trim();
+    previa.hidden = !valor;
+    if (valor) previa.src = valor;
+    else previa.removeAttribute('src');
+  }
+
+  const imagemBanner = document.querySelector('#formNovoBanner [name="imagem"]');
+  const imagemBannerMobile = document.querySelector('#formNovoBanner [name="imagemMobile"]');
+  const destinoBanner = document.querySelector('#bannerDestino');
+  const campoLinkFinal = document.querySelector('#bannerLinkFinal');
+  const personalizadoBanner = document.querySelector('#bannerLinkPersonalizado');
+  const campoLinkPersonalizado = document.querySelector('#formNovoBanner [name="linkPersonalizado"]');
+
+  function atualizarLinkBanner() {
+    if (!destinoBanner || !campoLinkFinal) return;
+    const personal = destinoBanner.value === 'personalizado';
+    if (personalizadoBanner) personalizadoBanner.hidden = !personal;
+    if (campoLinkPersonalizado) campoLinkPersonalizado.required = personal;
+    campoLinkFinal.value = personal ? (campoLinkPersonalizado?.value.trim() || '') : destinoBanner.value;
+  }
+  destinoBanner?.addEventListener('change', atualizarLinkBanner);
+  campoLinkPersonalizado?.addEventListener('input', atualizarLinkBanner);
+  imagemBanner?.addEventListener('input', () => atualizarPreviaBanner(imagemBanner.value));
+  document.querySelector('#formNovoBanner')?.addEventListener('submit', (event) => {
+    atualizarLinkBanner();
+    if (!campoLinkFinal?.value.trim()) {
+      event.preventDefault();
+      notificar('Selecione um destino válido para o banner.', 'erro');
+    }
+  });
+  atualizarLinkBanner();
+
   configurarUpload('#zonaUploadBanner', '#inputUploadBanner', (arquivos) => {
-    const campo = $('#campoBannerImagem');
-    if (campo && arquivos[0]) campo.value = arquivos[0].url;
+    if (imagemBanner && arquivos[0]) {
+      imagemBanner.value = arquivos[0].url;
+      atualizarPreviaBanner(imagemBanner.value);
+    }
   });
 
   /* --------------------------- editor de texto -------------------------- */
@@ -488,11 +525,17 @@
 
     const usarFundoBanner = alvo('[data-usar-fundo-banner]');
     if (usarFundoBanner) {
-      const campo = document.getElementById('campoBannerImagem');
-      if (campo) {
-        campo.value = usarFundoBanner.getAttribute('data-usar-fundo-banner');
-        campo.focus();
-        notificar('Fundo vermelho selecionado. Preencha o título e salve o banner.');
+      const campo = document.querySelector('#formNovoBanner [name="imagem"]');
+      const url = usarFundoBanner.getAttribute('data-usar-fundo-banner');
+      if (campo && url) {
+        campo.value = url;
+        if (imagemBannerMobile && !imagemBannerMobile.value.trim()) imagemBannerMobile.value = url;
+        atualizarPreviaBanner(url);
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+        notificar('Fundo vermelho aplicado ao novo banner. Prévia atualizada.');
+        document.querySelector('#formNovoBanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        notificar('Não foi possível localizar o formulário do novo banner.', 'erro');
       }
       return;
     }
