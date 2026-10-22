@@ -1016,3 +1016,19 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
   .carrossel .banner-texto-sobreposto p { font-size: 12px; margin-bottom: 7px; }
   .carrossel .banner-texto-sobreposto .banner-cta { padding: 5px 9px; font-size: 11px; }
 }
+
+/* Contraste obrigatório em banner vermelho: resiste a estilos globais da vitrine. */
+.carrossel .slide .banner-texto-sobreposto,
+.carrossel .slide .banner-texto-sobreposto h2,
+.carrossel .slide .banner-texto-sobreposto p,
+.carrossel .slide .banner-texto-sobreposto span {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  opacity: 1;
+}
+.carrossel .slide .banner-texto-sobreposto .banner-cta {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  background: #842336;
+  border: 2px solid #fff;
+}
