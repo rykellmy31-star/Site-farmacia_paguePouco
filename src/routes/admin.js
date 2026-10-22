@@ -378,6 +378,7 @@ export function registrarRotasAdmin(app, db) {
     res.html(telaBanners(ctx, {
       banners: db.collection('banners').all().sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99)),
       midias: db.collection('midia').all().filter((m) => m.tipo === 'image').slice(0, 40),
+      categorias: db.collection('categories').all().sort((a,b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')),
     }));
   });
 
