@@ -210,20 +210,38 @@ function cartaoProdutoContainer(ctx, cat) {
 /* CATEGORIA / BUSCA                                                   */
 /* ------------------------------------------------------------------ */
 export function categoriaPage(ctx, { categoria, produtos, total, pagina, porPagina, ordenar, filtros }) {
-  const arvore = ctx.arvore || montarArvore(ctx.db);
-  // A árvore contém níveis arbitrários; buscar só nas raízes escondia as
-  // subcategorias quando o cliente navegava para uma categoria intermediária.
-  const filhas = ctx.db.collection('categories').all()
-    .filter(c => c.ativa !== false && String(c.paiId || '') === String(categoria.id))
-    .sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999) ||
-      String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  const todas = ctx.db.collection('categories').all().filter(c => c.ativa !== false);
+  const porId = new Map(todas.map(c => [String(c.id), c]));
+  const ordenarCategorias = (a,b) => (a.ordem ?? 999) - (b.ordem ?? 999) ||
+    String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+  const pai = categoria.paiId ? porId.get(String(categoria.paiId)) : null;
+  const irmaos = pai ? todas.filter(c => String(c.paiId || '') === String(pai.id))
+    .sort(ordenarCategorias) : [];
+  const filhas = todas.filter(c => String(c.paiId || '') === String(categoria.id))
+    .sort(ordenarCategorias);
+  const trilha = [];
+  const visitados = new Set([String(categoria.id)]);
+  let ancestral = pai;
+  while (ancestral && !visitados.has(String(ancestral.id))) {
+    trilha.unshift({texto: ancestral.nome, url: categoryUrl(ancestral)});
+    visitados.add(String(ancestral.id));
+    ancestral = ancestral.paiId ? porId.get(String(ancestral.paiId)) : null;
+  }
   return paginaPublica(ctx, {
     titulo: categoria.nome,
     descricao: categoria.descricao || `${categoria.nome} na Farmácia Pague Pouco.`,
     conteudo: `<div class="container">
-      ${migalhas([{ texto: 'Início', url: '/' }, { texto: 'Departamentos', url: '/departamentos' }, { texto: categoria.nome }])}
+      ${migalhas([{ texto: 'Início', url: '/' }, { texto: 'Departamentos', url: '/departamentos' }, ...trilha, { texto: categoria.nome }])}
       <h1>${e(categoria.nome)}</h1>
       ${categoria.descricao ? `<p class="texto-suave">${sanitizeHtml(categoria.descricao)}</p>` : ''}
+      ${irmaos.length > 1 ? `<div class="filtros">
+        <h3>Outras categorias de ${e(pai.nome)}</h3>
+        <div class="linha" style="flex-wrap:wrap;gap:6px">
+          ${irmaos.map(c => c.id === categoria.id
+            ? `<span class="botao pequeno" aria-current="page">${e(c.nome)}</span>`
+            : `<a class="botao pequeno secundario" href="${e(categoryUrl(c))}">${e(c.nome)}</a>`).join('')}
+        </div>
+      </div>` : ''}
       ${filhas.length ? `<div class="filtros">
         <h3>Subcategorias</h3>
         <div class="linha" style="flex-wrap:wrap;gap:6px">
