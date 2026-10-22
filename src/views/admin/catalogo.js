@@ -69,7 +69,7 @@ export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoque
           colunas: ['Produto', 'Estoque', 'Mínimo', ''],
           linhas: estoqueBaixo.map((p) => `<tr>
             <td>${e(p.nome)}</td>
-            <td><strong>${e(p.estoque?.quantidade ?? 0)}</strong> ${Number(p.estoque?.reservado) ? `<span class="texto-pequeno texto-suave">(${p.estoque.reservado} reservado)</span>` : ''}</td>
+            <td><strong>${e(p.estoque?.quantidade ?? 0)}</strong> ${Number(p.estoque?.reservado) ? `<span class="texto-pequeno texto-suave">(${p.estoque.reservado} reservado)</span>` : ''} ${Number(p.estoque?.quarentena) ? `<span class="texto-pequeno texto-suave">(${e(p.estoque.quarentena)} em quarentena — não vendável)</span>` : ''}</td>
             <td>${e(p.estoque?.minimo ?? 0)}</td>
             <td><a class="botao pequeno secundario" href="/admin/produtos/${e(p.id)}">Ajustar</a></td>
           </tr>`),
