@@ -27,3 +27,21 @@ test('subcategorias aparecem em todos os niveis e somem somente no ultimo', () =
   assert.doesNotMatch(gerar(cats[2]),/href="\/categoria\/oculto"/);
   assert.doesNotMatch(gerar(cats[3]),/<h3>Subcategorias<\/h3>/);
 });
+
+test('ao acessar lenços permanecem fraldas descartáveis e geriátricas, com breadcrumb completo',()=>{
+  const db=new DB();
+  const cats=[
+    {id:'dep',nome:'Fraldas',slug:'fraldas',ativa:true},
+    {id:'lencos',paiId:'dep',nome:'Lenços umedecidos',slug:'lencos-umedecidos',ativa:true},
+    {id:'desc',paiId:'dep',nome:'Fraldas descartáveis',slug:'fraldas-descartaveis',ativa:true},
+    {id:'ger',paiId:'dep',nome:'Fraldas geriátricas',slug:'fraldas-geriatricas',ativa:true},
+    {id:'neto',paiId:'lencos',nome:'Lenços sem perfume',slug:'sem-perfume',ativa:true},
+  ];for(const c of cats)db.collection('categories').insert(c);
+  const ctx={db,settings:{empresa:{nomeFantasia:'Farmácia Pague Pouco'},tema:{},seo:{},whatsapp:{},cookies:{}},req:{pathname:'/categoria/lencos-umedecidos'},arvore:[],csrf:'teste'};
+  const html=categoriaPage(ctx,{categoria:cats[1],produtos:[],total:0,pagina:1,porPagina:24,ordenar:'relevancia',filtros:{}});
+  assert.match(html,/Outras categorias de Fraldas/);
+  assert.match(html,/href="\/categoria\/fraldas-descartaveis"/);
+  assert.match(html,/href="\/categoria\/fraldas-geriatricas"/);
+  assert.match(html,/href="\/categoria\/sem-perfume"/);
+  assert.match(html,/Fraldas<\/a>/);
+});
