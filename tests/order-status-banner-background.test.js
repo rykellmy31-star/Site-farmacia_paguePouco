@@ -210,3 +210,13 @@ test('seletor de banners mostra categorias reais e nao oferece categorias inativ
   assert.match(js,/atualizarPreviaBanner\(url\)/);
   assert.match(js,/atualizarLinkBanner/);
 });
+
+test('banner padrão possui título, descrição, fundo sem upload e ordem automática',()=>{
+  const db=new DB();
+  const html=telaBanners({...ctx(db),adminUser:{role:'super_admin',nome:'Admin'}},{banners:[],midias:[],categorias:[]});
+  assert.match(html,/Título que aparece no banner/);
+  assert.match(html,/Descrição abaixo do título/);
+  assert.match(html,/Ordem automática/);
+  assert.doesNotMatch(html,/name="ordem"/);
+  assert.match(html,/name="imagem" value="\/img\/fundo-banner-vermelho.svg"/);
+});
