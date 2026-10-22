@@ -238,3 +238,15 @@ test('banners cadastrados podem abrir edicao preenchida, mantendo id e ordem',()
   assert.match(html,/Salvar alterações/);
   assert.match(html,/Cancelar edição/);
 });
+
+test('previsao e miniatura de banner vermelho incluem titulo e descricao',()=>{
+ const db=new DB();
+ const banner={id:'bprev',titulo:'QUARTA DO BEBÊ',descricao:'Ofertas infantis com desconto',imagem:'/img/fundo-banner-vermelho.svg',posicao:'principal',ordem:4,ativo:true,link:'/categoria/fraldas'};
+ const html=telaBanners({...ctx(db),adminUser:{role:'super_admin',nome:'Admin'}},{banners:[banner],midias:[],categorias:[],editando:banner});
+ assert.match(html,/id="previewBannerTitulo">QUARTA DO BEBÊ/);
+ assert.match(html,/id="previewBannerDescricao">Ofertas infantis com desconto/);
+ assert.match(html,/banner-miniatura-lista/);
+ assert.match(html,/banner-miniatura-cta/);
+ const js=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
+ assert.match(js,/atualizarTextoPreviaBanner/);
+});
