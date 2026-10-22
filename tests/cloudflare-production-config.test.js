@@ -35,3 +35,15 @@ test('PUBLIC_BASE_URL explícita mantém preferência e segredo não é exposto'
     Object.assign(config, prev);
   }
 });
+
+test('Wrangler mantém Worker e banco de produção, URL pública explícita e segredos existentes', () => {
+  const wrangler = JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+  assert.equal(wrangler.name,'site-farmacia-paguepouco');
+  assert.equal(wrangler.main,'src/cloudflare/worker.js');
+  assert.equal(wrangler.keep_vars,true, 'variáveis e segredos existentes devem ser preservados');
+  assert.equal(wrangler.vars.PUBLIC_BASE_URL,'https://site.farmaciapaguepouco.app');
+  assert.deepEqual(wrangler.durable_objects.bindings,[{name:'LOJA',class_name:'LojaDurableObject'}]);
+  assert.deepEqual(wrangler.migrations,[{tag:'v1',new_sqlite_classes:['LojaDurableObject']}]);
+  assert.equal(wrangler.assets.binding,'ASSETS');
+  assert(!Object.keys(wrangler.vars).some(k=>/PASSWORD|TOKEN|SECRET|CREDENTIALS/i.test(k)));
+});
