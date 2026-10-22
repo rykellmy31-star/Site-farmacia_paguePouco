@@ -120,7 +120,21 @@
     previa.hidden = !valor;
     if (valor) previa.src = valor;
     else previa.removeAttribute('src');
+    const texto = document.querySelector('#previewBannerTexto');
+    if (texto) texto.hidden = valor !== '/img/fundo-banner-vermelho.svg';
   }
+
+  function atualizarTextoPreviaBanner() {
+    const titulo = document.querySelector('#formNovoBanner [name="titulo"]');
+    const descricao = document.querySelector('#formNovoBanner [name="descricao"]');
+    const tituloPrevia = document.querySelector('#previewBannerTitulo');
+    const descricaoPrevia = document.querySelector('#previewBannerDescricao');
+    if (tituloPrevia) tituloPrevia.textContent = titulo?.value || '';
+    if (descricaoPrevia) descricaoPrevia.textContent = descricao?.value || '';
+  }
+  document.querySelector('#formNovoBanner [name="titulo"]')?.addEventListener('input', atualizarTextoPreviaBanner);
+  document.querySelector('#formNovoBanner [name="descricao"]')?.addEventListener('input', atualizarTextoPreviaBanner);
+  atualizarTextoPreviaBanner();
 
   const imagemBanner = document.querySelector('#formNovoBanner [name="imagem"]');
   const imagemBannerMobile = document.querySelector('#formNovoBanner [name="imagemMobile"]');
