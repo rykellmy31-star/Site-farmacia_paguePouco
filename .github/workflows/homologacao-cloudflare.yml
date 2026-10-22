@@ -1,6 +1,11 @@
 name: Homologacao Cloudflare - somente leitura
 on:
   workflow_dispatch:
+    inputs:
+      build_uuid:
+        description: 'UUID do build com falha (opcional, somente leitura)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,6 +32,13 @@ jobs:
         run: node --test tests/cloudflare-public-smoke.test.js
       - name: Test public production pages and private-route blocking (GET only)
         run: node scripts/smoke-cloudflare-readonly.mjs
+      - name: Diagnosticar build Cloudflare sem exibir logs privados
+        if: ${{ inputs.build_uuid != '' }}
+        env:
+          CLOUDFLARE_AUDIT_TOKEN: ${{ secrets.CLOUDFLARE_AUDIT_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_BUILD_UUID: ${{ inputs.build_uuid }}
+        run: node scripts/diagnose-cloudflare-build.mjs
       - name: Read only Worker bindings and deployment metadata
         env:
           CLOUDFLARE_AUDIT_TOKEN: ${{ secrets.CLOUDFLARE_AUDIT_TOKEN }}

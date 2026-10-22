@@ -43,7 +43,7 @@ jobs:
       # Ensaio somente leitura, não dá deploy nem acessa credenciais do painel.
       # Nunca executar com secrets em pull requests externos (forks).
       - name: Cloudflare public smoke policy (offline, mocked GET only)
-        run: node --test tests/cloudflare-public-smoke.test.js
+        run: node --test tests/cloudflare-public-smoke.test.js tests/cloudflare-build-diagnostics.test.js
       - name: Cloudflare production smoke GET only (no clients or payments)
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         run: node scripts/smoke-cloudflare-readonly.mjs
