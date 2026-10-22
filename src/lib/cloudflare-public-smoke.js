@@ -7,6 +7,8 @@ export const URL_PRODUCAO = 'https://site.farmaciapaguepouco.app';
 const PASSO = [
   ['saude','/__health'],
   ['pagina_inicial','/'],
+  ['ofertas','/ofertas'],
+  ['departamentos','/departamentos'],
   ['painel_privado','/admin/inovafarma'],
   ['dados_privados','/data/db/admins.json'],
   ['asset_banner','/img/fundo-banner-vermelho.svg'],
@@ -39,7 +41,7 @@ export async function verificarCloudflarePublico({
         valido = json?.ok === true &&
           json?.runtime === 'cloudflare-workers' &&
           json?.storage === 'durable-object-sqlite';
-      } else if (nome === 'pagina_inicial') {
+      } else if (['pagina_inicial','ofertas','departamentos'].includes(nome)) {
         valido = res.status === 200 && tipo.includes('text/html');
       } else if (nome === 'painel_privado') {
         // Em nenhuma hipótese um visitante sem sessão pode obter este painel.
