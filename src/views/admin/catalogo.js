@@ -602,7 +602,7 @@ export function telaBanners(ctx, { banners, midias, categorias = [] }) {
       corpo: `<form method="post" id="formNovoBanner" action="/admin/api/banners">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'titulo', rotulo: 'Título/descrição alternativa', obrigatorio: true })}
+          ${campoAdmin({ nome: 'titulo', rotulo: 'Título que aparece no banner', obrigatorio: true })}
           <div class="campo">
             <label for="bannerDestino">Destino ao clicar</label>
             <select id="bannerDestino" aria-label="Selecionar destino do banner">
@@ -621,9 +621,10 @@ export function telaBanners(ctx, { banners, midias, categorias = [] }) {
         </div>
         <input type="hidden" id="bannerLinkFinal" name="link" value="/ofertas">
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'imagem', rotulo: 'Imagem (URL)', dica: 'Cole a URL de um arquivo da biblioteca ou envie abaixo.' })}
+          ${campoAdmin({ nome: 'imagem', rotulo: 'Imagem (URL)', valor: '/img/fundo-banner-vermelho.svg', dica: 'O fundo vermelho já está disponível, sem necessidade de enviar outro arquivo.' })}
           ${campoAdmin({ nome: 'imagemMobile', rotulo: 'Imagem para celular (opcional)' })}
         </div>
+        ${campoAdmin({ nome: 'descricao', rotulo: 'Descrição abaixo do título (opcional)', tipo: 'textarea', dica: 'Será mostrada sobre o fundo vermelho.' })}
         <div class="campo">
           <label>Prévia do banner</label>
           <img id="previewNovoBanner" hidden src="/img/fundo-banner-vermelho.svg" alt="Prévia do fundo selecionado"
@@ -631,7 +632,7 @@ export function telaBanners(ctx, { banners, midias, categorias = [] }) {
         </div>
         <div class="campo-linha">
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
-          ${campoAdmin({ nome: 'ordem', rotulo: 'Ordem', tipo: 'number', valor: 99 })}
+          <p class="texto-pequeno texto-suave">Ordem automática: o próximo banner será inserido depois dos banners existentes nessa posição.</p>
         </div>
         ${campoAdmin({ nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox', valor: true })}
         <button class="botao" type="submit">Salvar banner</button>
