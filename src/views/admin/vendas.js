@@ -142,12 +142,14 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
 
     <div class="grade-form duas-colunas">
       <div>
-        ${painel({
+        ${pedido.statusFinanceiro === 'aprovado' && ctx.permissoes?.podeEditarPedidos &&
+          !['cancelado', 'entregue', 'devolucao_em_analise', 'devolucao_recebida', 'encerrado_sem_devolucao']
+            .includes(pedido.statusOperacional) ? painel({
           titulo: 'Atualizar status operacional',
           corpo: `<form method="post" action="/admin/api/pedidos/${e(pedido.id)}/status">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
             ${campoAdmin({ nome: 'status', rotulo: 'Novo status', valor: pedido.statusOperacional,
-              opcoes: Object.values(STATUS_OPERACIONAL).filter(s => !['cancelado','devolucao_em_analise'].includes(s.id)).map((s) => ({ valor: s.id, texto: s.nome })) })}
+              opcoes: Object.values(STATUS_OPERACIONAL).filter(s => !['cancelado','devolucao_em_analise','devolucao_recebida','encerrado_sem_devolucao'].includes(s.id)).map((s) => ({ valor: s.id, texto: s.nome })) })}
             ${campoAdmin({ nome: 'obs', rotulo: 'Observação interna' })}
             <button class="botao" type="submit">Atualizar status</button>
             ${pedido.statusFinanceiro === 'aprovado' &&
@@ -155,7 +157,7 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
               ? `<button class="botao pequeno secundario" type="button"
                   data-marcar-entregue="${e(pedido.id)}">✓ Marcar como entregue</button>` : ''}
           </form>`,
-        })}
+        }) : ''}
 
         ${pedido.statusFinanceiro === 'estornado' &&
           statusOperacionalExibido(pedido) === 'devolucao_em_analise' &&
@@ -174,6 +176,19 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
             <textarea id="justificativa-devolucao" name="justificativa" minlength="10" maxlength="500" required placeholder="Descreva quem conferiu e o resultado"></textarea>
             <button class="botao" type="submit">Registrar resultado da devolução</button>
           </form>`,
+        }) : ''}
+
+        ${pedido.conferenciaDevolucao &&
+          ['devolucao_recebida','encerrado_sem_devolucao'].includes(pedido.statusOperacional) ? painel({
+          titulo: 'Conferência da devolução registrada',
+          corpo: `<p><strong>Situação:</strong> ${e(STATUS_OPERACIONAL[pedido.statusOperacional]?.nome || pedido.statusOperacional)}</p>
+            <p><strong>Responsável:</strong> ${e(pedido.conferenciaDevolucao.por || '—')}<br>
+            <strong>Registrado em:</strong> ${formatDateTime(pedido.conferenciaDevolucao.em)}<br>
+            <strong>Observação:</strong> ${e(pedido.conferenciaDevolucao.justificativa || '—')}</p>
+            ${pedido.conferenciaDevolucao.decisao === 'recebida' ? `<p>
+              <strong>Itens recebidos:</strong> ${(pedido.conferenciaDevolucao.itensRecebidos || []).reduce((sum,item)=>sum + Number(item.quantidade || 0),0)} unidade(s).
+              Estoque físico atualizado em quarentena, sem liberação para venda.
+            </p>` : '<p>Nenhuma entrada física foi lançada no estoque.</p>'}`,
         }) : ''}
 
         ${painel({
