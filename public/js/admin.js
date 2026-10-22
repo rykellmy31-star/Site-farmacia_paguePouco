@@ -114,7 +114,7 @@
   configurarUpload('#zonaUpload', '#inputUpload', adicionarAoFormProduto);
   configurarUpload('#zonaUploadMidia', '#inputUploadMidia', () => setTimeout(() => location.reload(), 900));
   function atualizarPreviaBanner(url) {
-    const previa = document.getElementById('previewNovoBanner');
+    const previa = document.querySelector('#previewNovoBanner');
     if (!previa) return;
     const valor = String(url || '').trim();
     previa.hidden = !valor;
@@ -124,9 +124,9 @@
 
   const imagemBanner = document.querySelector('#formNovoBanner [name="imagem"]');
   const imagemBannerMobile = document.querySelector('#formNovoBanner [name="imagemMobile"]');
-  const destinoBanner = document.getElementById('bannerDestino');
-  const campoLinkFinal = document.getElementById('bannerLinkFinal');
-  const personalizadoBanner = document.getElementById('bannerLinkPersonalizado');
+  const destinoBanner = document.querySelector('#bannerDestino');
+  const campoLinkFinal = document.querySelector('#bannerLinkFinal');
+  const personalizadoBanner = document.querySelector('#bannerLinkPersonalizado');
   const campoLinkPersonalizado = document.querySelector('#formNovoBanner [name="linkPersonalizado"]');
 
   function atualizarLinkBanner() {
@@ -139,7 +139,7 @@
   destinoBanner?.addEventListener('change', atualizarLinkBanner);
   campoLinkPersonalizado?.addEventListener('input', atualizarLinkBanner);
   imagemBanner?.addEventListener('input', () => atualizarPreviaBanner(imagemBanner.value));
-  document.getElementById('formNovoBanner')?.addEventListener('submit', (event) => {
+  document.querySelector('#formNovoBanner')?.addEventListener('submit', (event) => {
     atualizarLinkBanner();
     if (!campoLinkFinal?.value.trim()) {
       event.preventDefault();
@@ -533,7 +533,7 @@
         atualizarPreviaBanner(url);
         campo.dispatchEvent(new Event('input', { bubbles: true }));
         notificar('Fundo vermelho aplicado ao novo banner. Prévia atualizada.');
-        document.getElementById('formNovoBanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.querySelector('#formNovoBanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else {
         notificar('Não foi possível localizar o formulário do novo banner.', 'erro');
       }
