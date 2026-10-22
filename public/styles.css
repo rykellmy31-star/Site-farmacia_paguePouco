@@ -1031,3 +1031,16 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
   color: #842336 !important;
   -webkit-text-fill-color: #842336;
 }
+
+/* Texto do banner vermelho: sobrescreve cores herdadas do tema e dos links. */
+.carrossel .slide .banner-texto-sobreposto,
+.carrossel .slide a .banner-texto-sobreposto,
+.carrossel .slide .banner-texto-sobreposto h2,
+.carrossel .slide .banner-texto-sobreposto p {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+}
+.carrossel .slide .banner-texto-sobreposto .banner-cta {
+  color: #842336 !important;
+  -webkit-text-fill-color: #842336;
+}
