@@ -120,3 +120,14 @@ test('INOVAFARMA: pedido não pode ser dado como refletido antes da confirmaçã
   assert.equal(r.status, 409);
   assert.equal(estoqueDisponivel(db.collection('products').get('produto-1')), 5);
 });
+
+test('INOVAFARMA: retorno segregado nunca aparece no saldo vendavel do ERP', () => {
+  const db = preparar();
+  const p = db.collection('products').get('produto-1');
+  db.collection('products').update(p.id, { estoque: {
+    ...p.estoque, quantidade: 12, quarentena: 2,
+  } });
+  const atualizado = db.collection('products').get(p.id);
+  assert.equal(estoqueInovaDisponivel(atualizado), 3);
+  assert.equal(estoqueDisponivel(atualizado), 3);
+});

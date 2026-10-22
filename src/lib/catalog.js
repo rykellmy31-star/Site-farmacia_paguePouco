@@ -84,7 +84,9 @@ export function podeVender(produto) {
 export function estoqueDisponivel(produto) {
   if (inovaAtiva()) return estoqueInovaDisponivel(produto);
   const e = produto?.estoque || {};
-  return Math.max(0, Number(e.quantidade || 0) - Number(e.reservado || 0));
+  return Math.max(0, Number(e.quantidade || 0) -
+    Math.max(0, Number(e.reservado || 0)) -
+    Math.max(0, Number(e.quarentena || 0)));
 }
 
 export function precoVigenteCentavos(produto) {

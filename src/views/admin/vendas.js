@@ -157,6 +157,25 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
           </form>`,
         })}
 
+        ${pedido.statusFinanceiro === 'estornado' &&
+          statusOperacionalExibido(pedido) === 'devolucao_em_analise' &&
+          ctx.permissoes?.podeEditarPedidos ? painel({
+          titulo: 'Conferir devolução após estorno',
+          corpo: `<p>O pagamento já foi estornado. Registre o destino físico da mercadoria. Ao confirmar o recebimento, os itens entram automaticamente no estoque físico, separados em quarentena e indisponíveis para venda até destinação sanitária. Esta ação não emite um novo estorno.</p>
+          <form method="post" action="/admin/api/pedidos/${e(pedido.id)}/concluir-devolucao">
+            <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            <label for="decisao-devolucao">Resultado da conferência</label>
+            <select id="decisao-devolucao" name="decisao" required>
+              <option value="">Selecione</option>
+              <option value="recebida">Confirmar devolução recebida</option>
+              <option value="nao_recebida">Encerrar sem devolução</option>
+            </select>
+            <label for="justificativa-devolucao">Justificativa e conferência física</label>
+            <textarea id="justificativa-devolucao" name="justificativa" minlength="10" maxlength="500" required placeholder="Descreva quem conferiu e o resultado"></textarea>
+            <button class="botao" type="submit">Registrar resultado da devolução</button>
+          </form>`,
+        }) : ''}
+
         ${painel({
           titulo: 'Rastreamento',
           corpo: `<form method="post" action="/admin/api/pedidos/${e(pedido.id)}/rastreio">

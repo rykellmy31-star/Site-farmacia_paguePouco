@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Collection } from '../src/lib/store.js';
-import { atualizarStatusFinanceiro, atualizarStatusOperacional, cancelarPedido, statusOperacionalExibido } from '../src/lib/orders.js';
+import { atualizarStatusFinanceiro, atualizarStatusOperacional, cancelarPedido, statusOperacionalExibido, concluirDevolucaoEstornada } from '../src/lib/orders.js';
 import { telaConta, telaPedidoDetalhe } from '../src/views/account.js';
+import { estoqueDisponivel } from '../src/lib/catalog.js';
 import { telaPedido } from '../src/views/admin/vendas.js';
 import { telaBanners } from '../src/views/admin/catalogo.js';
 
@@ -73,13 +74,13 @@ test('pedido antigo estornado aparece coerente no painel e conta sem mutação r
   const p=db.collection('orders').get('o1');
   assert.equal(statusOperacionalExibido(p),'devolucao_em_analise');
   const cliente=telaConta(ctx(db),{pedidos:[p]});
-  assert.match(cliente,/Devolução em análise/);
+  assert.match(cliente,/Aguardando conferência de devolução/);
   assert.doesNotMatch(cliente,/saiu para entrega/i);
   const detalhe=telaPedidoDetalhe(ctx(db),{pedido:p});
-  assert.match(detalhe,/Devolução em análise/);
+  assert.match(detalhe,/Aguardando conferência de devolução/);
   const admin=telaPedido({...ctx(db),adminUser:{role:'super_admin',nome:'Admin'},permissoes:{podeEditarPedidos:true}},
     {pedido:p,pagamento:null,eventos:[]});
-  assert.match(admin,/Devolução em análise/);
+  assert.match(admin,/Aguardando conferência de devolução/);
   assert.equal(db.collection('orders').get('o1').statusOperacional,'saiu_para_entrega',
     'histórico armazenado preservado em pedidos antigos');
 });
@@ -122,4 +123,60 @@ test('modelo vermelho pode ser baixado e reutilizado sem textos originais',()=>{
   assert.match(html,/Baixar somente o fundo vermelho/);
   assert.match(html,/download="fundo-banner-vermelho-pague-pouco.svg"/);
   assert.match(html,/data-usar-fundo-banner="\/img\/fundo-banner-vermelho.svg"/);
+});
+
+test('administrador confirma devolucao, registra estoque fisico em quarentena, sem liberar venda',()=>{
+  const {db}=criar('aprovado','saiu_para_entrega');
+  assert.equal(concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Devolvida pela transportadora'}).ok,false);
+  db.collection('payments').update('pg',{status:'refunded'});
+  atualizarStatusFinanceiro(db,'o1','estornado');
+  assert.equal(concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'curta'}).ok,false);
+  const resultado=concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Recebida no balcão, lote segregado para avaliação.',por:'Gerente'});
+  assert.equal(resultado.ok,true);
+  assert.equal(resultado.pedido.statusOperacional,'devolucao_recebida');
+  assert.equal(resultado.pedido.conferenciaDevolucao.por,'Gerente');
+  assert.equal(resultado.pedido.statusFinanceiro,'estornado');
+  const produto = db.collection('products').get('p1');
+  assert.equal(produto.estoque.quantidade,9, 'quantidade física aumentou');
+  assert.equal(produto.estoque.quarentena,1, 'devolução recebida segregada');
+  assert.equal(estoqueDisponivel(produto),8, 'não colocar o devolvido à venda sem avaliação');
+  const movimentos = db.collection('stockMovements').find(x => x.pedidoId === 'o1');
+  assert.equal(movimentos.length,1);
+  assert.equal(movimentos[0].tipo,'entrada_quarentena');
+  assert.equal(movimentos[0].quantidade,1);
+  assert.equal(concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Tentativa duplicada'}).ok,false);
+  assert.equal(atualizarStatusOperacional(db,'o1','entregue').ok,false);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,9,'repetição não lança nova entrada');
+});
+test('pode encerrar sem retorno fisico documentado, sem criar nova cobrança',()=>{
+  const {db}=criar('estornado','devolucao_em_analise');
+  const r=concluirDevolucaoEstornada(db,'o1',{decisao:'nao_recebida',justificativa:'Transportadora confirmou extravio.',por:'Super Admin'});
+  assert.equal(r.ok,true);
+  assert.equal(statusOperacionalExibido(r.pedido),'encerrado_sem_devolucao');
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,8);
+  const html=telaPedido({...ctx(db),adminUser:{role:'super_admin',nome:'Admin'},permissoes:{podeEditarPedidos:true}},
+    {pedido:r.pedido,pagamento:null,eventos:[]});
+  assert.match(html,/Encerrado sem devolução/);
+  assert.doesNotMatch(html,/Registrar resultado da devolução/);
+});
+
+test('devolucao nao movimenta produtos inexistentes nem aceita quantidades incorretas',()=>{
+  const {db}=criar('estornado','devolucao_em_analise');
+  db.collection('orders').update('o1',{itens:[{produtoId:'sumiu',quantidade:2}]});
+  const x=concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Mercadoria fisicamente devolvida',por:'Admin'});
+  assert.equal(x.ok,false);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,8);
+  assert.equal(db.collection('stockMovements').count(),0);
+  assert.equal(db.collection('orders').get('o1').statusOperacional,'devolucao_em_analise');
+});
+test('devolucao multiplos itens agrega entradas por produto de modo auditavel',()=>{
+  const {db}=criar('estornado','devolucao_em_analise');
+  db.collection('orders').update('o1',{itens:[{produtoId:'p1',quantidade:2},{produtoId:'p1',quantidade:1}]});
+  const r=concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Tres itens conferidos no retorno',por:'Admin'});
+  assert.equal(r.ok,true);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,11);
+  assert.equal(db.collection('products').get('p1').estoque.quarentena,3);
+  assert.equal(estoqueDisponivel(db.collection('products').get('p1')),8);
+  assert.equal(db.collection('stockMovements').count(),1);
+  assert.equal(r.pedido.conferenciaDevolucao.itensRecebidos[0].quantidade,3);
 });

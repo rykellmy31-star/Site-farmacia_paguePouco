@@ -30,7 +30,7 @@ import {
 } from '../lib/catalog.js';
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
-  registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro,
+  registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro, concluirDevolucaoEstornada,
   cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
@@ -1149,6 +1149,19 @@ function registrarApi(app, db) {
     if (!r.ok) return void res.json(r, 400);
     logAdmin(db, req.adminUser, 'alterou_status_pedido', 'pedido', pedido.id, { status: req.body.status }, req);
     res.json({ ok: true, status: req.body.status });
+  });
+
+  app.post('/admin/api/pedidos/:id/concluir-devolucao', (req, res) => {
+    if (!guardApi(req, res, 'pedidos.editar')) return;
+    const decisao = String(req.body.decisao || '');
+    const justificativa = cleanText(req.body.justificativa, 500);
+    const r = concluirDevolucaoEstornada(db, req.params.id, {
+      decisao, justificativa, por: req.adminUser.nome,
+    });
+    if (!r.ok) return void res.json(r, 409);
+    logAdmin(db, req.adminUser, 'concluiu_conferencia_devolucao', 'pedido', req.params.id,
+      { decisao, status: r.pedido.statusOperacional }, req);
+    res.json({ ok: true, status: r.pedido.statusOperacional });
   });
 
   app.post('/admin/api/pedidos/:id/rastreio', (req, res) => {
