@@ -53,3 +53,13 @@ jobs:
           CLOUDFLARE_AUDIT_TOKEN: ${{ secrets.CLOUDFLARE_AUDIT_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/audit-cloudflare-readonly.mjs
+      # Diagnóstico temporário GET apenas, UUID do último Workers Builds falhado.
+      # Nunca imprimir conteúdo bruto do log. O job principal continua independente.
+      - name: Diagnose previous Cloudflare build failure safely
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        continue-on-error: true
+        env:
+          CLOUDFLARE_AUDIT_TOKEN: ${{ secrets.CLOUDFLARE_AUDIT_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_BUILD_UUID: 7e8a1950-bf8b-4e40-a16c-4a21149efd3f
+        run: node scripts/diagnose-cloudflare-build.mjs
