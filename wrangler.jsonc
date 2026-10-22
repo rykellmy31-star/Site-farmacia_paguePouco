@@ -8,6 +8,9 @@
   ],
   "workers_dev": true,
   "keep_vars": true,
+  "vars": {
+    "PUBLIC_BASE_URL": "https://site.farmaciapaguepouco.app"
+  },
   "build": {
     "command": "node scripts/prepare-cloudflare.js"
   },
