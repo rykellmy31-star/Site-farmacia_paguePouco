@@ -1032,3 +1032,18 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
   background: #842336;
   border: 2px solid #fff;
 }
+
+/* Miniaturas e edição visual dos banners. */
+.banner-miniatura{position:relative;overflow:hidden;border-radius:10px;background:#782235;aspect-ratio:1200/420;width:100%}
+.banner-miniatura img{display:block;width:100%;height:100%;object-fit:cover}
+.banner-preview-editor{max-width:720px}
+.banner-miniatura-lista{width:180px;max-width:100%}
+.banner-miniatura-texto{position:absolute;inset:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;width:75%;padding:5%;gap:5%;color:#fff!important;pointer-events:none;text-shadow:0 1px 5px rgba(0,0,0,.27)}
+.banner-miniatura-texto[hidden]{display:none!important}
+.banner-miniatura-texto strong{font-size:clamp(15px,3vw,31px);line-height:1.15;color:#fff!important;overflow-wrap:anywhere}
+.banner-miniatura-texto>span:not(.banner-miniatura-cta){font-size:clamp(10px,1.5vw,16px);line-height:1.2;color:#fff!important}
+.banner-miniatura-cta{display:inline-block;background:#842336;border:1px solid #fff;border-radius:15px;padding:5px 12px;font-size:clamp(8px,1vw,12px);color:#fff!important;text-shadow:none}
+.banner-miniatura-lista .banner-miniatura-texto{gap:3%}
+.banner-miniatura-lista .banner-miniatura-texto strong{font-size:clamp(7px,.9vw,12px)}
+.banner-miniatura-lista .banner-miniatura-texto>span:not(.banner-miniatura-cta){font-size:clamp(5px,.6vw,8px)}
+.banner-miniatura-lista .banner-miniatura-cta{font-size:6px;padding:2px 5px}

@@ -627,8 +627,14 @@ export function telaBanners(ctx, { banners, midias, categorias = [], editando = 
         ${campoAdmin({ nome: 'descricao', rotulo: 'Descrição abaixo do título (opcional)', tipo: 'textarea', valor: editando?.descricao || '', dica: 'Será mostrada sobre o fundo vermelho.' })}
         <div class="campo">
           <label>Prévia do banner</label>
-          <img id="previewNovoBanner" ${editando ? '' : 'hidden'} src="${e(editando?.imagem || '/img/fundo-banner-vermelho.svg')}" alt="Prévia do fundo selecionado"
-            style="max-width:100%;width:480px;height:auto;border-radius:10px">
+          <div id="previewBannerContainer" class="banner-miniatura banner-preview-editor">
+            <img id="previewNovoBanner" src="${e(editando?.imagem || '/img/fundo-banner-vermelho.svg')}" alt="Prévia do banner">
+            <div id="previewBannerTexto" class="banner-miniatura-texto" ${(editando?.imagem || '/img/fundo-banner-vermelho.svg') === '/img/fundo-banner-vermelho.svg' ? '' : 'hidden'}>
+              <strong id="previewBannerTitulo">${e(editando?.titulo || '')}</strong>
+              <span id="previewBannerDescricao">${e(editando?.descricao || '')}</span>
+              <span class="banner-miniatura-cta">Ver ofertas →</span>
+            </div>
+          </div>
         </div>
         <div class="campo-linha">
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', valor: editando?.posicao || 'principal', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
@@ -649,7 +655,14 @@ export function telaBanners(ctx, { banners, midias, categorias = [], editando = 
       corpo: tabelaAdmin({
         colunas: ['Imagem', 'Título', 'Posição', 'Ordem', 'Situação', 'Ações'],
         linhas: banners.map((b) => `<tr>
-          <td><img class="mini" src="${e(b.imagem)}" alt="" style="width:90px;height:auto"></td>
+          <td><div class="banner-miniatura banner-miniatura-lista">
+            <img src="${e(b.imagem)}" alt="Prévia de ${e(b.titulo)}">
+            ${b.imagem === '/img/fundo-banner-vermelho.svg' ? `<div class="banner-miniatura-texto">
+              <strong>${e(b.titulo || '')}</strong>
+              ${b.descricao ? `<span>${e(b.descricao)}</span>` : ''}
+              <span class="banner-miniatura-cta">Ver ofertas →</span>
+            </div>` : ''}
+          </div></td>
           <td>${e(b.titulo)}<br><span class="texto-pequeno texto-suave">${e(b.link || '')}</span></td>
           <td>${e(b.posicao || 'principal')}</td>
           <td>${e(String(b.ordem ?? 99))}</td>
