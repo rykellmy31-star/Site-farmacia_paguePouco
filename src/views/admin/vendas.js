@@ -161,7 +161,7 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
           statusOperacionalExibido(pedido) === 'devolucao_em_analise' &&
           ctx.permissoes?.podeEditarPedidos ? painel({
           titulo: 'Conferir devolução após estorno',
-          corpo: `<p>O pagamento já foi estornado. Registre o destino físico da mercadoria. A confirmação não devolve automaticamente produtos ao estoque.</p>
+          corpo: `<p>O pagamento já foi estornado. Registre o destino físico da mercadoria. Ao confirmar o recebimento, os itens entram automaticamente no estoque físico, separados em quarentena e indisponíveis para venda até destinação sanitária. Esta ação não emite um novo estorno.</p>
           <form method="post" action="/admin/api/pedidos/${e(pedido.id)}/concluir-devolucao">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
             <label for="decisao-devolucao">Resultado da conferência</label>
