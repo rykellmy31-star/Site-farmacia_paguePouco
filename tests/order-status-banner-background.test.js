@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { Collection } from '../src/lib/store.js';
 import { atualizarStatusFinanceiro, atualizarStatusOperacional, cancelarPedido, statusOperacionalExibido, concluirDevolucaoEstornada } from '../src/lib/orders.js';
 import { telaConta, telaPedidoDetalhe } from '../src/views/account.js';
+import { estoqueDisponivel } from '../src/lib/catalog.js';
 import { telaPedido } from '../src/views/admin/vendas.js';
 import { telaBanners } from '../src/views/admin/catalogo.js';
 
@@ -124,7 +125,7 @@ test('modelo vermelho pode ser baixado e reutilizado sem textos originais',()=>{
   assert.match(html,/data-usar-fundo-banner="\/img\/fundo-banner-vermelho.svg"/);
 });
 
-test('administrador confirma devolucao apenas com estorno e justificativa; nao altera estoque',()=>{
+test('administrador confirma devolucao, registra estoque fisico em quarentena, sem liberar venda',()=>{
   const {db}=criar('aprovado','saiu_para_entrega');
   assert.equal(concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Devolvida pela transportadora'}).ok,false);
   db.collection('payments').update('pg',{status:'refunded'});
@@ -135,9 +136,17 @@ test('administrador confirma devolucao apenas com estorno e justificativa; nao a
   assert.equal(resultado.pedido.statusOperacional,'devolucao_recebida');
   assert.equal(resultado.pedido.conferenciaDevolucao.por,'Gerente');
   assert.equal(resultado.pedido.statusFinanceiro,'estornado');
-  assert.equal(db.collection('products').get('p1').estoque.quantidade,8);
+  const produto = db.collection('products').get('p1');
+  assert.equal(produto.estoque.quantidade,9, 'quantidade física aumentou');
+  assert.equal(produto.estoque.quarentena,1, 'devolução recebida segregada');
+  assert.equal(estoqueDisponivel(produto),8, 'não colocar o devolvido à venda sem avaliação');
+  const movimentos = db.collection('stockMovements').find(x => x.pedidoId === 'o1');
+  assert.equal(movimentos.length,1);
+  assert.equal(movimentos[0].tipo,'entrada_quarentena');
+  assert.equal(movimentos[0].quantidade,1);
   assert.equal(concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Tentativa duplicada'}).ok,false);
   assert.equal(atualizarStatusOperacional(db,'o1','entregue').ok,false);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,9,'repetição não lança nova entrada');
 });
 test('pode encerrar sem retorno fisico documentado, sem criar nova cobrança',()=>{
   const {db}=criar('estornado','devolucao_em_analise');
@@ -149,4 +158,25 @@ test('pode encerrar sem retorno fisico documentado, sem criar nova cobrança',()
     {pedido:r.pedido,pagamento:null,eventos:[]});
   assert.match(html,/Encerrado sem devolução/);
   assert.doesNotMatch(html,/Registrar resultado da devolução/);
+});
+
+test('devolucao nao movimenta produtos inexistentes nem aceita quantidades incorretas',()=>{
+  const {db}=criar('estornado','devolucao_em_analise');
+  db.collection('orders').update('o1',{itens:[{produtoId:'sumiu',quantidade:2}]});
+  const x=concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Mercadoria fisicamente devolvida',por:'Admin'});
+  assert.equal(x.ok,false);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,8);
+  assert.equal(db.collection('stockMovements').count(),0);
+  assert.equal(db.collection('orders').get('o1').statusOperacional,'devolucao_em_analise');
+});
+test('devolucao multiplos itens agrega entradas por produto de modo auditavel',()=>{
+  const {db}=criar('estornado','devolucao_em_analise');
+  db.collection('orders').update('o1',{itens:[{produtoId:'p1',quantidade:2},{produtoId:'p1',quantidade:1}]});
+  const r=concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Tres itens conferidos no retorno',por:'Admin'});
+  assert.equal(r.ok,true);
+  assert.equal(db.collection('products').get('p1').estoque.quantidade,11);
+  assert.equal(db.collection('products').get('p1').estoque.quarentena,3);
+  assert.equal(estoqueDisponivel(db.collection('products').get('p1')),8);
+  assert.equal(db.collection('stockMovements').count(),1);
+  assert.equal(r.pedido.conferenciaDevolucao.itensRecebidos[0].quantidade,3);
 });
