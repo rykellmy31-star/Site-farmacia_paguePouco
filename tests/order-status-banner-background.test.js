@@ -202,7 +202,7 @@ test('seletor de banners mostra categorias reais e nao oferece categorias inativ
       {id:'cat2',nome:'Oculta',slug:'oculta',ativa:false},
     ],
   });
-  assert.match(html,/option value="\/categoria\/vitaminas">Categoria: Vitaminas/);
+  assert.match(html,/option value="\/categoria\/vitaminas"\s*(?:selected)?>Categoria: Vitaminas/);
   assert.doesNotMatch(html,/option value="\/categoria\/oculta"/);
   const js=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
   assert.match(js,/data-usar-fundo-banner/);
@@ -219,4 +219,22 @@ test('banner padrão possui título, descrição, fundo sem upload e ordem autom
   assert.match(html,/Ordem automática/);
   assert.doesNotMatch(html,/name="ordem"/);
   assert.match(html,/name="imagem" value="\/img\/fundo-banner-vermelho.svg"/);
+});
+
+test('banners cadastrados podem abrir edicao preenchida, mantendo id e ordem',()=>{
+  const db=new DB();
+  const banner={id:'banner-123',titulo:'Fraldas e cuidados',descricao:'Conheça as ofertas',
+    imagem:'/img/fundo-banner-vermelho.svg',imagemMobile:'/img/fundo-banner-vermelho.svg',
+    link:'/categoria/fraldas',posicao:'principal',ordem:4,ativo:true};
+  const html=telaBanners({...ctx(db),csrf:'teste',adminUser:{role:'super_admin',nome:'Admin'}},
+    {banners:[banner],midias:[],categorias:[{id:'c1',nome:'Fraldas',slug:'fraldas',ativa:true}],editando:banner});
+  assert.match(html,/data-usar-fundo-banner/);
+  assert.match(html,/href="\/admin\/banners\?editar=banner-123#formNovoBanner">Editar/);
+  assert.match(html,/action="\/admin\/api\/banners\/banner-123\/editar"/);
+  assert.match(html,/name="titulo" value="Fraldas e cuidados"/);
+  assert.match(html,/Conheça as ofertas/);
+  assert.match(html,/option value="\/categoria\/fraldas" selected/);
+  assert.match(html,/Ordem atual: 4/);
+  assert.match(html,/Salvar alterações/);
+  assert.match(html,/Cancelar edição/);
 });

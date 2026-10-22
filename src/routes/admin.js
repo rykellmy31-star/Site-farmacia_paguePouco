@@ -377,6 +377,7 @@ export function registrarRotasAdmin(app, db) {
     const ctx = ctxAdmin(req, db);
     res.html(telaBanners(ctx, {
       banners: db.collection('banners').all().sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99)),
+      editando: can(req.adminUser, 'banners.editar') ? db.collection('banners').get(String(req.query.get('editar') || '')) : null,
       midias: db.collection('midia').all().filter((m) => m.tipo === 'image').slice(0, 40),
       categorias: db.collection('categories').all().sort((a,b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')),
     }));
@@ -1389,6 +1390,33 @@ function registrarApi(app, db) {
       inicio: null, fim: null,
     });
     logAdmin(db, req.adminUser, 'criou_banner', 'banner', null, { titulo: req.body.titulo }, req);
+    res.json({ ok: true });
+  });
+
+  app.post('/admin/api/banners/:id/editar', (req, res) => {
+    if (!guardApi(req, res, 'banners.editar')) return;
+    const antigo = db.collection('banners').get(req.params.id);
+    if (!antigo) return void res.json({ ok: false, erro: 'Banner não encontrado.' }, 404);
+    const titulo = cleanText(req.body.titulo, 120);
+    const imagem = cleanText(req.body.imagem, 300);
+    const link = cleanText(req.body.link, 300).trim();
+    const destinoLocal = link.startsWith('/') && !link.startsWith('//') &&
+      !/[\\\\\u0000-\u001f]/.test(link);
+    const destinoExterno = /^https:\/\/[^\s/]+/i.test(link);
+    if (!titulo || !imagem || !link || (!destinoLocal && !destinoExterno))
+      return void res.json({ ok: false, erro: 'Informe título, imagem e destino válido.' }, 400);
+    const posicao = ['principal','secundario'].includes(req.body.posicao) ? req.body.posicao : (antigo.posicao || 'principal');
+    const novaPosicao = posicao !== (antigo.posicao || 'principal');
+    const outros = db.collection('banners').find(b => b.id !== antigo.id && (b.posicao || 'principal') === posicao);
+    const ordem = novaPosicao
+      ? outros.reduce((maior,b) => Math.max(maior, Number(b.ordem) || 0), 0) + 1
+      : antigo.ordem;
+    db.collection('banners').update(antigo.id, {
+      titulo, descricao: cleanText(req.body.descricao, 240), imagem,
+      imagemMobile: cleanText(req.body.imagemMobile, 300), link, posicao, ordem,
+      ativo: req.body.ativo === '1' || req.body.ativo === 'on',
+    });
+    logAdmin(db, req.adminUser, 'editou_banner', 'banner', antigo.id, { titulo, posicao }, req);
     res.json({ ok: true });
   });
 
