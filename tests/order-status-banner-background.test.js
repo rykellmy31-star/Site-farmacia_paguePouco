@@ -202,7 +202,7 @@ test('seletor de banners mostra categorias reais e nao oferece categorias inativ
       {id:'cat2',nome:'Oculta',slug:'oculta',ativa:false},
     ],
   });
-  assert.match(html,/option value="\/categoria\/vitaminas"(?: selected)?>Categoria: Vitaminas/);
+  assert.match(html,/option value="\/categoria\/vitaminas"\\s*(?:selected)?>Categoria: Vitaminas/);
   assert.doesNotMatch(html,/option value="\/categoria\/oculta"/);
   const js=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
   assert.match(js,/data-usar-fundo-banner/);
