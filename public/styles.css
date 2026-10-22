@@ -1028,8 +1028,10 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
   -webkit-text-fill-color: #fff;
 }
 .carrossel .slide .banner-texto-sobreposto .banner-cta {
-  color: #842336 !important;
-  -webkit-text-fill-color: #842336;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  background: #842336;
+  border: 2px solid #fff;
 }
 
 /* Texto do banner vermelho: sobrescreve cores herdadas do tema e dos links. */
