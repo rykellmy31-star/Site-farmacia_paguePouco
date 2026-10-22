@@ -15,6 +15,8 @@ function responder(rotas={}) {
 const base={
  '/__health':[200,JSON.stringify({ok:true,runtime:'cloudflare-workers',storage:'durable-object-sqlite'}),'application/json'],
  '/':[200,'<h1>Farmácia Pague Pouco</h1>','text/html; charset=utf-8'],
+ '/ofertas':[200,'<h1>Ofertas e promoções</h1>','text/html; charset=utf-8'],
+ '/departamentos':[200,'<h1>Departamentos</h1>','text/html; charset=utf-8'],
  '/admin/inovafarma':[302,'','text/html'],
  '/data/db/admins.json':[404,'','text/plain'],
  '/img/fundo-banner-vermelho.svg':[200,'<svg/>','image/svg+xml'],
@@ -23,7 +25,7 @@ test('somente GET, sem redirects seguidos ou dados de clientes',async()=>{
  const {fetchImpl,chamadas}=responder(base);
  const r=await verificarCloudflarePublico({fetchImpl});
  assert.equal(r.aprovado,true);
- assert.equal(chamadas.length,5);
+ assert.equal(chamadas.length,7);
  assert(chamadas.every(c=>c.options.method==='GET'&&c.options.redirect==='manual'));
  assert(chamadas.every(c=>!c.options.body&&!c.options.headers.Authorization));
  assert.deepEqual(chamadas.map(c=>c.rota),Object.keys(base));
@@ -57,4 +59,12 @@ test('falhas de rede são relatadas sem vazar dados da exceção',async()=>{
 test('restringe ensaio ao domínio real da farmácia',async()=>{
  await assert.rejects(()=>verificarCloudflarePublico({origem:'https://localhost.invalid',fetchImpl:async()=>null}),/domínio fixo/);
  assert.equal(URL_PRODUCAO,'https://site.farmaciapaguepouco.app');
+});
+
+test('falha se Ofertas ou Departamentos não funcionarem na produção', async () => {
+  for (const rota of ['/ofertas','/departamentos']) {
+    const {fetchImpl}=responder({...base,[rota]:[503,'Manutenção','text/html']});
+    const resultado=await verificarCloudflarePublico({fetchImpl});
+    assert.equal(resultado.aprovado,false);
+  }
 });
