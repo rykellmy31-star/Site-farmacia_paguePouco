@@ -578,7 +578,7 @@ export function telaMidia(ctx, { arquivos, stats, filtro }) {
 }
 
 /* ============================== BANNERS ============================== */
-export function telaBanners(ctx, { banners, midias }) {
+export function telaBanners(ctx, { banners, midias, categorias = [] }) {
   return paginaAdmin(ctx, {
     titulo: 'Banners',
     ativo: 'banners',
@@ -599,15 +599,35 @@ export function telaBanners(ctx, { banners, midias }) {
     `})}
     ${painel({
       titulo: 'Novo banner',
-      corpo: `<form method="post" action="/admin/api/banners">
+      corpo: `<form method="post" id="formNovoBanner" action="/admin/api/banners">
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <div class="campo-linha">
           ${campoAdmin({ nome: 'titulo', rotulo: 'Título/descrição alternativa', obrigatorio: true })}
-          ${campoAdmin({ nome: 'link', rotulo: 'Link ao clicar', valor: '/ofertas' })}
+          <div class="campo">
+            <label for="bannerDestino">Destino ao clicar</label>
+            <select id="bannerDestino" aria-label="Selecionar destino do banner">
+              <option value="/ofertas">Ofertas</option>
+              <option value="/">Página inicial</option>
+              <option value="/categorias">Todas as categorias</option>
+              ${categorias.filter(c => c.ativa !== false && c.slug).map(c =>
+                `<option value="/categoria/${e(c.slug)}">Categoria: ${e(c.nome)}</option>`).join('')}
+              <option value="personalizado">Link personalizado</option>
+            </select>
+            <span class="dica">Selecione uma página ou categoria cadastrada. Para outra rota, escolha Link personalizado.</span>
+          </div>
         </div>
+        <div id="bannerLinkPersonalizado" hidden>
+          ${campoAdmin({ nome: 'linkPersonalizado', rotulo: 'URL personalizada', valor: '', dica: 'Use /pagina ou https://site-confiavel; selecione Link personalizado acima.' })}
+        </div>
+        <input type="hidden" id="bannerLinkFinal" name="link" value="/ofertas">
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'imagem', rotulo: 'Imagem (URL)', atributos: 'id="campoBannerImagem"', dica: 'Cole a URL de um arquivo da biblioteca ou envie abaixo.' })}
+          ${campoAdmin({ nome: 'imagem', rotulo: 'Imagem (URL)', dica: 'Cole a URL de um arquivo da biblioteca ou envie abaixo.' })}
           ${campoAdmin({ nome: 'imagemMobile', rotulo: 'Imagem para celular (opcional)' })}
+        </div>
+        <div class="campo">
+          <label>Prévia do banner</label>
+          <img id="previewNovoBanner" src="/img/fundo-banner-vermelho.svg" alt="Prévia do fundo selecionado"
+            style="display:none;max-width:100%;width:480px;height:auto;border-radius:10px">
         </div>
         <div class="campo-linha">
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
