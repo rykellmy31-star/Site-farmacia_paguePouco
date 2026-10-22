@@ -34,6 +34,12 @@ export function carrosselBanners(banners, id = 'carrosselPrincipal') {
               ${b.imagemMobile ? `<source media="(max-width: 640px)" srcset="${e(bannerImageUrl(b.imagemMobile))}">` : ''}
               <img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || 'Banner promocional')}" ${i === 0 ? '' : 'loading="lazy"'} width="1200" height="420">
             </picture>
+            ${b.imagem === '/img/fundo-banner-vermelho.svg' && (b.titulo || b.descricao) ? `
+            <div class="banner-texto-sobreposto">
+              ${b.titulo ? `<h2>${e(b.titulo)}</h2>` : ''}
+              ${b.descricao ? `<p>${e(b.descricao)}</p>` : ''}
+              <span class="banner-cta">Ver ofertas <span aria-hidden="true">→</span></span>
+            </div>` : ''}
           ${b.link ? '</a>' : '</span>'}
         </div>`).join('')}
     </div>
