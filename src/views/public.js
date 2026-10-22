@@ -211,7 +211,12 @@ function cartaoProdutoContainer(ctx, cat) {
 /* ------------------------------------------------------------------ */
 export function categoriaPage(ctx, { categoria, produtos, total, pagina, porPagina, ordenar, filtros }) {
   const arvore = ctx.arvore || montarArvore(ctx.db);
-  const filhas = (arvore.find((c) => c.id === categoria.id) || {}).filhas || categoria.filhas || [];
+  // A árvore contém níveis arbitrários; buscar só nas raízes escondia as
+  // subcategorias quando o cliente navegava para uma categoria intermediária.
+  const filhas = ctx.db.collection('categories').all()
+    .filter(c => c.ativa !== false && String(c.paiId || '') === String(categoria.id))
+    .sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999) ||
+      String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   return paginaPublica(ctx, {
     titulo: categoria.nome,
     descricao: categoria.descricao || `${categoria.nome} na Farmácia Pague Pouco.`,
