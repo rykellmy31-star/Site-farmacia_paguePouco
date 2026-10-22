@@ -1370,7 +1370,7 @@ function registrarApi(app, db) {
     const linkBanner = cleanText(req.body.link, 300).trim();
     const destinoLocal = linkBanner.startsWith('/') && !linkBanner.startsWith('//') &&
       !/[\\\\\u0000-\u001f]/.test(linkBanner);
-    const destinoExterno = /^https:\/\/[^\\s/]+/i.test(linkBanner);
+    const destinoExterno = /^https:\/\/[^\s/]+/i.test(linkBanner);
     if (!linkBanner || (!destinoLocal && !destinoExterno))
       return void res.json({ ok: false, erro: 'Destino inválido: use uma página interna ou endereço HTTPS.' }, 400);
     db.collection('banners').insert({
