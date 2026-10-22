@@ -37,7 +37,8 @@ export function estoqueInovaDisponivel(produto, agora = Date.now()) {
       !Number.isSafeInteger(e.inovaQuantidade) || e.inovaQuantidade < 0) return 0;
   return Math.max(0, e.inovaQuantidade -
     Math.max(0, Number(e.reservado || 0)) -
-    Math.max(0, Number(e.inovaPendente || 0)));
+    Math.max(0, Number(e.inovaPendente || 0)) -
+    Math.max(0, Number(e.quarentena || 0)));
 }
 
 /** A fila nasce apenas de pedidos aprovados quando a integração está ligada.
