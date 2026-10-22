@@ -144,6 +144,13 @@ test('administrador confirma devolucao, registra estoque fisico em quarentena, s
   assert.equal(movimentos.length,1);
   assert.equal(movimentos[0].tipo,'entrada_quarentena');
   assert.equal(movimentos[0].quantidade,1);
+  const html = telaPedido({...ctx(db),adminUser:{role:'super_admin',nome:'Gerente'},
+      permissoes:{podeEditarPedidos:true}}, {pedido:resultado.pedido,pagamento:null,eventos:[]});
+  assert.match(html,/Conferência da devolução registrada/);
+  assert.match(html,/Estoque físico atualizado em quarentena/);
+  assert.match(html,/Gerente/);
+  assert.doesNotMatch(html,/Registrar resultado da devolução/);
+  assert.doesNotMatch(html,/Atualizar status operacional/);
   assert.equal(concluirDevolucaoEstornada(db,'o1',{decisao:'recebida',justificativa:'Tentativa duplicada'}).ok,false);
   assert.equal(atualizarStatusOperacional(db,'o1','entregue').ok,false);
   assert.equal(db.collection('products').get('p1').estoque.quantidade,9,'repetição não lança nova entrada');
