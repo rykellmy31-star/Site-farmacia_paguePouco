@@ -37,7 +37,9 @@ export const STATUS_OPERACIONAL = {
   saiu_para_entrega: { id: 'saiu_para_entrega', nome: 'Saiu para entrega', ordem: 5 },
   entregue: { id: 'entregue', nome: 'Entregue', ordem: 6 },
   cancelado: { id: 'cancelado', nome: 'Cancelado', ordem: 7 },
-  devolucao_em_analise: { id: 'devolucao_em_analise', nome: 'Devolução em análise', ordem: 8 },
+  devolucao_em_analise: { id: 'devolucao_em_analise', nome: 'Aguardando conferência de devolução', ordem: 8 },
+  devolucao_recebida: { id: 'devolucao_recebida', nome: 'Devolução recebida', ordem: 9 },
+  encerrado_sem_devolucao: { id: 'encerrado_sem_devolucao', nome: 'Encerrado sem devolução', ordem: 10 },
 };
 
 /** Apresenta um estado coerente inclusive em pedidos legados que ficaram
@@ -46,6 +48,7 @@ export const STATUS_OPERACIONAL = {
 export function statusOperacionalExibido(pedido) {
   if (!pedido) return 'aguardando_pagamento';
   if (pedido.statusFinanceiro === 'estornado') {
+    if (['devolucao_recebida','encerrado_sem_devolucao'].includes(pedido.statusOperacional)) return pedido.statusOperacional;
     if (['enviado','saiu_para_entrega','entregue','devolucao_em_analise'].includes(pedido.statusOperacional))
       return 'devolucao_em_analise';
     return 'cancelado';
@@ -469,12 +472,34 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   return { ok: true, pedido: pedidoAtual };
 }
 
+/** Conferência humana do retorno, sem estorno adicional ou estoque automático. */
+export function concluirDevolucaoEstornada(db, pedidoId, { decisao, justificativa, por = 'sistema' } = {}) {
+  const pedido = db.collection('orders').get(pedidoId);
+  if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
+  if (pedido.statusFinanceiro !== 'estornado' || statusOperacionalExibido(pedido) !== 'devolucao_em_analise')
+    return { ok: false, erro: 'Somente pedidos estornados e aguardando conferência podem ser concluídos.' };
+  if (!['recebida','nao_recebida'].includes(decisao))
+    return { ok: false, erro: 'Escolha o resultado da conferência.' };
+  const motivo = String(justificativa || '').trim();
+  if (motivo.length < 10 || motivo.length > 500)
+    return { ok: false, erro: 'Informe justificativa de 10 a 500 caracteres.' };
+  const status = decisao === 'recebida' ? 'devolucao_recebida' : 'encerrado_sem_devolucao';
+  const registro = { decisao, justificativa: motivo, por: String(por).slice(0,120), em: nowISO() };
+  const atualizado = db.collection('orders').update(pedidoId, {
+    statusOperacional: status, conferenciaDevolucao: registro, atualizadoEm: nowISO(),
+  });
+  adicionarHistorico(db, atualizado, { tipo: 'operacional', status, obs: motivo, por: registro.por });
+  enfileirarAvisoPedido(db, atualizado, 'operacional', status);
+  // Medicamentos devolvidos exigem conferência sanitária antes de qualquer eventual reposição.
+  return { ok: true, pedido: atualizado };
+}
+
 export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por = 'sistema', rastreio = null } = {}) {
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' };
   if (!STATUS_OPERACIONAL[status]) return { ok: false, erro: 'Status operacional inválido.' };
-  if (['cancelado','devolucao_em_analise'].includes(status)) return { ok: false, erro: 'Use o fluxo de cancelamento ou devolução validado.' };
-  if (['cancelado','devolucao_em_analise'].includes(pedido.statusOperacional)) return { ok: false, erro: 'Pedido encerrado ou em devolução não pode avançar na entrega.' };
+  if (['cancelado','devolucao_em_analise','devolucao_recebida','encerrado_sem_devolucao'].includes(status)) return { ok: false, erro: 'Use o fluxo de cancelamento ou devolução validado.' };
+  if (['cancelado','devolucao_em_analise','devolucao_recebida','encerrado_sem_devolucao'].includes(pedido.statusOperacional)) return { ok: false, erro: 'Pedido encerrado ou em devolução não pode avançar na entrega.' };
   if (status === pedido.statusOperacional && !rastreio) return { ok: true, pedido, semAlteracao: true };
   if (status !== pedido.statusOperacional &&
       STATUS_OPERACIONAL[status].ordem <= (STATUS_OPERACIONAL[pedido.statusOperacional]?.ordem || 0)) {
