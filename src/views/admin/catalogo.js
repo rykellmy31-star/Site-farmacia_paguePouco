@@ -626,8 +626,8 @@ export function telaBanners(ctx, { banners, midias, categorias = [] }) {
         </div>
         <div class="campo">
           <label>Prévia do banner</label>
-          <img id="previewNovoBanner" src="/img/fundo-banner-vermelho.svg" alt="Prévia do fundo selecionado"
-            style="display:none;max-width:100%;width:480px;height:auto;border-radius:10px">
+          <img id="previewNovoBanner" hidden src="/img/fundo-banner-vermelho.svg" alt="Prévia do fundo selecionado"
+            style="max-width:100%;width:480px;height:auto;border-radius:10px">
         </div>
         <div class="campo-linha">
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
