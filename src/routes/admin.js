@@ -1367,11 +1367,17 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'banners.criar')) return;
     const imagem = cleanText(req.body.imagem, 300);
     if (!imagem) return void res.json({ ok: false, erro: 'Informe a imagem do banner.' }, 400);
+    const linkBanner = cleanText(req.body.link, 300).trim();
+    const destinoLocal = linkBanner.startsWith('/') && !linkBanner.startsWith('//') &&
+      !/[\\\\\u0000-\u001f]/.test(linkBanner);
+    const destinoExterno = /^https:\/\/[^\\s/]+/i.test(linkBanner);
+    if (!linkBanner || (!destinoLocal && !destinoExterno))
+      return void res.json({ ok: false, erro: 'Destino inválido: use uma página interna ou endereço HTTPS.' }, 400);
     db.collection('banners').insert({
       titulo: cleanText(req.body.titulo, 120),
       imagem,
       imagemMobile: cleanText(req.body.imagemMobile, 300),
-      link: cleanText(req.body.link, 300),
+      link: linkBanner,
       posicao: req.body.posicao || 'principal',
       ordem: Number(req.body.ordem) || 99,
       ativo: req.body.ativo === '1' || req.body.ativo === 'on',
