@@ -1843,6 +1843,18 @@ function registrarApi(app, db) {
   });
 
   /* -------------------------------- SISTEMA ----------------------------- */
+  // Diagnóstico protegido: consulta bookmarks PITR, sem devolver seus valores.
+  // Não realiza restauração, backup remoto ou alteração de qualquer pedido.
+  app.get('/admin/api/sistema/recuperacao-pitr', async (req, res) => {
+    if (!guardApi(req, res, 'sistema.*')) return;
+    res.set('Cache-Control', 'no-store');
+    if (!config.isCloudflare || typeof db.verificarRecuperacaoPitr !== 'function') {
+      return void res.json({ ok: false, disponivel: false, status: 'INDISPONIVEL_NESTE_AMBIENTE' }, 501);
+    }
+    const resultado = await db.verificarRecuperacaoPitr();
+    res.json({ ok: true, ...resultado, backupExternoValidado: false, restauracaoRealValidada: false });
+  });
+
   app.post('/admin/api/sistema/backup', async (req, res) => {
     if (!guardApi(req, res, 'sistema.*')) return;
     if (config.isCloudflare) {

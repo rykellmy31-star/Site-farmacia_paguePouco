@@ -53,6 +53,28 @@ export class CloudStore {
     this.stats.writes++;
   }
 
+  // Apenas consulta a disponibilidade do histórico PITR do SQLite.
+  // Nunca expõe bookmarks nem chama operações de restore da produção.
+  async verificarRecuperacaoPitr() {
+    if (typeof this.storage.getCurrentBookmark !== 'function' ||
+        typeof this.storage.getBookmarkForTime !== 'function') {
+      return { disponivel: false, status: 'INDISPONIVEL_NESTE_AMBIENTE' };
+    }
+    try {
+      const atual = await this.storage.getCurrentBookmark();
+      const anterior = await this.storage.getBookmarkForTime(Date.now() - 24 * 60 * 60 * 1000);
+      if (typeof atual !== 'string' || !atual ||
+          typeof anterior !== 'string' || !anterior) {
+        return { disponivel: false, status: 'NAO_CONFIRMADO' };
+      }
+      return { disponivel: true, status: 'BOOKMARKS_DE_24_HORAS_CONFIRMADOS' };
+    } catch {
+      // Cloudflare pode não ter histórico suficiente num objeto novo.
+      // Não registrar erro bruto para não vazar dados do runtime.
+      return { disponivel: false, status: 'NAO_CONFIRMADO' };
+    }
+  }
+
   async flush() { await this.storage.sync(); }
   flushSync() { /* SQL síncrono, protegido pelo output gate do Durable Object. */ }
   async close() { await this.flush(); }
