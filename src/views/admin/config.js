@@ -538,6 +538,9 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
       titulo: 'Homologação financeira e conciliação automática',
       corpo: `<p class="texto-pequeno">Indicadores internos sem valores de pagamentos, nomes de clientes
         ou credenciais. O último ciclo registrado não comprova crédito bancário real.</p>
+        <p><strong>Provedor configurado:</strong> ${e(stats.provedorPagamento?.nome || 'Não identificado')}</p>
+        <p><strong>Pix real configurado:</strong> ${stats.provedorPagamento?.real && stats.provedorPagamento?.configurado ? 'Sim — requer compra real de homologação' : 'Não confirmado — não executar cobrança de homologação'}</p>
+        <p><strong>Ambiente Mercado Pago:</strong> ${stats.provedorPagamento?.sandbox === true ? 'Testes' : stats.provedorPagamento?.sandbox === false ? 'Produção' : 'Não informado'}</p>
         <p><strong>Última execução do alarme:</strong> ${stats.conciliacaoFinanceira?.ultimaExecucaoEm
           ? formatDateTime(stats.conciliacaoFinanceira.ultimaExecucaoEm) : 'Ainda não registrada'}</p>
         <p><strong>Resultado do último ciclo:</strong> ${e(stats.conciliacaoFinanceira?.situacao || 'Sem registro')}</p>
@@ -561,6 +564,9 @@ export function telaSistema(ctx, { emails, logs, stats, versao }) {
         <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
         <button class="botao" type="submit">${config.isCloudflare ? "Baixar backup JSON" : "Gerar backup agora"}</button>
       </form>
+      ${config.isCloudflare ? `<p class="texto-pequeno">O SQLite tem histórico de recuperação por ponto no tempo (PITR) na Cloudflare.
+        <a href="/admin/api/sistema/recuperacao-pitr" target="_blank" rel="noopener">Consultar diagnóstico protegido de disponibilidade PITR</a>.
+        Essa consulta não restaura nem exporta dados e não substitui a restauração isolada do backup real.</p>` : ''}
       ${config.isCloudflare ? `<p class="texto-pequeno"><strong>Homologação de recuperação:</strong> baixe também o manifesto e todos
         os arquivos de mídia, guarde as cópias em local externo privado e faça o ensaio isolado
         pelo script <code>node scripts/validate-cloudflare-backup.mjs</code>.
