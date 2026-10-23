@@ -6,13 +6,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CloudStore } from '../src/cloudflare/store.js';
+import { ensaiarRestauracaoCloudflare } from '../src/lib/restore-rehearsal.js';
 import { RequestQueue } from '../src/cloudflare/request-queue.js';
 import { dispatchFetch, readWebBody } from '../src/cloudflare/http-adapter.js';
 
@@ -241,6 +242,34 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.match(download.headers.get('content-disposition') || '', /attachment/);
   assert.equal(download.headers.get('content-type'), 'application/octet-stream');
   assert.equal(await download.text(), svg, 'backup deve conter bytes idênticos ao upload');
+
+  // Prova ponta a ponta com dados FICTÍCIOS do Worker SQLite local:
+  // exportação real -> manifesto real -> mídia baixada -> reabertura isolada.
+  // Nada é enviado à Cloudflare de produção ou salvo em artefato público do CI.
+  const restoreFolder = await mkdtemp(path.join(os.tmpdir(), 'pp-restauracao-real-local-'));
+  t.after(async () => rm(restoreFolder, { recursive: true, force: true }));
+  const mediaPath = path.join(restoreFolder, ...entry.caminho.split('/'));
+  await mkdir(path.dirname(mediaPath), { recursive: true });
+  const authenticatedMedia = await call('/admin/api/sistema/backup/arquivo/' + entry.chave);
+  assert.equal(authenticatedMedia.status, 200);
+  await writeFile(mediaPath, Buffer.from(await authenticatedMedia.arrayBuffer()));
+  const completeRestore = await ensaiarRestauracaoCloudflare({
+    snapshot, manifest, mediaDir: restoreFolder,
+  });
+  assert.equal(completeRestore.ok, true, 'exportação real precisa reabrir em ambiente isolado');
+  assert.equal(completeRestore.isolado, true);
+  assert.equal(completeRestore.producaoAlterada, false);
+  assert.ok(completeRestore.documentosRestaurados > 0);
+  assert.equal(completeRestore.arquivos, manifest.files.length);
+  assert.equal(completeRestore.bytes, manifest.bytes);
+
+  // Uma cópia adulterada com igual tamanho não pode gerar falso positivo.
+  await writeFile(mediaPath, Buffer.alloc(Buffer.byteLength(svg), 0x21));
+  await assert.rejects(ensaiarRestauracaoCloudflare({
+    snapshot, manifest, mediaDir: restoreFolder,
+  }), /arquivo alterado/, 'hash divergente bloqueia o ensaio mesmo com bytes iguais');
+  await writeFile(mediaPath, svg);
+
   assert.equal((await call('/admin/api/sistema/backup/arquivo/YWJjLi4vLi4vc2VncmVkbw')).status, 400,
     'caminhos suspeitos com travessia devem ser recusados com 400');
   assert.equal((await call('/admin/api/sistema/backup/arquivo/' +
