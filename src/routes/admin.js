@@ -772,6 +772,12 @@ export function registrarRotasAdmin(app, db) {
         emails: db.collection('mailOutbox').count(),
         backups,
         conciliacaoFinanceira: diagnosticoFinanceiro(db),
+        provedorPagamento: (() => {
+          const dados = providerPublicInfo(db);
+          // Apenas campos de estado; jamais serializar credenciais no painel Sistema.
+          return { nome: dados.nome, real: !!dados.real,
+            configurado: !!dados.configurado, sandbox: dados.sandbox };
+        })(),
         backupMidias: config.isCloudflare && typeof db.exportMediaManifest === 'function'
           ? db.exportMediaManifest() : null,
       },

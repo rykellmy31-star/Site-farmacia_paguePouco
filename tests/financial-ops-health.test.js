@@ -64,3 +64,15 @@ test('Worker persiste ciclo antes de alarmes sem revelar mensagem de erro origin
   assert.doesNotMatch(c,/console\.error\('\[worker\] falha ao atender requisição:', err\.message\)/);
   assert.match(c,/registrar: \(fluxo\)/);
 });
+
+test('painel Sistema distingue Pix real do simulado e publica somente diagnostico PITR protegido',()=>{
+  const rota=readFileSync(new URL('../src/routes/admin.js',import.meta.url),'utf8');
+  const view=readFileSync(new URL('../src/views/admin/config.js',import.meta.url),'utf8');
+  assert.match(rota,/provedorPagamento: \(\(\) =>/);
+  assert.match(rota,/providerPublicInfo\(db\)/);
+  assert.match(view,/Pix real configurado:/);
+  assert.match(view,/Ambiente Mercado Pago:/);
+  assert.match(view,/requer compra real de homologação/);
+  assert.match(view,/api\/sistema\/recuperacao-pitr/);
+  assert.doesNotMatch(view,/stats\.provedorPagamento\?\.accessToken|stats\.provedorPagamento\?\.webhookSecret/);
+});
