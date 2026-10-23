@@ -1,0 +1,45 @@
+name: Verificar autorizacao Cloudflare - leitura segura
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verificar-autorizacao-cloudflare.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Baixar codigo homologado
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar Worker e bindings com token autorizado (GET somente)
+        env:
+          CLOUDFLARE_AUDIT_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/audit-cloudflare-readonly.mjs > resumo-seguro.txt
+          node -e '
+            const fs = require("node:fs");
+            const linha = fs.readFileSync("resumo-seguro.txt", "utf8").split("\\n").find(l => l.startsWith("CLOUDFLARE_AUDIT="));
+            if (!linha) { console.log("RESULTADO=SEM_RELATORIO"); process.exit(1); }
+            const r = JSON.parse(linha.slice("CLOUDFLARE_AUDIT=".length));
+            const aprovado = r.status === "ACESSO_LEITURA_CONFIRMADO"
+              && r.worker_settings_http === 200
+              && r.binding_LOJA === true && r.binding_ASSETS === true;
+            console.log("RESULTADO=" + (aprovado ? "TOKEN_CONFIGURADO_ACESSO_LEITURA_CONFIRMADO" : "VALIDACAO_INCOMPLETA"));
+            console.log("STATUS_TOKEN=" + r.status);
+            console.log("WORKER_HTTP=" + (r.worker_settings_http || "NAO_CONSULTADO"));
+            console.log("PUBLIC_BASE_URL=" + (r.bindings_prod?.PUBLIC_BASE_URL_esperada === true ? "OK" : "NAO_CONFIRMADA"));
+            if (!aprovado) process.exit(1);
+          '
+          rm -f resumo-seguro.txt
