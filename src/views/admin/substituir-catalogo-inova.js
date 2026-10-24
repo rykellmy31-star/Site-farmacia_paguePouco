@@ -13,6 +13,7 @@ export function telaSubstituirCatalogoInova(ctx) {
     titulo:'Substituir todo o catálogo',ativo:'produtos',
     conteudo:
       '<h1>Substituir todo o catálogo pelos produtos do InovaFarma</h1>'+
+      '<p><a class="botao secundario" href="/admin/produtos/substituir-catalogo/pendencias">🔎 Ver pedido e produto que estão bloqueando a substituição</a></p>'+
       '<div class="alerta erro"><strong>Atenção: substituição integral.</strong> Esta operação não reaproveita '+
       'nenhum cadastro antigo, nem os 6.062 que já foram importados. Todos os produtos atuais sairão '+
       'da tabela de produtos e serão criados novos cadastros com novos IDs, exatamente a partir do CSV. '+
@@ -37,7 +38,7 @@ export function telaSubstituirCatalogoInova(ctx) {
       '<p><a class="botao secundario" href="/admin/produtos">Voltar aos produtos</a></p>',
   });
 }
-function detalhesPendenciasSubstituicao(bloqueios) {
+export function detalhesPendenciasSubstituicao(bloqueios) {
   if(!bloqueios)return '';
   const pedidos=bloqueios.pedidos||[];
   const produtos=bloqueios.produtos||[];
@@ -54,12 +55,12 @@ function detalhesPendenciasSubstituicao(bloqueios) {
   const linhasProdutos=produtos.slice(0,20).map(p=>{
     const relacionados=(p.pedidosRelacionados||[]).slice(0,3).map(o=>
       '<a href="/admin/pedidos/'+txt(encodeURIComponent(o.id))+'">'+
-      txt(o.codigo)+'</a>').join(', ');
+      txt(o.codigo)+'</a> <span class="texto-pequeno">('+txt(o.financeiro)+' / '+txt(o.operacional)+')</span>').join(', ');
     return '<tr><td><strong>'+txt(p.nome)+'</strong><br>'+
       '<span class="texto-pequeno">Código interno: '+txt(p.codigoInterno||'—')+'</span></td>'+
       '<td>'+txt(p.reservado)+'</td><td>'+txt(p.quarentena)+'</td>'+
       '<td>'+txt(p.inovaPendente)+'</td>'+
-      '<td>'+(relacionados||'Sem relação com os pedidos abertos')+'</td>'+
+      '<td>'+(relacionados||'Nenhum pedido vinculado localizado')+'</td>'+
       '<td><a class="botao pequeno secundario" href="/admin/produtos/'+
       txt(encodeURIComponent(p.id))+'">Abrir produto</a></td></tr>';
   }).join('');
@@ -91,6 +92,38 @@ function detalhesPendenciasSubstituicao(bloqueios) {
     'Reenviar CSV depois de resolver as pendências</a></p>'+
     '<p class="texto-pequeno">O envio deve ser repetido porque a proposta anterior '+
     'é invalidada sempre que pedidos ou produtos forem alterados.</p>',
+  });
+}
+
+/**
+ * Diagnóstico consultável sem reenviar o CSV e sem tocar em produtos ou pedidos.
+ * Mostra somente identificadores internos e estado, ao superadmin autenticado.
+ */
+export function telaPendenciasSubstituicaoInova(ctx,bloqueios) {
+  const nPedidos=bloqueios?.pedidos?.length||0;
+  const nProdutos=bloqueios?.produtos?.length||0;
+  const cestas=bloqueios?.carrinhosParaEsvaziar||0;
+  return paginaAdmin(ctx,{
+    titulo:'Pendências da substituição InovaFarma',ativo:'produtos',
+    conteudo:
+      '<h1>Pedidos e produtos que bloqueiam a substituição</h1>'+
+      '<div class="alerta info"><strong>Consulta somente leitura.</strong> '+
+      'Os dados abaixo são consultados agora no banco da farmácia. '+
+      'Não é necessário reenviar o CSV para identificar pendências, e nada é cancelado, '+
+      'liberado, apagado ou atualizado nesta página.</div>'+
+      painel({titulo:'Situação atual da loja',corpo:
+        '<p><strong>Pedidos que impedem a troca:</strong> '+txt(nPedidos)+
+        ' · <strong>Produtos com estoque comprometido:</strong> '+txt(nProdutos)+
+        ' · <strong>Carrinhos que serão esvaziados na troca:</strong> '+txt(cestas)+'</p>'+
+        '<p><strong>Importante:</strong> pedidos pagos ou pendentes precisam de verificação real. '+
+        'Estoque em quarentena ou com sincronização pendente exige conciliação, não apenas zerar a quantidade.</p>'})+
+      (nPedidos||nProdutos?
+        detalhesPendenciasSubstituicao(bloqueios):
+        painel({titulo:'Nenhum bloqueio operacional encontrado',corpo:
+          '<p>Não há pedidos ou reservas impedindo a troca neste instante. '+
+          'O envio integral do CSV e a confirmação do backup ainda são obrigatórios.</p>'}))+
+      '<p><a class="botao" href="/admin/produtos/substituir-catalogo">'+
+      'Voltar para substituir catálogo</a></p>'
   });
 }
 

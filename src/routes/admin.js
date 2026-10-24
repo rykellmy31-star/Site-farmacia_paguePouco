@@ -10,8 +10,8 @@ import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
-import { telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova } from '../views/admin/substituir-catalogo-inova.js';
-import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
+import { telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova, telaPendenciasSubstituicaoInova } from '../views/admin/substituir-catalogo-inova.js';
+import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
@@ -294,6 +294,17 @@ export function registrarRotasAdmin(app, db) {
   // Nova página principal, sem API ou login no ERP. Apenas superadmin.
   // Zerar completamente a tabela de produtos e cadastrar APENAS novos itens do
   // CSV integral InovaFarma; a importação comum e a conciliação não fazem isso.
+  // Diagnóstico atual sem CSV, permitido somente ao superadministrador.
+  // Nunca cancela pedido nem altera reserva, estoque, pagamento ou produtos.
+  app.get('/admin/produtos/substituir-catalogo/pendencias', (req,res) => {
+    if (!guard(req,res,'produtos.excluir')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('Diagnóstico restrito ao superadministrador.');
+    res.set('Cache-Control','no-store');
+    const bloqueios=identificarBloqueiosSubstituicaoInova(db);
+    res.html(telaPendenciasSubstituicaoInova(ctxAdmin(req,db),bloqueios));
+  });
+
   app.get('/admin/produtos/substituir-catalogo', (req, res) => {
     if (!guard(req,res,'produtos.excluir')) return;
     if (req.adminUser.role !== 'super_admin')

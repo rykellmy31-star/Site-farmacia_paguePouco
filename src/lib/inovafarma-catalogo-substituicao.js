@@ -191,9 +191,15 @@ export function identificarBloqueiosSubstituicaoInova(db) {
       reservado:Number(e.reservado||0),
       quarentena:Number(e.quarentena||0),
       inovaPendente:Number(e.inovaPendente||0),
-      pedidosRelacionados:d.abertos.filter(o=>
+      // Pedidos encerrados também podem explicar uma reserva que ficou presa.
+      // Só exibimos identificador e situação, sem dados do consumidor.
+      pedidosRelacionados:d.pedidos.filter(o=>
         (o.itens||[]).some(i=>String(i.produtoId||'')===id)
-      ).map(o=>({id:String(o.id),codigo:String(o.codigo||o.id)})),
+      ).slice(-5).map(o=>({
+        id:String(o.id),codigo:String(o.codigo||o.id),
+        financeiro:String(o.statusFinanceiro||''),
+        operacional:String(o.statusOperacional||''),
+      })),
     };
   });
   return {pedidos,produtos,carrinhosParaEsvaziar:d.cestasAtivas.length};

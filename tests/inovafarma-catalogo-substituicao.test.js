@@ -8,7 +8,7 @@ import {
   ErroSubstituicaoInova,
 } from '../src/lib/inovafarma-catalogo-substituicao.js';
 import {
-  telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova
+  telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova, telaPendenciasSubstituicaoInova
 } from '../src/views/admin/substituir-catalogo-inova.js';
 
 const now=new Date('2026-10-24T19:00:00Z');
@@ -319,3 +319,59 @@ test('revisão e rotas exigem Superadmin, CSRF e confirmação do backup',()=>{
   assert.match(source,/role!=='super_admin'/);
   assert.match(source,/guard\(req,res,'produtos.excluir'\)/);
 });
+
+
+test('diagnóstico independente de CSV mostra pedido e produto sem alterar financeiro/estoque',()=>{
+  const pedido={id:'pedido_vinculado',codigo:'PP2026000099',
+    statusFinanceiro:'pendente',statusOperacional:'aguardando_pagamento',
+    pendenciaPagamento:'conciliacao_necessaria',itens:[{produtoId:'antigo_001'}],
+    cliente:{nome:'Cliente que não deve aparecer',email:'segredo@teste.com'}};
+  const {db}=criarDB({pedidos:[pedido],reservas:3});
+  const anterior=structuredClone(db.collection('products').all());
+  const bloq=identificarBloqueiosSubstituicaoInova(db);
+  assert.equal(bloq.pedidos.length,1);
+  assert.equal(bloq.produtos.length,1);
+  assert.equal(bloq.produtos[0].reservado,3);
+  const ctx={adminUser:{role:'super_admin',nome:'Super'},
+    csrf:'CSRF_TESTE',settings:{empresa:{nomeFantasia:'Farmácia'},tema:{}},
+    req:{pathname:'/admin/produtos/substituir-catalogo/pendencias',query:new URLSearchParams()}};
+  const html=telaPendenciasSubstituicaoInova(ctx,bloq);
+  assert.match(html,/PP2026000099/);
+  assert.match(html,/href="\/admin\/pedidos\/pedido_vinculado"/);
+  assert.match(html,/href="\/admin\/produtos\/antigo_001"/);
+  assert.match(html,/Consulta somente leitura/);
+  assert.doesNotMatch(html,/Cliente que não deve aparecer|segredo@teste\.com/);
+  assert.doesNotMatch(html,/action="\/admin\/estoque\/substituicao\/aplicar"/);
+  assert.deepEqual(db.collection('products').all(),anterior);
+  assert.equal(db.collection('orders').get('pedido_vinculado').statusFinanceiro,'pendente');
+  const path=readFileSync(new URL('../src/routes/admin.js',import.meta.url),'utf8');
+  const inicio=path.indexOf("app.get('/admin/produtos/substituir-catalogo/pendencias'");
+  const fim=path.indexOf("app.get('/admin/produtos/substituir-catalogo'",inicio+20);
+  assert(inicio>0&&fim>inicio);
+  const bloco=path.slice(inicio,fim);
+  assert.match(bloco,/guard\(req,res,'produtos.excluir'\)/);
+  assert.match(bloco,/req.adminUser.role !== 'super_admin'/);
+  assert.match(bloco,/identificarBloqueiosSubstituicaoInova\(db\)/);
+  assert.doesNotMatch(bloco,/\.(update|remove|delete|insert)\(/);
+});
+test('diagnóstico sem bloqueios não pede CSV nem executa substituição',()=>{
+  const {db}=criarDB({pedidos:[pedidoEncerrado()],carrinhos:false});
+  const bloq=identificarBloqueiosSubstituicaoInova(db);
+  const ctx={adminUser:{role:'super_admin',nome:'Super'},
+    csrf:'CSRF_TESTE',settings:{empresa:{nomeFantasia:'Farmácia'},tema:{}},
+    req:{pathname:'/admin/produtos/substituir-catalogo/pendencias',query:new URLSearchParams()}};
+  const html=telaPendenciasSubstituicaoInova(ctx,bloq);
+  assert.match(html,/Nenhum bloqueio operacional encontrado/);
+  assert.doesNotMatch(html,/action="\/admin\/estoque\/substituicao\/aplicar"/);
+});
+test('reserva órfã aponta pedidos anteriores mesmo se estiverem encerrados',()=>{
+  const antigo=pedidoEncerrado();
+  antigo.codigo='PP2026000042';
+  const {db}=criarDB({pedidos:[antigo],reservas:1,carrinhos:false});
+  const bloq=identificarBloqueiosSubstituicaoInova(db);
+  assert.equal(bloq.pedidos.length,0);
+  assert.equal(bloq.produtos.length,1);
+  assert.equal(bloq.produtos[0].pedidosRelacionados[0].codigo,'PP2026000042');
+  assert.equal(bloq.produtos[0].pedidosRelacionados[0].operacional,'entregue');
+});
+
