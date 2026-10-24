@@ -48,6 +48,7 @@ export function sanitarioDefault() {
  */
 export function podeVender(produto) {
   if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
+  if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
   if (!produto.ativo) return { ok: false, motivo: 'Produto inativo.', codigo: 'INATIVO', bloqueioSanitario: false };
   const s = { ...sanitarioDefault(), ...(produto.sanitario || {}) };
 
@@ -167,7 +168,7 @@ export function searchProducts(db, {
   porPagina = 24, precoMin = null, precoMax = null, apenasDisponiveis = true,
   apenasVendaveis = true, promocao = false, termos = null,
 } = {}) {
-  let rows = db.collection('products').all();
+  let rows = db.collection('products').all().filter(p => !p.inovaArquivado?.em);
 
   if (apenasVendaveis) rows = rows.filter((p) => podeVender(p).ok || p.ativo);
   if (apenasDisponiveis) rows = rows.filter((p) => !apenasVendaveis || podeVender(p).ok);

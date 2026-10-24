@@ -12,7 +12,7 @@ import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
-import { lerItensRelatorioEstoqueSomenteLeitura } from '../lib/inovafarma-csv-import.js';
+import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado } from '../lib/inovafarma-limpeza-segura.js';
 import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
 import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
 import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
@@ -259,6 +259,9 @@ export function registrarRotasAdmin(app, db) {
     const pagina = Number(req.query.get('pagina')) || 1;
     const porPagina = 25;
     let todos = db.collection('products').all();
+    if (status === 'arquivados') todos = todos.filter(p => Boolean(p.inovaArquivado?.em));
+    else if (status !== 'todos_incluindo_arquivados')
+      todos = todos.filter(p => !p.inovaArquivado?.em);
     if (busca) {
       const b = busca.toLowerCase();
       todos = todos.filter((p) => [p.nome, p.sku, p.ean, p.marca, p.codigoInterno].some((f) => String(f || '').toLowerCase().includes(b)));
@@ -324,10 +327,10 @@ export function registrarRotasAdmin(app, db) {
     }
   });
 
-  // Auditoria do catálogo legada é SOMENTE LEITURA. Não desativa ou remove.
+  // 1) Envia relatório integral e prepara candidatos, sem tocar em produtos.
   app.post('/admin/estoque/limpeza/previa',
     { maxBodyBytes: 8 * 1024 * 1024 + 128 * 1024 }, (req, res) => {
-    if (!guard(req, res, 'produtos.criar')) return;
+    if (!guard(req, res, 'produtos.excluir')) return;
     if (req.adminUser.role !== 'super_admin')
       return void res.status(403).html('Conferência restrita ao Super Administrador.');
     res.set('Cache-Control', 'no-store');
@@ -336,22 +339,66 @@ export function registrarRotasAdmin(app, db) {
         !arquivo.data?.length || arquivo.data.length > 8 * 1024 * 1024)
       return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
         titulo: 'Relatório inválido', ativo: 'importacao_estoque',
-        conteudo: '<h1>Relatório inválido</h1><p>Selecione o CSV da Posição de Estoque (até 8 MB).</p>'
+        conteudo: '<h1>Relatório inválido</h1><p>Selecione o CSV integral da Posição de Estoque (até 8 MB).</p>'
       }));
     try {
-      const itens = lerItensRelatorioEstoqueSomenteLeitura(arquivo.data);
-      const previa = planejarLimpezaCatalogoInova(
-        db.collection('products').all(), itens, db.collection('orders').all()
-      );
-      return void res.html(telaPreviaLimpezaInova(ctxAdmin(req, db), previa));
+      const previa = prepararLimpezaInova(db, arquivo.data, req.adminUser.id);
+      return void res.html(telaPreviaLimpezaInova(ctxAdmin(req, db), {
+        ...previa.previa, id:previa.id, fonte:previa.fonte,
+        habilitado:previa.habilitado, inalterado:true,
+        elegiveis:previa.elegiveis, emCarrinhos:previa.emCarrinhos,
+      }));
     } catch {
       return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
         titulo: 'Não foi possível conferir', ativo: 'importacao_estoque',
-        conteudo: '<h1>CSV inválido</h1><p>Confira código de barras, código interno, ' +
-          'quantidade e preço de venda do arquivo antes da comparação.</p>' +
+        conteudo: '<h1>CSV inválido</h1><p>Confira os códigos internos e as linhas do relatório integral.</p>' +
           '<p><a href="/admin/estoque/importar">Voltar</a></p>'
       }));
     }
+  });
+
+  // 2) Dupla confirmação explícita + revalidação do catálogo; nunca remove.
+  app.post('/admin/estoque/limpeza/aplicar', (req, res) => {
+    if (!guard(req, res, 'produtos.excluir')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('Limpeza restrita ao Super Administrador.');
+    res.set('Cache-Control', 'no-store');
+    const id=String(req.body.loteId||'');
+    if(!/^limpeza_[0-9a-f-]{36}$/.test(id))
+      return void res.status(400).html('Prévia inválida.');
+    const resultado=aplicarLimpezaInova(db,id,req.adminUser.id,{
+      frase:String(req.body.frase||''),conferido:String(req.body.conferido||'')
+    });
+    if(!resultado.ok)
+      return void res.status(resultado.status||409).html(paginaAdmin(ctxAdmin(req, db),{
+        titulo:'Limpeza não realizada',ativo:'importacao_estoque',
+        conteudo:'<h1>Limpeza não realizada</h1><p>'+e(resultado.erro)+
+          '</p><a href="/admin/estoque/importar">Voltar e conferir novamente</a>'
+      }));
+    logAdmin(db,req.adminUser,'arquivou_produtos_antigos_inovafarma','sistema',id,{
+      arquivados:resultado.arquivados,pendentes:resultado.restamParaRevisao
+    },req);
+    return void res.html(paginaAdmin(ctxAdmin(req, db),{
+      titulo:'Limpeza segura concluída',ativo:'importacao_estoque',
+      conteudo:'<h1>Limpeza segura concluída</h1><div class="alerta sucesso">' +
+        '<strong>'+e(resultado.arquivados)+' produtos antigos foram arquivados.</strong>' +
+        ' Nenhum produto foi excluído definitivamente e o histórico de pedidos foi preservado.</div>' +
+        '<p>Para conferir ou restaurar, abra <a href="/admin/produtos?status=arquivados">'+
+        'Produtos arquivados</a>.</p><p>'+e(resultado.restamParaRevisao)+
+        ' casos continuam pendentes de revisão.</p>'
+    }));
+  });
+
+  // Restaurar cadastros arquivados é ato separado; voltam INATIVOS.
+  app.post('/admin/produtos/arquivados/:id/restaurar', (req, res) => {
+    if (!guard(req, res, 'produtos.excluir')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('Restauração restrita ao Super Administrador.');
+    const r=restaurarProdutoArquivado(db,req.params.id);
+    if(!r.ok)return void res.status(r.status||400).html(e(r.erro));
+    logAdmin(db,req.adminUser,'restaurou_produto_arquivado_inovafarma',
+      'produto',req.params.id,{reativado:false},req);
+    res.redirect('/admin/produtos?status=arquivados');
   });
 
   app.get('/admin/produtos/importar', (req, res) => {
@@ -992,6 +1039,8 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'produtos.editar')) return;
     const produto = db.collection('products').get(req.params.id);
     if (!produto) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
+    if (produto.inovaArquivado?.em)
+      return void res.json({ok:false,erro:'Restaure o cadastro arquivado antes de editá-lo.'},409);
     const dados = lerProdutoDoForm(req.body);
     dados.slug = produto.slug;
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
@@ -1021,6 +1070,8 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'produtos.editar')) return;
     const p = db.collection('products').get(req.params.id);
     if (!p) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
+    if (p.inovaArquivado?.em)
+      return void res.json({ok:false,erro:'Restaure o produto arquivado antes de ativá-lo.'},409);
     db.collection('products').update(p.id, { ativo: !p.ativo });
     logAdmin(db, req.adminUser, p.ativo ? 'desativou_produto' : 'ativou_produto', 'produto', p.id, { nome: p.nome }, req);
     res.json({ ok: true, ativo: !p.ativo });
@@ -1030,6 +1081,8 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'produtos.excluir')) return;
     const p = db.collection('products').get(req.params.id);
     if (!p) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
+    if (p.inovaArquivado?.em)
+      return void res.json({ok:false,erro:'Produto arquivado: use Restaurar para rever o cadastro.'},409);
     const emPedidos = db.collection('orders').findOne((o) => (o.itens || []).some((i) => i.produtoId === p.id));
     if (emPedidos) {
       // Preserva o histórico: desativa em vez de apagar
@@ -1108,6 +1161,7 @@ function registrarApi(app, db) {
           descricao: obj.descricao || '',
         };
         if (existente) {
+          if (existente.inovaArquivado?.em) { erros++; continue; }
           db.collection('products').update(existente.id, dados);
           if (obj.quantidade && !inovaAtiva()) {
             registrarMovimentoEstoque(db, { produtoId: existente.id, tipo: 'ajuste', quantidade: Number(obj.quantidade), origem: 'importacao_csv', usuarioId: req.adminUser.id });

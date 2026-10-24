@@ -49,7 +49,7 @@ export function planejarLimpezaCatalogoInova(produtos, relatorio, pedidos = []) 
   const resumo = {
     produtosNoSite: produtos.length, registrosNoRelatorio: relatorio.length,
     preservar: 0, conferirIdentificacao: 0, candidatosSemHistorico: 0,
-    vinculadosPedidos: 0, comReserva: 0,
+    vinculadosPedidos: 0, comReserva: 0, jaArquivados: 0,
   };
   const itens = produtos.map(p => {
     const ean = chave(p.ean), codigoInterno = chave(p.codigoInterno);
@@ -58,7 +58,12 @@ export function planejarLimpezaCatalogoInova(produtos, relatorio, pedidos = []) 
     const codigosDuplicados = (ean && (atuaisPorEan.get(ean)?.length || 0) > 1) ||
       (codigoInterno && (atuaisPorCodigo.get(codigoInterno)?.length || 0) > 1);
     const identificacaoConflitante = idsRelatorio.length > 1 ||
-      porBarras.length > 1 || porInterno.length > 1 || codigosDuplicados;
+      porBarras.length > 1 || porInterno.length > 1 || codigosDuplicados ||
+      (porBarras.length === 1 && codigoInterno &&
+        porBarras[0].codigoInterno &&
+        chave(porBarras[0].codigoInterno) !== codigoInterno) ||
+      (porInterno.length === 1 && ean && porInterno[0].ean &&
+        chave(porInterno[0].ean) !== ean);
     const pedidoVinculado = emPedidos.has(chave(p.id));
     const estoque = p.estoque || {};
     const reservado = Number(estoque.reservado || 0);
@@ -66,7 +71,8 @@ export function planejarLimpezaCatalogoInova(produtos, relatorio, pedidos = []) 
     const reservaAtiva = !Number.isFinite(reservado) || reservado > 0 ||
       !Number.isFinite(quarentena) || quarentena > 0;
     let status;
-    if (identificacaoConflitante || (!ean && !codigoInterno))
+    if (p.inovaArquivado?.em) status = 'ja_arquivado';
+    else if (identificacaoConflitante || (!ean && !codigoInterno))
       status = 'conferir_identificacao';
     else if (idsRelatorio.length === 1)
       status = 'preservar';
@@ -78,6 +84,7 @@ export function planejarLimpezaCatalogoInova(produtos, relatorio, pedidos = []) 
       status = 'candidato_sem_historico';
     const resumoCampo = {
       conferir_identificacao: 'conferirIdentificacao', preservar: 'preservar',
+      ja_arquivado: 'jaArquivados',
       vinculado_pedidos: 'vinculadosPedidos', com_reserva: 'comReserva',
       candidato_sem_historico: 'candidatosSemHistorico',
     }[status];

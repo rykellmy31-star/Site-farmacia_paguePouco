@@ -45,7 +45,7 @@ export function registrarRotasPublicas(app, db) {
   app.get('/produto/:slug', (req, res) => {
     const ctx = criarContexto(req, db);
     const produto = db.collection('products').findOne((p) => p.slug === req.params.slug);
-    if (!produto) return void res.html(paginaErro(ctx, { codigo: 404, mensagem: 'Produto não encontrado.' }), 404);
+    if (!produto || produto.inovaArquivado?.em) return void res.html(paginaErro(ctx, { codigo: 404, mensagem: 'Produto não encontrado.' }), 404);
     const categoria = db.collection('categories').get(produto.categoriaId) || null;
     res.html(produtoPage(ctx, {
       produto,
