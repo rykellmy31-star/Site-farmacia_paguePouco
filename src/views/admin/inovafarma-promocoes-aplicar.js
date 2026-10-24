@@ -36,6 +36,9 @@ export function telaPreviaAplicacaoPromocoesInova(ctx,previa) {
       '<p><strong>Produtos com descontos preparados:</strong> '+fmt(resumo.prontos)+
       ' · <strong>Campanhas preparadas:</strong> '+fmt(resumo.campanhasAceitas)+
       ' · <strong>Códigos conferidos:</strong> '+fmt(resumo.codigos)+'</p>'+
+      '<p><strong>Linhas sem aplicação:</strong> '+fmt(resumo.linhasIgnoradas)+
+      ' de '+fmt(resumo.linhasNoRelatorio)+
+      ' (inclui produtos ausentes, campanhas vencidas e regras não autorizadas).</p>'+
       '<p><strong>Não encontrados:</strong> '+fmt(resumo.semProduto)+
       ' · <strong>Duplicados:</strong> '+fmt(resumo.codigoDuplicado)+
       ' · <strong>Preço divergente:</strong> '+fmt(resumo.precoDivergente)+
