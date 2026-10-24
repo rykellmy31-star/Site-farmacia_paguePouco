@@ -40,7 +40,7 @@ function preparar({ sanitario = { classificacao: 'nao_aplicavel', aprovadoFarmac
     nome:'Produto editado e com foto',codigoInterno:produto.codigoInterno,
     ean:produto.ean,preco:'12.50',quantidade:String(quantidade),
     estoqueMinimo:'5',classificacao:sanitario.classificacao,
-    imagens:['/uploads/produtos/foto-teste.webp'],
+    'imagens[]':['/uploads/produtos/foto-teste.webp'],
     ...extra,
   });
   return {db,produto,executar,body};
