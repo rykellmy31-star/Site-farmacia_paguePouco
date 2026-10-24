@@ -53,7 +53,7 @@ export function telaCarrinho(ctx, { totais, avisos = [], erro = '' }) {
               ${cart.cupom ? `<p class="texto-pequeno mb-0">Cupom <strong>${e(cart.cupom.codigo)}</strong> aplicado.
                 <button class="botao pequeno secundario" formaction="/carrinho/cupom/remover" type="submit">Remover</button></p>` : ''}
             </form>
-            <div id="resumoCarrinho">${htmlResumoCarrinho(cart, totais, { mostrarFrete: false })}</div>
+            <div id="resumoCarrinho">${htmlResumoCarrinho(cart, totais, { mostrarFrete: false, db: ctx.db, exibirParcelamento: true })}</div>
             <a class="botao destaque bloquinho mt-2" href="/checkout">Finalizar compra</a>
             <p class="texto-pequeno texto-suave mb-0 mt-1">O frete é calculado no próximo passo, a partir do seu CEP.</p>
           </div>
