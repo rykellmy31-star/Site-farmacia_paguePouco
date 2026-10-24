@@ -10,6 +10,15 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_ROWS = 12000;
 const MIN_ROWS_COMPLETO = 6128;
 const PRAZO_MS = 20 * 60 * 1000;
+
+export class ErroRelatorioInova extends Error {
+  constructor(codigo, mensagem) {
+    super(mensagem);
+    this.name = 'ErroRelatorioInova';
+    this.codigo = codigo;
+  }
+}
+
 const normal = v => String(v ?? '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const codigo = v => String(v ?? '').trim();
@@ -21,77 +30,113 @@ const aliases = {
   nome: ['nome','descricao','descricaoproduto','descricaodoproduto',
     'produto','nomedoproduto'],
 };
-function csvLinhas(texto) {
-  const trecho = texto.slice(0, 5000);
-  const delimitador = [';', '\t', ','].sort((a,b) =>
-    trecho.split(b).length - trecho.split(a).length)[0];
-  const linhas=[];let campos=[],valor='',aspas=false;
-  const termina=()=>{
-    campos.push(valor.trim()); valor='';
-    if(campos.some(Boolean))linhas.push(campos);
-    campos=[];
-    if(linhas.length>MAX_ROWS+100)
-      throw new Error('Relatório excede o máximo de linhas permitido.');
+function csvLinhas(texto, separador) {
+  const linhas = [];
+  let campos = [], valor = '', aspas = false;
+  const terminar = () => {
+    campos.push(valor.trim());
+    if (campos.some(Boolean)) linhas.push(campos);
+    valor = ''; campos = [];
+    if (linhas.length > MAX_ROWS + 100)
+      throw new ErroRelatorioInova('MUITAS_LINHAS','O relatório tem mais de 12 mil linhas; exporte apenas a posição de estoque.');
   };
-  for(let i=0;i<texto.length;i++){
+  for (let i=0; i<texto.length; i++) {
     const ch=texto[i];
-    if(ch==='"'){
-      if(aspas && texto[i+1]==='"'){valor+='"';i++;}
+    if (ch==='"') {
+      if (aspas && texto[i+1]==='"') {valor+='"';i++;}
       else aspas=!aspas;
-    } else if(ch===delimitador && !aspas){
+    } else if (ch===separador && !aspas) {
       campos.push(valor.trim());valor='';
-    } else if((ch==='\r'||ch==='\n') && !aspas){
-      if(ch==='\r'&&texto[i+1]==='\n')i++;
-      termina();
+    } else if ((ch==='\r'||ch==='\n')&&!aspas) {
+      if (ch==='\r' && texto[i+1]==='\n') i++;
+      terminar();
     } else valor+=ch;
   }
-  if(aspas)throw new Error('CSV com aspas não fechadas.');
-  termina();
+  if (aspas) throw new ErroRelatorioInova('ASPAS_INVALIDAS','CSV com aspas não fechadas. Exporte o arquivo novamente no formato CSV.');
+  terminar();
   return linhas;
 }
+function indicesCabecalho(linhas) {
+  for (let i=0;i<Math.min(linhas.length,100);i++) {
+    const nomes=linhas[i].map(normal);
+    const idx=Object.fromEntries(Object.entries(aliases).map(([campo,apelidos])=>
+      [campo,nomes.findIndex(x=>apelidos.includes(x))]));
+    if (idx.nome>=0 && idx.codigoInterno>=0 && idx.ean>=0)
+      return {indice:i,colunas:idx};
+  }
+  return null;
+}
+function decodificarCsv(bytes) {
+  if (bytes[0]===0xff && bytes[1]===0xfe)
+    return new TextDecoder('utf-16le').decode(bytes);
+  if (bytes[0]===0xfe && bytes[1]===0xff)
+    return new TextDecoder('utf-16be').decode(bytes);
+  try {return new TextDecoder('utf-8',{fatal:true}).decode(bytes);}
+  catch {return new TextDecoder('windows-1252').decode(bytes);}
+}
+/**
+ * Lê SOMENTE identidades; estoque negativo, produto sem EAN e preço ausente
+ * não podem impedir a conciliação. Suporta:
+ * - exportação bruta cp1252 "POSIÇÃO DE ESTOQUE", com capa e várias colunas;
+ * - CSV UTF-8 importado anteriormente, com EAN, Descricao e Codigo Interno;
+ * - CSV reduzido seguro para conciliação (Codigo Interno;EAN;Descricao).
+ */
 export function lerIdentidadesInovaParaLimpeza(bytes) {
-  if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>MAX_BYTES)
-    throw new Error('Relatório CSV inválido ou maior que 8 MB.');
-  let texto;
-  try { texto=new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
-  catch { texto=new TextDecoder('windows-1252').decode(bytes); }
-  const linhas=csvLinhas(texto.replace(/^\uFEFF/,''));
-  let headerIndex=-1,indices=null;
-  for(let i=0;i<Math.min(linhas.length,100);i++){
-    const h=linhas[i].map(normal);
-    const idx=Object.fromEntries(Object.entries(aliases).map(([campo, valores])=>
-      [campo,h.findIndex(x=>valores.includes(x))]));
-    if(idx.nome>=0 && idx.codigoInterno>=0 && idx.ean>=0){
-      headerIndex=i;indices=idx;break;
-    }
+  if (!(bytes instanceof Uint8Array) || !bytes.byteLength || bytes.byteLength>MAX_BYTES)
+    throw new ErroRelatorioInova('ARQUIVO_INVALIDO','Envie um CSV de até 8 MB exportado do InovaFarma.');
+  const texto=decodificarCsv(bytes).replace(/^\uFEFF/,'');
+  let selecionado=null;
+  for (const separador of [';','\t',',']) {
+    const linhas=csvLinhas(texto,separador);
+    const cabecalho=indicesCabecalho(linhas);
+    if (cabecalho) {selecionado={linhas,...cabecalho};break;}
   }
-  if(headerIndex<0)
-    throw new Error('Cabeçalho com Código Interno, Código de Barras e Produto não encontrado.');
-  const itens=[];let invalidos=0;
-  const eans=new Set(),codigos=new Set();let repetidos=0,semBarras=0;
-  for(let i=headerIndex+1;i<linhas.length;i++){
+  if (!selecionado) {
+    const inicio=normal(texto.slice(0,300));
+    if (inicio.startsWith('relatoriodepromocoes'))
+      throw new ErroRelatorioInova('TIPO_PROMOCOES',
+        'Você enviou o relatório de Promoções. Para limpar produtos, use Posição de Estoque do InovaFarma.');
+    if (/codigobarra|produto|preco|estoque|ean/.test(inicio))
+      throw new ErroRelatorioInova('COLUNAS_AUSENTES',
+        'Faltam as colunas Código Interno, EAN/Cód. Barra e Produto/Descrição. '+
+        'Use Posição de Estoque do InovaFarma ou o CSV completo de conferência, '+
+        'não a exportação de produtos do próprio site.');
+    throw new ErroRelatorioInova('FORMATO_DESCONHECIDO',
+      'Arquivo não reconhecido. Exporte Posição de Estoque em CSV no InovaFarma. '+
+      'O relatório deve conter Código, Cod. Barra e Produto.');
+  }
+  const {linhas,indice,colunas}=selecionado;
+  const itens=[];
+  let invalidos=0,repetidos=0,semBarras=0;
+  const eans=new Set(),codigos=new Set();
+  for (let i=indice+1;i<linhas.length;i++) {
     const r=linhas[i];
-    const code=codigo(r[indices.codigoInterno]);
-    const ean=codigo(r[indices.ean]);
-    const nome=codigo(r[indices.nome]);
-    if(!code&&!ean&&!nome)continue;
-    if(!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$/.test(code)) {
-      if(nome && !/total|rodape|pagina|relatorio/i.test(normal(nome)))invalidos++;
-      continue;
+    const interno=codigo(r[colunas.codigoInterno]);
+    const ean=codigo(r[colunas.ean]);
+    const nome=codigo(r[colunas.nome]);
+    if(!interno&&!ean&&!nome)continue;
+    // Ignorar rodapés do relatório oficial (ESTOQUE, TOTAL, Fonte).
+    if (/^(estoque|total|fonte|pagina)\b/i.test(interno)) continue;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$/.test(interno) ||
+        !nome || nome.length<2 || nome.length>220 ||
+        ean.length>30 || /[<>\x00-\x1f]/.test(nome+ean)) {
+      invalidos++;continue;
     }
-    if(!nome||nome.length<2||nome.length>220){invalidos++;continue;}
-    if(ean.length>30||/[<>\x00-\x1f]/.test(nome+ean)){invalidos++;continue;}
-    if(codigos.has(code)||(ean&&eans.has(ean)))repetidos++;
-    codigos.add(code);if(ean)eans.add(ean);else semBarras++;
-    itens.push({codigoInterno:code,ean,nome});
+    if(codigos.has(interno) || (ean && eans.has(ean)))repetidos++;
+    codigos.add(interno);
+    if (ean)eans.add(ean);else semBarras++;
+    itens.push({codigoInterno:interno,ean,nome});
   }
-  if(!itens.length)throw new Error('Nenhum produto identificado no CSV.');
+  if (!itens.length)
+    throw new ErroRelatorioInova('SEM_PRODUTOS','O arquivo foi lido, mas nenhum produto com Código Interno foi encontrado.');
   return {itens,estatisticas:{
     total:itens.length,semBarras,invalidos,repetidos,
     minimoEsperado:MIN_ROWS_COMPLETO,
-    coberturaCompleta:itens.length>=MIN_ROWS_COMPLETO&&!invalidos&&!repetidos,
+    coberturaCompleta:itens.length>=MIN_ROWS_COMPLETO && !invalidos && !repetidos,
+    tipoRelatorio:normal(texto.slice(0,150)).startsWith('posicaodeestoque')?'inovafarma_original':'csv_conferencia',
   }};
 }
+
 const colecoes = db => ({
   produtos:db.collection('products').all(),
   pedidos:db.collection('orders').all(),
