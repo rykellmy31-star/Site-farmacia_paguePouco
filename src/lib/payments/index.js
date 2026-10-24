@@ -120,6 +120,17 @@ export function installmentOptions(db, totalCents) {
   return opts;
 }
 
+/**
+ * Mensagens comerciais da vitrine seguem exatamente as opcoes do checkout.
+ * Nao anuncia 2x antes de R$50, nem parcelas com juros como "sem juros".
+ * Null significa nao exibir informacao de parcelamento.
+ */
+export function melhorParcelamentoSemJuros(db,precoCentavos) {
+  if(!db)return null;
+  const opcoes=installmentOptions(db,precoCentavos);
+  return opcoes.filter(p=>p.numero>=2&&p.semJuros===true&&p.juros===false).at(-1)||null;
+}
+
 function mpConfigEfetiva(db) {
   return { ...config, payments: { ...config.payments, mp: credenciaisMercadoPago(db) } };
 }
