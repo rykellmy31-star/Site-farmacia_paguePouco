@@ -101,6 +101,7 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       <div class="linha" style="gap:6px">
         <a class="botao" href="/admin/produtos/novo">+ Novo produto</a>
         <a class="botao secundario" href="/admin/produtos/importar">Importar/exportar</a>
+        ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/estoque/importar">Limpar produtos antigos</a>' : ''}
         ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/produtos/inovafarma">Importar da InovaFarma</a>' : ''}
       </div>
     </div>
@@ -116,6 +117,8 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
           <option value="">Todos os status</option>
           <option value="ativo" ${filtros.status === 'ativo' ? 'selected' : ''}>Ativos</option>
           <option value="inativo" ${filtros.status === 'inativo' ? 'selected' : ''}>Inativos</option>
+          <option value="arquivados" ${filtros.status === 'arquivados' ? 'selected' : ''}>Arquivados (recuperáveis)</option>
+          <option value="todos_incluindo_arquivados" ${filtros.status === 'todos_incluindo_arquivados' ? 'selected' : ''}>Todos, incluindo arquivados</option>
           <option value="estoque_baixo" ${filtros.status === 'estoque_baixo' ? 'selected' : ''}>Estoque baixo</option>
           <option value="bloqueado" ${filtros.status === 'bloqueado' ? 'selected' : ''}>Bloqueados para venda</option>
         </select>
@@ -149,15 +152,22 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
               ${Number(p.estoque?.quantidade ?? 0) <= Number(p.estoque?.minimo ?? 0) ? ' <span class="etiqueta vermelha">Baixo</span>' : ''}
             </td>
             <td>
-              ${!p.ativo ? etiquetaStatus('inativo') : ''}
+              ${p.inovaArquivado?.em ? '<span class="etiqueta">Arquivado</span>' : ''}
+              ${!p.ativo && !p.inovaArquivado?.em ? etiquetaStatus('inativo') : ''}
               ${p.ativo && venda.ok ? etiquetaStatus('ativo') : ''}
               ${p.ativo && !venda.ok ? `<span class="etiqueta vermelha" title="${e(venda.motivo)}">${venda.bloqueioSanitario ? 'Bloqueio sanitário' : 'Indisponível'}</span>` : ''}
             </td>
             <td class="acoes-linha">
               <a class="botao pequeno secundario" href="/admin/produtos/${e(p.id)}">Editar</a>
               <a class="botao pequeno secundario" href="/produto/${e(p.slug)}" target="_blank">Ver</a>
-              <button class="botao pequeno ${p.ativo ? '' : 'secundario'}" data-alternar-produto="${e(p.id)}">${p.ativo ? 'Desativar' : 'Ativar'}</button>
-              <button class="botao pequeno perigo" data-excluir-produto="${e(p.id)}" data-nome="${e(p.nome)}">Excluir</button>
+              ${p.inovaArquivado?.em
+                ? (ctx.adminUser?.role === 'super_admin'
+                  ? '<form method="post" action="/admin/produtos/arquivados/' + e(p.id) + '/restaurar" style="display:inline">' +
+                    '<input type="hidden" name="_csrf" value="' + e(ctx.csrf) + '">' +
+                    '<button class="botao pequeno secundario" type="submit">Restaurar (inativo)</button></form>'
+                  : '<span class="texto-pequeno">Arquivado</span>')
+                : `<button class="botao pequeno ${p.ativo ? '' : 'secundario'}" data-alternar-produto="${e(p.id)}">${p.ativo ? 'Desativar' : 'Ativar'}</button>
+                   <button class="botao pequeno perigo" data-excluir-produto="${e(p.id)}" data-nome="${e(p.nome)}">Excluir</button>`}
             </td>
           </tr>`;
         }),
