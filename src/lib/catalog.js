@@ -47,10 +47,15 @@ export function sanitarioDefault() {
  * Um produto pode ser vendido online?
  * @returns {{ok:boolean, motivo:string|null, codigo:string|null, bloqueioSanitario:boolean}}
  */
-export function podeVender(produto) {
+/**
+ * Valida se um cadastro pode ser marcado ATIVO após a aprovação.
+ * Não exige saldo positivo: produto sem estoque permanece ativo no cadastro,
+ * mas a venda continua bloqueada por podeVender() até haver disponibilidade.
+ * Aplica as mesmas barreiras sanitárias do checkout, sem exceções.
+ */
+export function podeAtivarAposAprovacao(produto) {
   if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
   if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
-  if (!produto.ativo) return { ok: false, motivo: 'Produto inativo.', codigo: 'INATIVO', bloqueioSanitario: false };
   const s = { ...sanitarioDefault(), ...(produto.sanitario || {}) };
 
   if (s.controlado || s.requerReceita || s.classificacao === 'controlado') {
@@ -77,6 +82,15 @@ export function podeVender(produto) {
       bloqueioSanitario: true,
     };
   }
+  return { ok: true, motivo: null, codigo: null, bloqueioSanitario: false };
+}
+
+export function podeVender(produto) {
+  if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
+  if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
+  if (!produto.ativo) return { ok: false, motivo: 'Produto inativo.', codigo: 'INATIVO', bloqueioSanitario: false };
+  const bloqueio = podeAtivarAposAprovacao(produto);
+  if (!bloqueio.ok) return bloqueio;
   if (estoqueDisponivel(produto) <= 0) {
     return { ok: false, motivo: 'Produto esgotado.', codigo: 'SEM_ESTOQUE', bloqueioSanitario: false };
   }

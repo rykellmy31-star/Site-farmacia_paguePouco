@@ -36,7 +36,7 @@ import {
   telaUsuarios, telaAuditoria, telaSistema, telaAparencia,
 } from '../views/admin/config.js';
 import {
-  montarArvore, slugUnicoProduto, slugUnicoCategoria, marcasDisponiveis, podeVender, filtrarProdutosPorEstoque,
+  montarArvore, slugUnicoProduto, slugUnicoCategoria, marcasDisponiveis, podeVender, podeAtivarAposAprovacao, filtrarProdutosPorEstoque,
 } from '../lib/catalog.js';
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
@@ -1247,6 +1247,13 @@ function registrarApi(app, db) {
     if (!produto) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
     if (produto.inovaArquivado?.em)
       return void res.json({ok:false,erro:'Restaure o cadastro arquivado antes de editá-lo.'},409);
+    const aprovarAoSalvar = String(req.body.aprovarAoSalvar || '') === '1';
+    // O botão apenas marca a intenção no formulário. A aprovação real e
+    // a ativação só acontecem após Salvar, com permissão no SERVIDOR.
+    if (aprovarAoSalvar && !can(req.adminUser, 'produtos.aprovar'))
+      return void res.json({ok:false,erro:'Sem permissão para aprovar cadastro sanitário.'},403);
+    if (aprovarAoSalvar && produto.sanitario?.aprovadoFarmaceutico)
+      return void res.json({ok:false,erro:'Este cadastro já foi aprovado. Recarregue antes de alterar a aprovação.'},409);
     const dados = lerProdutoDoForm(req.body);
     dados.slug = produto.slug;
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
@@ -1271,11 +1278,33 @@ function registrarApi(app, db) {
     estoque.quantidade = Number.isFinite(novaQtd) ? novaQtd : Number(estoque.quantidade || 0);
     estoque.minimo = Number(req.body.estoqueMinimo) || Number(estoque.minimo || 0);
     dados.estoque = estoque;
-    // Preserva a aprovação sanitária (apenas o responsável técnico altera)
+    // Preserva o estado de aprovação, salvo na PRIMEIRA aprovação explícita
+    // efetuada por usuário autorizado no mesmo envio das fotos/dados.
     dados.sanitario = { ...(produto.sanitario || {}), ...dados.sanitario, aprovadoFarmaceutico: produto.sanitario?.aprovadoFarmaceutico || false, aprovadoPor: produto.sanitario?.aprovadoPor || '', aprovadoEm: produto.sanitario?.aprovadoEm || null };
+    let ativacaoAutomatica = false;
+    let motivoAtivacao = '';
+    if (aprovarAoSalvar) {
+      dados.sanitario.aprovadoFarmaceutico = true;
+      dados.sanitario.aprovadoPor = `${req.adminUser.nome}${req.adminUser.crf ? ` — CRF ${req.adminUser.crf}` : ''}`;
+      dados.sanitario.aprovadoEm = new Date().toISOString();
+      // Verificar todo o cadastro FINAL, não o produto antes das edições.
+      const aptidao = podeAtivarAposAprovacao({ ...produto, ...dados });
+      dados.ativo = aptidao.ok;
+      ativacaoAutomatica = aptidao.ok;
+      motivoAtivacao = aptidao.ok ? '' : aptidao.motivo;
+    }
     db.collection('products').update(produto.id, dados);
+    if (aprovarAoSalvar) {
+      logAdmin(db, req.adminUser, 'aprovou_produto_sanitario', 'produto', produto.id, {
+        nome: dados.nome, ativacaoAutomatica, motivoAtivacao,
+      }, req);
+    }
+    if (ativacaoAutomatica) {
+      logAdmin(db, req.adminUser, 'ativou_produto_apos_aprovacao', 'produto', produto.id, {nome:dados.nome},req);
+    }
     logAdmin(db, req.adminUser, 'editou_produto', 'produto', produto.id, { nome: dados.nome }, req);
-    res.json({ ok: true, id: produto.id });
+    res.json({ ok: true, id: produto.id, aprovacaoAplicada: aprovarAoSalvar,
+      ativacaoAutomatica, motivoAtivacao });
   });
 
   app.post('/admin/api/produtos/:id/ativar', (req, res) => {

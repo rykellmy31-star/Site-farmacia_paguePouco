@@ -311,10 +311,18 @@
           body: new FormData(form),
         });
         if (!resposta?.id) throw new Error('O servidor não confirmou o salvamento do produto.');
-        notificar('Produto salvo com sucesso.');
+        const mensagem = resposta.aprovacaoAplicada
+          ? (resposta.ativacaoAutomatica
+            ? 'Cadastro aprovado, salvo e produto ativado automaticamente.'
+            : 'Cadastro aprovado e salvo, mas o produto ficou inativo: ' +
+              (resposta.motivoAtivacao || 'verifique as restrições para venda online.'))
+          : 'Produto salvo com sucesso.';
+        notificar(mensagem);
         // Ao criar, abre o cadastro recém-criado; ao editar, reabre o mesmo.
         const destino = resposta.url || '/admin/produtos/' + encodeURIComponent(resposta.id);
-        setTimeout(() => { window.location.assign(destino + '?salvo=1'); }, 500);
+        const parametros = resposta.aprovacaoAplicada
+          ? '?salvo=1&aprovado=1' : '?salvo=1';
+        setTimeout(() => { window.location.assign(destino + parametros); }, 500);
       } catch (erro) {
         notificar(erro.message || 'Não foi possível salvar o produto.', 'erro');
       } finally {
@@ -430,6 +438,28 @@
       const id = aprovarProd.getAttribute('data-aprovar-produto');
       const status = aprovarProd.getAttribute('data-status');
       if (!id) { notificar('Salve o produto antes de aprovar.', 'erro'); return; }
+      // A primeira aprovação entra no MESMO salvamento que fotos, categoria
+      // e descrição. Não recarregar a tela: isso apagava alterações pendentes.
+      if (status === '1') {
+        const form = $('#formProduto');
+        if (!form) { notificar('Abra a edição do produto para aprovar.', 'erro'); return; }
+        let campo = form.querySelector('input[name="aprovarAoSalvar"]');
+        if (!campo) {
+          campo = document.createElement('input');
+          campo.type = 'hidden';
+          campo.name = 'aprovarAoSalvar';
+          form.appendChild(campo);
+        }
+        campo.value = '1';
+        const ativo = form.querySelector('input[name="ativo"]');
+        if (ativo) ativo.checked = true;
+        aprovarProd.textContent = 'Aprovação preparada — salve o produto';
+        aprovarProd.disabled = true;
+        notificar('Aprovação preparada. Clique em Salvar alterações para aprovar e ativar, se permitido.');
+        return;
+      }
+      // Revogação continua uma ação explícita separada, com autorização no
+      // servidor. Não reativa produto previamente desativado.
       try {
         await post(`/admin/api/produtos/${id}/aprovar`, { status });
         notificar('Situação sanitária atualizada.');

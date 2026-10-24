@@ -2,7 +2,7 @@
 import { escapeHtml as e, sanitizeHtml } from '../../lib/security.js';
 import { paginaAdmin, painel, tabelaAdmin, cartaoMetrica, campoAdmin, barraFerramentas, etiquetaStatus, graficoBarras, paginacaoAdmin, money } from './layout.js';
 import { formatDateTime, formatDate, formatNumber } from '../../lib/format.js';
-import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, podeVender, precoVigenteCentavos } from '../../lib/catalog.js';
+import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, podeVender, podeAtivarAposAprovacao, precoVigenteCentavos } from '../../lib/catalog.js';
 import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
@@ -201,7 +201,12 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
       <strong>Este produto não pode ser vendido agora.</strong> Motivo: ${e(podeVender(p).motivo || '')}
     </div>` : ''}
 
-    ${ctx.req?.query?.get('salvo') === '1' ? '<div class="alerta sucesso" role="status">Produto salvo com sucesso.</div>' : ''}
+    ${ctx.req?.query?.get('salvo') === '1'
+      ? (ctx.req?.query?.get('aprovado') === '1'
+        ? (p.ativo
+          ? '<div class="alerta sucesso" role="status">Cadastro aprovado e produto ativado automaticamente. Você ainda pode desativá-lo pela lista de produtos.</div>'
+          : `<div class="alerta aviso" role="status">Cadastro aprovado e salvo, porém permanece inativo: ${e(podeAtivarAposAprovacao(p).motivo || 'verifique as restrições para venda online.')}</div>`)
+        : '<div class="alerta sucesso" role="status">Produto salvo com sucesso.</div>') : ''}
     <form id="formProduto" method="post" action="/admin/api/produtos${editando ? `/${e(p.id)}` : ''}">
       <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
 
@@ -294,6 +299,7 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
                     data-aprovar-produto="${e(p.id || '')}" data-status="${s.aprovadoFarmaceutico ? '0' : '1'}">
                     ${s.aprovadoFarmaceutico ? 'Revogar aprovação' : 'Aprovar cadastro'}
                   </button>
+                  ${!s.aprovadoFarmaceutico ? '<p class="texto-pequeno mt-1 mb-0">Após clicar em Aprovar cadastro, clique em Salvar alterações: a aprovação e a ativação serão feitas juntas, desde que não existam bloqueios sanitários. Não é necessário voltar à lista para ativar.</p>' : ''}
                 </div>` : '<div class="texto-pequeno mt-1">Seu perfil não tem permissão para aprovar. Peça ao farmacêutico responsável ou ao super administrador.</div>'}
             </div>
             `,
