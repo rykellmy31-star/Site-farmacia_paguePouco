@@ -26,6 +26,7 @@ const MENU = [
   { id: 'fretes', rotulo: 'Configuração de fretes', href: '/admin/fretes', perm: 'fretes.ver', icone: '🚚' },
   { id: 'configuracoes', rotulo: 'Configurações gerais', href: '/admin/configuracoes', perm: 'configuracoes.ver', icone: '⚙️' },
   { id: 'importacao_estoque', rotulo: 'Importação de estoque', href: '/admin/estoque/importar', perm: 'produtos.criar', somenteSuperadmin: true, icone: '📥' },
+  { id: 'robo_inova', rotulo: 'Robô InovaFarma', href: '/admin/robo-inovafarma', perm: 'produtos.editar', somenteSuperadmin: true, icone: '🤖' },
   { id: 'usuarios', rotulo: 'Usuários e permissões', href: '/admin/usuarios', perm: 'usuarios.ver', icone: '🔐' },
   { id: 'auditoria', rotulo: 'Auditoria', href: '/admin/auditoria', perm: 'auditoria.ver', icone: '🕵️' },
   { id: 'sistema', rotulo: 'Sistema e backups', href: '/admin/sistema', perm: 'sistema.ver', icone: '🛠️' },
