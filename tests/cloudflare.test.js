@@ -304,8 +304,8 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const csvInovaForm = new FormData();
   csvInovaForm.append('_csrf', adminToken);
   csvInovaForm.append('arquivo', new Blob([
-    'Codigo de Barras;Descricao;Estoque Atual;Codigo Interno\n' +
-    '7891234500009;Sabonete laboratorio;0;INOVATEST9000\n',
+    'Codigo de Barras;Descricao;Estoque Atual;Codigo Interno;Preco de Venda\n' +
+    '7891234500009;Sabonete laboratorio;0;INOVATEST9000;R$ 12,90\n',
   ], {type:'text/csv'}), 'relatorio-inicial.csv');
   const prepararCsv=await call('/admin/api/produtos/inova-csv/preparar', {
     method:'POST',body:csvInovaForm,
@@ -319,6 +319,8 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(previewResponse.status,200);
   const previewHtml = await previewResponse.text();
   assert.match(previewHtml,/Confirmar importação inicial/);
+  assert.match(previewHtml,/Preço de venda \(CSV\)/);
+  assert.match(previewHtml,/12,90/);
   assert.match(previewHtml,/href="\/admin\/estoque\/importar"/);
 
   const antesConfirmar=await call('/admin/api/sistema/backup',{
@@ -343,6 +345,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
     p=>p.ean==='7891234500009');
   assert.ok(pCsv);
   assert.equal(pCsv.estoque.quantidade,0);
+  assert.equal(pCsv.precoCentavos,1290,'relatório atribui preço de venda sem preenchimento manual');
   assert.equal(pCsv.ativo,false,'produto novo não pode ser anunciado sem revisão');
   assert.equal(pCsv.sanitario.requerReceita,true);
 
