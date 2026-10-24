@@ -10,6 +10,7 @@
  */
 import { slugify } from './security.js';
 import { inovaAtiva, estoqueInovaDisponivel } from './inovafarma-stock.js';
+import { precoPromocaoInovaVigente } from './inovafarma-promocoes-precos.js';
 
 export const CLASSIFICACOES = {
   nao_aplicavel: { id: 'nao_aplicavel', nome: 'Não se aplica (não é medicamento)', exigeRegistro: false, vendaOnline: true },
@@ -90,21 +91,23 @@ export function estoqueDisponivel(produto) {
     Math.max(0, Number(e.quarentena || 0)));
 }
 
-export function precoVigenteCentavos(produto) {
-  const promo = Number(produto.precoPromocionalCentavos || 0);
-  const normal = Number(produto.precoCentavos || 0);
+export function precoVigenteCentavos(produto, referencia = new Date()) {
+  const normal = Number(produto?.precoCentavos || 0);
+  const inova = precoPromocaoInovaVigente(produto, referencia);
+  if (inova != null) return inova;
+  const promo = Number(produto?.precoPromocionalCentavos || 0);
   return promo > 0 && promo < normal ? promo : normal;
 }
 
-export function temPromocao(produto) {
-  const promo = Number(produto.precoPromocionalCentavos || 0);
-  const normal = Number(produto.precoCentavos || 0);
-  return promo > 0 && promo < normal;
+export function temPromocao(produto, referencia = new Date()) {
+  const normal = Number(produto?.precoCentavos || 0);
+  return normal > 0 && precoVigenteCentavos(produto, referencia) < normal;
 }
 
-export function descontoPercentual(produto) {
-  if (!temPromocao(produto)) return 0;
-  return Math.round(((produto.precoCentavos - produto.precoPromocionalCentavos) / produto.precoCentavos) * 100);
+export function descontoPercentual(produto, referencia = new Date()) {
+  if (!temPromocao(produto, referencia)) return 0;
+  return Math.round(((Number(produto.precoCentavos) -
+    precoVigenteCentavos(produto, referencia)) / Number(produto.precoCentavos)) * 100);
 }
 
 export function productUrl(produto) {
