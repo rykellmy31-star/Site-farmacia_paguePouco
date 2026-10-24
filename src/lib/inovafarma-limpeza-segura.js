@@ -97,14 +97,15 @@ const colecoes = db => ({
   pedidos:db.collection('orders').all(),
   carrinhos:db.collection('carts').all(),
 });
-const fingerprint = (colecoes, relatorio) => {
+const fingerprint = (colecoes, relatorio, elegiveis) => {
   const produtos=colecoes.produtos.map(p=>[p.id,p.ean,p.codigoInterno,
     p.ativo,p.atualizadoEm,p.updatedAt,
     p.estoque?.reservado,p.estoque?.quarentena,p.inovaArquivado?.em]);
   const pedidos=colecoes.pedidos.map(p=>[p.id,(p.itens||[]).map(i=>i.produtoId)]);
-  const carrinhos=colecoes.carrinhos.map(c=>[c.id,(c.itens||[]).map(i=>i.produtoId)]);
+  // Cestas vazias são criadas a cada visita; não invalidam a prévia.
+  // Mas qualquer alteração dos IDs elegíveis a arquivamento invalida.
   return crypto.createHash('sha256').update(JSON.stringify({
-    produtos,pedidos,carrinhos,
+    produtos,pedidos,elegiveis:elegiveis.map(i=>i.id).sort(),
     fonte:relatorio.map(i=>[i.ean,i.codigoInterno])
   })).digest('hex');
 };
@@ -119,7 +120,7 @@ function montarPlano(db,fonte) {
   const emCarrinhos=previa.itens.filter(i=>
     i.status==='candidato_sem_historico'&&idsCarrinho.has(i.id));
   return {previa,elegiveis,emCarrinhos,
-    fingerprint:fingerprint(dados,fonte.itens)};
+    fingerprint:fingerprint(dados,fonte.itens,elegiveis)};
 }
 const validoLote=(lote,operadorId)=>{
   if(!lote||lote.operadorId!==operadorId)
