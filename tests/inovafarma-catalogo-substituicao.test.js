@@ -48,7 +48,7 @@ function criarDB({pedidos=[],reservas=0,carrinhos=true}={}){
   const col=name=>{
     if(!dados.has(name))dados.set(name,[]);
     return {
-      all:()=>dados.get(name),
+      all:()=>dados.get(name).slice(),
       count:fn=>fn?dados.get(name).filter(fn).length: dados.get(name).length,
       get:(key)=>dados.get(name).find(p=>String(p.id)===String(key))||null,
       insert:doc=>{
@@ -146,19 +146,9 @@ test('reset integral produz somente IDs novos, arquiva antigos e preserva pedido
   const pedido=pedidoEncerrado();
   const {db}=criarDB({pedidos:[pedido]});
   const p=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
-  const originalTransaction=db.storage.transactionSync;
-  let origemErro=null;
-  db.storage.transactionSync=fn=>originalTransaction(()=>{
-    try { return fn(); } catch(err) { origemErro=err; throw err; }
-  });
-  let aplicado;
-  try {
-    aplicado=aplicarSubstituicaoCatalogoInova(db,p.id,'super',{
-      frase:'SUBSTITUIR TODO O CATALOGO',autorizou:'1',backupConfirmado:'1'
-    },now);
-  } catch(err) {
-    throw new Error('A causa interna da transação nos testes é: '+String(origemErro?.message||origemErro?.name||'desconhecida'),{cause:err});
-  }
+  const aplicado=aplicarSubstituicaoCatalogoInova(db,p.id,'super',{
+    frase:'SUBSTITUIR TODO O CATALOGO',autorizou:'1',backupConfirmado:'1'
+  },now);
   assert.equal(aplicado.ok,true);
   assert.equal(aplicado.antigosArquivados,2);
   assert.equal(aplicado.criados,6128);
