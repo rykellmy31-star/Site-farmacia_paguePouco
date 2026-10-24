@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
 import { podeVender, estoqueDisponivel } from '../src/lib/catalog.js';
-import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../src/lib/inovafarma-csv-import.js';
+import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque, interpretarPrecoVendaCentavos } from '../src/lib/inovafarma-csv-import.js';
 import { readFileSync } from 'node:fs';
 
 const EAN1='7891234567890',EAN2='7891234567891';
@@ -113,4 +113,119 @@ test('rotas de importação exigem superadmin, confirmação e CSRF global',()=>
   assert.match(routes.slice(a,b),/super_admin/);
   assert.match(routes.slice(b,b+1100),/super_admin/);
   assert.match(routes.slice(b,b+1100),/req\.body\.confirmar/);
+});
+
+
+test('preço de venda em reais usa centavos exatos, sem arredondamento nem aceitar preços ambíguos',()=>{
+  for(const [texto,esperado] of [
+    ['R$ 12,90',1290],['12,90',1290],['31.90',3190],
+    ['1.234,56',123456],['R$ 1.234,56',123456],['1.234',123400],
+    ['10',1000],['2,5',250],
+  ]) assert.equal(interpretarPrecoVendaCentavos(texto),esperado,texto);
+  for(const invalido of ['','R$ 0,00','0','-4,99','abc','12,345','12.3.4','10,xx','1.2,3','1000001,00']) {
+    assert.equal(interpretarPrecoVendaCentavos(invalido),null,invalido);
+  }
+});
+
+test('prévia inclui nome, preço e saldo, mas não muda preços antes da confirmação',()=>{
+  const db=criarDB();
+  const file=csv('Código de barras;Descrição;Estoque atual;Preço de Venda;Código Interno\n'
+    +EAN1+';Produto existente;8;R$ 19,90;100\n'
+    +EAN2+';Produto novo;3;1.234,56;101\n');
+  const r=prepararRelatorioEstoque(db,file,{operadorId:'admin'});
+  assert.equal(r.ok,true);
+  assert.equal(r.resumo.precosAtualizados,1);
+  assert.equal(r.resumo.precosNovos,1);
+  assert.equal(r.resumo.precosAusentes,0);
+  const prev=consultarRelatorioEstoque(db,r.id,'admin');
+  assert.equal(prev.plano[0].precoAnteriorCentavos,1500);
+  assert.equal(prev.plano[0].precoCentavos,1990);
+  assert.equal(prev.plano[0].alterarPreco,true);
+  assert.equal(prev.plano[1].precoCentavos,123456);
+  assert.equal(db.collection('products').get('existente').precoCentavos,1500);
+  assert.equal(db.collection('stockMovements').count(),0);
+  const apply=aplicarRelatorioEstoque(db,r.id,'admin');
+  assert.equal(apply.ok,true);
+  assert.equal(db.collection('products').get('existente').precoCentavos,1990);
+  const novo=db.collection('products').findOne(p=>p.ean===EAN2);
+  assert.equal(novo.precoCentavos,123456);
+  assert.equal(novo.estoque.quantidade,3);
+  assert.equal(novo.ativo,false);
+  assert.equal(novo.imagens.length,0);
+  assert.equal(novo.sanitario.requerReceita,true);
+  assert.equal(db.collection('products').get('existente').imagens[0].url,'/img/original.png');
+  assert.equal(aplicarRelatorioEstoque(db,r.id,'admin').status,409);
+  const after=consultarRelatorioEstoque(db,r.id,'admin');
+  assert.equal(after.aplicado,true);
+  assert.equal(after.resumo.precosAtualizados,1);
+});
+
+test('preço altera mesmo se estoque já estiver igual; reaplicar mesmo relatório não duplica ações',()=>{
+  const db=criarDB();
+  const file=csv('ean;nome;quantidade;preco venda\n'
+    + EAN1+';Produto original;9;15,50\n');
+  const a=prepararRelatorioEstoque(db,file,{operadorId:'admin'});
+  assert.equal(a.ok,true);
+  assert.equal(a.resumo.ajustes,0);
+  assert.equal(a.resumo.semAlteracao,1);
+  assert.equal(a.resumo.precosAtualizados,1);
+  assert.equal(aplicarRelatorioEstoque(db,a.id,'admin').ok,true);
+  assert.equal(db.collection('products').get('existente').precoCentavos,1550);
+  assert.equal(db.collection('stockMovements').count(),0);
+  const b=prepararRelatorioEstoque(db,file,{operadorId:'admin'});
+  assert.equal(b.resumo.precosAtualizados,0);
+  assert.equal(aplicarRelatorioEstoque(db,b.id,'admin').ok,true);
+  assert.equal(db.collection('products').get('existente').precoCentavos,1550);
+  assert.equal(db.collection('stockMovements').count(),0);
+});
+
+test('sem coluna de preço conserva o preço existente e deixa novos produtos inativos sem valor',()=>{
+  const db=criarDB();
+  const r=prepararRelatorioEstoque(db,relatorio(7,4),{operadorId:'admin'});
+  assert.equal(r.resumo.precosAusentes,2);
+  assert.equal(r.resumo.precosAtualizados,0);
+  assert.equal(aplicarRelatorioEstoque(db,r.id,'admin').ok,true);
+  assert.equal(db.collection('products').get('existente').precoCentavos,1500);
+  assert.equal(db.collection('products').findOne(x=>x.ean===EAN2).precoCentavos,0);
+});
+
+test('coluna de preço inválida ou zero impede criar lote e evita preços incorretos',()=>{
+  for(const valor of ['0','R$ 0,00','-1,00','12.345,678','R$ XYZ','','1000001,00']){
+    const db=criarDB();
+    const file=csv('ean;nome;quantidade;preco de venda\n'
+      + EAN1+';Produto original;3;'+valor+'\n');
+    const r=prepararRelatorioEstoque(db,file,{operadorId:'admin'});
+    assert.equal(r.ok,false,'valor não rejeitado: '+valor);
+    assert.equal(db.collection('products').get('existente').precoCentavos,1500);
+    assert.equal(db.collection('inovaCsvImportacoes').count(),0);
+  }
+});
+test('conflito de estoque impede reprecificação de todo o lote',()=>{
+  const db=criarDB();
+  db.collection('products').update('existente',{estoque:{quantidade:9,reservado:8,quarentena:0,minimo:3}});
+  const file=csv('ean;nome;quantidade;preco venda\n'
+    + EAN1+';Produto original;1;999,99\n');
+  const r=prepararRelatorioEstoque(db,file,{operadorId:'admin'});
+  assert.equal(r.resumo.conflitos,1);
+  assert.equal(aplicarRelatorioEstoque(db,r.id,'admin').status,409);
+  assert.equal(db.collection('products').get('existente').precoCentavos,1500);
+  assert.equal(db.collection('products').get('existente').estoque.quantidade,9);
+});
+
+test('prévia mostra coluna de preço anterior e novo, inclui alerta de diferenças',async()=>{
+  const { telaPreviaRelatorioInova } = await import('../src/views/admin/inova-csv.js');
+  const db=criarDB();
+  const file=csv('ean;nome;quantidade;valor de venda\n'
+    + EAN1+';Produto original;9;25,90\n');
+  const r=prepararRelatorioEstoque(db,file,{operadorId:'admin'});
+  assert.equal(r.resumo.alertasPreco,1);
+  const prev=consultarRelatorioEstoque(db,r.id,'admin');
+  const ctx={adminUser:{role:'super_admin',nome:'Admin'},csrf:'teste',
+    req:{query:new URLSearchParams()},settings:{empresa:{nomeFantasia:'Farmácia Teste'},tema:{}}};
+  const html=telaPreviaRelatorioInova(ctx,prev);
+  assert.match(html,/Preço de venda \(CSV\)/);
+  assert.match(html,/25,90/);
+  assert.match(html,/15,00/);
+  assert.match(html,/diferença superior a 50%/);
+  assert.match(html,/saldos e preços de venda/);
 });
