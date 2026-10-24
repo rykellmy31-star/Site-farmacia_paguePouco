@@ -55,8 +55,7 @@ export function telaPreviaPromocoesInova(ctx, previa) {
         '<p><strong>Campanhas recorrentes / dia da semana:</strong> ' + fmt(resumo.recorrenciaParaRevisar) +
         ' · <strong>Restrições de pagamento:</strong> ' + fmt(resumo.regrasDePagamento) +
         ' · <strong>Demais casos para revisão:</strong> ' + fmt(resumo.candidatosParaRevisao) + '</p>' +
-        falhas }),
-      }) +
+        falhas }) +
       painel({ titulo: 'Amostra para conferência (' + fmt(Math.min(itens.length, 80)) +
         ' de ' + fmt(itens.length) + ' produtos)', corpo:
         '<div style="overflow-x:auto"><table class="tabela">' +
