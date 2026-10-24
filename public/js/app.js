@@ -69,7 +69,13 @@
     const contador = $('#contadorCarrinho');
     if (contador) contador.textContent = dados.quantidade || 0;
     const resumoEl = $('#resumoCarrinho');
-    if (resumoEl && dados.html && dados.html.resumo) resumoEl.innerHTML = dados.html.resumo;
+    if (resumoEl && dados.html) {
+      // A página /carrinho calcula o frete somente no próximo passo:
+      // manter o mesmo resumo e anúncio de parcelas após cada alteração.
+      const emCarrinho = window.location.pathname === '/carrinho';
+      const resumoAtual = emCarrinho ? dados.html.resumoSemFrete : dados.html.resumo;
+      if (resumoAtual) resumoEl.innerHTML = resumoAtual;
+    }
     const itensEl = $('#itensCarrinhoPagina');
     if (itensEl && dados.html && dados.html.itens) {
       itensEl.innerHTML = dados.html.itens;
