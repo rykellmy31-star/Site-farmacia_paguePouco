@@ -138,7 +138,7 @@ test('arquivo completo: concilia código interno sem EAN, não toca em pedidos, 
 test('Cliente Windows transmite formato JSON sem cartão, CPF ou preço de custo',async()=>{
   const linhas=Array.from({length:3000},(_,i)=>linha(800001+i,
     String(7891000000000+i),i%3,'20,50'));
-  const txt=csvOriginal.split('\r\n').slice(0,3).concat(linhas,
+  const txt=csvOriginal.split('\r\n').slice(0,7).concat(linhas,
     ['ESTOQUE:;;;;;;;;;;;;;;;;;;;;']).join('\r\n');
   const bytes=Buffer.from(txt);
   const chamadas=[];
