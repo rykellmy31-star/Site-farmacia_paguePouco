@@ -55,10 +55,11 @@ export function telaImportacaoEstoque(ctx) {
         corpo: `<p>O <strong>Relatório de Promoções</strong> é diferente do relatório de estoque:
           ele mostra campanhas, preços promocionais, desconto percentual e período.
           Envie o CSV que você exportou no menu Relatório de Promoções do InovaFarma.</p>
-          <div class="alerta info"><strong>Prévia somente leitura.</strong>
-            O site não aplicará nenhum desconto ao conferir o relatório.
-            Campanhas por dia da semana, promoções futuras e condições de pagamento
-            precisarão ser revisadas antes de permitir atualização automática.</div>
+          <div class="alerta info"><strong>Conferência antes de aplicar.</strong>
+            Você pode apenas conferir ou preparar a aplicação dos descontos.
+            <strong>Nada será alterado até você revisar a lista e confirmar.</strong>
+            Promoções com vigência definida serão ativadas e encerradas automaticamente.
+            Campanhas semanais sem data final exigem que você informe uma validade máxima.</div>
           <form method="post" action="/admin/estoque/promocoes/conferir"
                 enctype="multipart/form-data">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
@@ -67,7 +68,27 @@ export function telaImportacaoEstoque(ctx) {
               <input type="file" name="arquivo" id="arquivoPromocoesInova"
                      accept=".csv,text/csv" required>
             </div>
-            <button class="botao" type="submit">Conferir promoções sem alterar a loja</button>
+            <div class="campo">
+              <label for="validadePromoSemFim">Validade máxima das campanhas semanais sem data final (opcional)</label>
+              <input id="validadePromoSemFim" type="date" name="fimSemData">
+              <p class="texto-pequeno">Defina até quando aplicar promoções como
+              Segunda Fitness, Terça do Suplemento ou Quinta do Esmalte.
+              Máximo de 90 dias a partir de hoje. Sem data, essas campanhas serão ignoradas.</p>
+            </div>
+            <div class="campo">
+              <label>
+                <input type="checkbox" name="aceitaTodosOnline" value="1">
+                Autorizo os preços promocionais deste relatório para Pix, crédito e débito
+                no site, mesmo que o InovaFarma tenha restrições de forma de pagamento.
+              </label>
+              <p class="texto-pequeno">Se não autorizar, campanhas com restrições de pagamento
+              não serão aplicadas ao site. Não há combinação de descontos.</p>
+            </div>
+            <div class="linha" style="gap:8px;flex-wrap:wrap">
+              <button class="botao secundario" type="submit">Somente conferir promoções</button>
+              <button class="botao" type="submit"
+                formaction="/admin/estoque/promocoes/preparar">Conferir e preparar aplicação dos descontos</button>
+            </div>
           </form>`,
       })}
       ${painel({
