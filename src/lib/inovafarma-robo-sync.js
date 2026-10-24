@@ -176,6 +176,16 @@ function aplicarProduto(db,it,agora,indicadores) {
   if(porEan.length&&!porCodigo.length&&p.codigoInterno&&String(p.codigoInterno)!==it.codigoInterno){
     indicadores.pendentes++;return detalhe(it,'codigo_interno_divergente');
   }
+  // Um pedido pago no site NÃO significa que o ERP já registrou a venda.
+  // Sem confirmação oficial, atualizar o saldo absoluto do ERP poderia
+  // repor online unidades já entregues. Falhar fechado somente neste SKU.
+  const vendaNaoRefletida=db.collection('orders').all().some(o=>
+    o.statusFinanceiro==='aprovado' && !o.inovaConfirmadoEm &&
+    (o.itens||[]).some(v=>String(v.produtoId||'')===String(p.id)));
+  if(vendaNaoRefletida){
+    indicadores.pendentes++;
+    return detalhe(it,'venda_online_paga_sem_confirmacao_no_erp');
+  }
   const estoque=p.estoque||{};
   const comprometido=Number(estoque.reservado||0)+Number(estoque.quarentena||0)+
     Number(estoque.inovaPendente||0);
