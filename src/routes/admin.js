@@ -332,7 +332,7 @@ export function registrarRotasAdmin(app, db) {
       return void res.status(403).html('Conferência restrita ao Super Administrador.');
     res.set('Cache-Control', 'no-store');
     const arquivo = (req.files || []).find(f => f.field === 'arquivo');
-    if (!arquivo || !/\\.csv$/i.test(String(arquivo.filename || '')) ||
+    if (!arquivo || !/\.csv$/i.test(String(arquivo.filename || '')) ||
         !arquivo.data?.length || arquivo.data.length > 8 * 1024 * 1024)
       return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
         titulo: 'Relatório inválido', ativo: 'importacao_estoque',
