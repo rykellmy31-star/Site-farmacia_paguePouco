@@ -281,15 +281,15 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const csvInovaForm = new FormData();
   csvInovaForm.append('_csrf', adminToken);
   csvInovaForm.append('arquivo', new Blob([
-    'Codigo de Barras;Descricao;Estoque Atual;Codigo Interno\\n' +
-    '7891234500009;Sabonete laboratorio;0;INOVATEST9000\\n',
+    'Codigo de Barras;Descricao;Estoque Atual;Codigo Interno\n' +
+    '7891234500009;Sabonete laboratorio;0;INOVATEST9000\n',
   ], {type:'text/csv'}), 'relatorio-inicial.csv');
   const prepararCsv=await call('/admin/api/produtos/inova-csv/preparar', {
     method:'POST',body:csvInovaForm,
   });
   assert.equal(prepararCsv.status,200);
   const preparada=await prepararCsv.json();
-  assert.match(preparada.url,/^\\/admin\\/produtos\\/importar\\/relatorio\\/csv_/);
+    assert.ok(preparada.url.startsWith('/admin/produtos/importar/relatorio/csv_'));
   const previewResponse=await call(preparada.url);
   assert.equal(previewResponse.status,200);
   assert.match(await previewResponse.text(),/Confirmar importação inicial/);
