@@ -28,8 +28,9 @@ function responderCarrinho(req, res, db, { avisos = [] } = {}) {
     avisos: [...avisos, ...normalizado.avisos.map((a) => a.mensagem)],
     html: {
       corpo: htmlGavetaCarrinho(normalizado.cart, totais),
-      rodape: htmlRodapeCarrinho(normalizado.cart, totais),
-      resumo: htmlResumoCarrinho(normalizado.cart, totais),
+      rodape: htmlRodapeCarrinho(normalizado.cart, totais, db),
+      resumo: htmlResumoCarrinho(normalizado.cart, totais, { db, exibirParcelamento: true }),
+      resumoSemFrete: htmlResumoCarrinho(normalizado.cart, totais, { mostrarFrete: false, db, exibirParcelamento: true }),
       itens: htmlItensCarrinho(normalizado.cart),
     },
   };
