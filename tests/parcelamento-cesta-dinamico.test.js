@@ -35,18 +35,18 @@ test('foto real: dois produtos na cesta somando R$ 66,48 exibem 2x de R$ 33,24 s
   const c=criarCesta();c.adicionar('a');c.adicionar('b');
   const html=render(c);
   assert.equal(c.totais().totalCentavos,6648);
-  assert.match(html,/até 2x de R\$ 33,24 sem juros/);
+  assert.match(html,/até 2x de R\$\s+33,24 sem juros/);
   assert.doesNotMatch(html,/até 6x/);
   assert.match(html,/sobre os produtos após descontos/);
 });
 test('alterar quantidade e excluir recalcula parcelas; ao ficar abaixo de R$50 remove aviso',()=>{
   const c=criarCesta(2500,2500);c.adicionar('a');c.adicionar('b');
-  assert.match(render(c),/até 2x de R\$ 25,00 sem juros/);
+  assert.match(render(c),/até 2x de R\$\s+25,00 sem juros/);
   removeItem(c.db,c.atual(),'b');
   assert.doesNotMatch(render(c),/parcelamento-cesta/);
   const atualizado=setItemQuantity(c.db,c.atual(),'a',3);
   assert.equal(atualizado.ok,true);
-  assert.match(render(c),/até 3x de R\$ 25,00 sem juros/);
+  assert.match(render(c),/até 3x de R\$\s+25,00 sem juros/);
   setItemQuantity(c.db,c.atual(),'a',1);
   assert.doesNotMatch(render(c),/parcelamento-cesta/);
   removeItem(c.db,c.atual(),'a');
@@ -77,7 +77,7 @@ test('não confunde frete com base da cesta e não anuncia juros como sem juros'
   const totais={quantidadeItens:4,subtotalCentavos:15000,descontoCupom:0,
     freteCentavos:1000,totalCentavos:16000,freteGratis:false};
   const html=htmlResumoCarrinho({itens:[{}]},totais,{mostrarFrete:false,db,exibirParcelamento:true});
-  assert.match(html,/até 2x de R\$ 75,00 sem juros/);
+  assert.match(html,/até 2x de R\$\s+75,00 sem juros/);
   assert.doesNotMatch(html,/até 6x sem juros/);
   assert.match(html,/frete no checkout/);
 });
@@ -86,7 +86,7 @@ test('centavo indivisível não divulga soma incorreta das parcelas',()=>{
   const txt=htmlParcelamentoCesta(db,{quantidadeItens:1,subtotalCentavos:5001,
     descontoCupom:0,totalCentavos:5001});
   assert.match(txt,/até 2x sem juros/);
-  assert.doesNotMatch(txt,/R\$ 25,01/);
+  assert.doesNotMatch(txt,/R\$\s+25,01/);
 });
 test('página minha cesta e API compartilham o aviso após mudança de quantidades/cupons',()=>{
   const c=criarCesta();c.adicionar('a');c.adicionar('b');
@@ -94,7 +94,7 @@ test('página minha cesta e API compartilham o aviso após mudança de quantidad
     settings:{empresa:{nomeFantasia:'Farmácia Pague Pouco'},tema:{},seo:{},whatsapp:{},cookies:{}},
     arvore:[]};
   const html=telaCarrinho(ctx,{totais:c.totais()});
-  assert.match(html,/até 2x de R\$ 33,24 sem juros/);
+  assert.match(html,/até 2x de R\$\s+33,24 sem juros/);
   const api=readFileSync(new URL('../src/routes/api.js',import.meta.url),'utf8');
   assert.match(api,/htmlRodapeCarrinho\(normalizado\.cart, totais, db\)/);
   assert.match(api,/resumoSemFrete: htmlResumoCarrinho/);
