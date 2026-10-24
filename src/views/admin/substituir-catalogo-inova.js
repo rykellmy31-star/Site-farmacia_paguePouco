@@ -37,6 +37,63 @@ export function telaSubstituirCatalogoInova(ctx) {
       '<p><a class="botao secundario" href="/admin/produtos">Voltar aos produtos</a></p>',
   });
 }
+function detalhesPendenciasSubstituicao(bloqueios) {
+  if(!bloqueios)return '';
+  const pedidos=bloqueios.pedidos||[];
+  const produtos=bloqueios.produtos||[];
+  if(!pedidos.length&&!produtos.length)return '';
+  const linhasPedidos=pedidos.slice(0,20).map(p=>
+    '<tr><td><strong>'+txt(p.codigo)+'</strong></td>'+
+    '<td>'+txt(p.financeiro)+'</td><td>'+txt(p.operacional)+'</td>'+
+    '<td>'+(p.conferenciaPagamento
+      ? '<strong>Confira a cobrança no Mercado Pago antes de cancelar.</strong>'
+      : 'Confira a situação real deste pedido, sem alterar o financeiro indevidamente.')+
+    '</td><td><a class="botao pequeno secundario" href="/admin/pedidos/'+
+    txt(encodeURIComponent(p.id))+'">Abrir pedido</a></td></tr>'
+  ).join('');
+  const linhasProdutos=produtos.slice(0,20).map(p=>{
+    const relacionados=(p.pedidosRelacionados||[]).slice(0,3).map(o=>
+      '<a href="/admin/pedidos/'+txt(encodeURIComponent(o.id))+'">'+
+      txt(o.codigo)+'</a>').join(', ');
+    return '<tr><td><strong>'+txt(p.nome)+'</strong><br>'+
+      '<span class="texto-pequeno">Código interno: '+txt(p.codigoInterno||'—')+'</span></td>'+
+      '<td>'+txt(p.reservado)+'</td><td>'+txt(p.quarentena)+'</td>'+
+      '<td>'+txt(p.inovaPendente)+'</td>'+
+      '<td>'+(relacionados||'Sem relação com os pedidos abertos')+'</td>'+
+      '<td><a class="botao pequeno secundario" href="/admin/produtos/'+
+      txt(encodeURIComponent(p.id))+'">Abrir produto</a></td></tr>';
+  }).join('');
+  return painel({titulo:'Pendências que impedem a substituição — identifique e resolva',corpo:
+    '<div class="alerta aviso"><strong>Não é erro do CSV.</strong> A troca está bloqueada '+
+    'para proteger pagamentos, entregas e reservas. Não cancele pedidos pagos nem '+
+    'zere reservas ou quarentena apenas para desbloquear esta operação.</div>'+
+    (pedidos.length?
+      '<h3>Pedidos que precisam ser conferidos ('+txt(pedidos.length)+')</h3>'+
+      '<div style="overflow-x:auto"><table class="tabela">'+
+      '<thead><tr><th>Pedido</th><th>Pagamento</th><th>Entrega</th><th>Atenção</th>'+
+      '<th>Ação</th></tr></thead><tbody>'+linhasPedidos+'</tbody></table></div>'+
+      '<p class="texto-pequeno">Se a cobrança estiver pendente, confira o status '+
+      'no provedor antes de concluir ou cancelar. Se a venda já foi paga, '+
+      'conclua a entrega verdadeira ou siga o fluxo regular de estorno/devolução.</p>'
+      :'')+
+    (produtos.length?
+      '<h3>Produtos com estoque comprometido ('+txt(produtos.length)+')</h3>'+
+      '<div style="overflow-x:auto"><table class="tabela">'+
+      '<thead><tr><th>Produto</th><th>Reservado</th><th>Quarentena</th>'+
+      '<th>Pendente Inova</th><th>Pedido relacionado</th><th>Ação</th></tr></thead>'+
+      '<tbody>'+linhasProdutos+'</tbody></table></div>'+
+      '<p class="texto-pequeno">Reservas de pedidos são liberadas automaticamente '+
+      'somente pelos fluxos financeiros/operacionais legítimos. Estoque em '+
+      'quarentena ou pendência de sincronização exige conciliação real do estoque. '+
+      '<a href="/admin/estoque">Abrir Controle de estoque</a>.</p>'
+      :'')+
+    '<p><a class="botao secundario" href="/admin/produtos/substituir-catalogo">'+
+    'Reenviar CSV depois de resolver as pendências</a></p>'+
+    '<p class="texto-pequeno">O envio deve ser repetido porque a proposta anterior '+
+    'é invalidada sempre que pedidos ou produtos forem alterados.</p>',
+  });
+}
+
 export function telaRevisaoSubstituirCatalogoInova(ctx,previa) {
   const r=previa.resumo;
   const impeditivo=r.bloqueado;
@@ -74,6 +131,7 @@ export function telaRevisaoSubstituirCatalogoInova(ctx,previa) {
       'Nenhum produto antigo será aproveitado. As informações de produtos antigos serão mantidas '+
       'somente no backup e em arquivo privado separado, nunca na lista de produtos novos.</div>'+
       painel({titulo:'O que acontecerá com o catálogo',corpo:resumo})+
+      (impeditivo ? detalhesPendenciasSubstituicao(previa.bloqueios) : '')+
       painel({titulo:'Autorizar substituição integral',corpo:
         '<p>Pedidos e pagamentos anteriores permanecerão. Carrinhos antigos serão esvaziados. '+
         'Ofertas e vitrines que usavam IDs antigos deverão ser reconfiguradas. '+
