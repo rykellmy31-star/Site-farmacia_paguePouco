@@ -38,6 +38,8 @@ jobs:
         run: node --test tests/inovafarma-limpeza-previa.test.js
       - name: InovaFarma raw stock CSV full reconciliation diagnostics
         run: node --test tests/inovafarma-limpeza-formatos-reais.test.js
+      - name: Politica de parcelamento 6x e filtros de estoque do painel
+        run: node --test tests/parcelamento-filtros-estoque.test.js
       - name: InovaFarma full catalog replacement (fresh products, history and order protections)
         run: node --test tests/inovafarma-catalogo-substituicao.test.js tests/inovafarma-quarentena-conciliacao.test.js
       - name: InovaFarma archive confirmation, reversibility and protected catalog tests
