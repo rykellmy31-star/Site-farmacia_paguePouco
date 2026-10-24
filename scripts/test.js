@@ -560,34 +560,29 @@ async function main() {
     return 'sessão ativa';
   });
 
-  await testar('Integração InovaFarma: painel superadmin, configuração segura sem conectar ERP', async () => {
-    const abertura=await admin.get('/admin/inovafarma');
-    assert(abertura.status===200 && abertura.texto.includes('Integração InovaFarma'),
-      'painel não abriu');
-    assert(abertura.texto.includes('name="urlConector"') &&
-      abertura.texto.includes('Sincronizar estoque agora'), 'seções do painel ausentes');
-    const bloqueio=await admin.post('/admin/inovafarma/configuracao', { form: {
-      urlConector:'https://127.0.0.1/admin',estabelecimento:'loja-1',intervaloMinutos:'15',
+  await testar('Importação de estoque: menu substitui integração e API antiga não altera dados', async () => {
+    const dashboard = await admin.get('/admin');
+    assert(dashboard.status === 200 && dashboard.texto.includes('Importação de estoque'), 'menu de importação ausente');
+    assert(!dashboard.texto.includes('Integração InovaFarma'), 'item antigo ainda visível no menu');
+    const pagina = await admin.get('/admin/estoque/importar');
+    assert(pagina.status === 200 && pagina.texto.includes('Importação de estoque'), 'nova página de estoque não abriu');
+    assert(pagina.texto.includes('name="arquivo"') &&
+      pagina.texto.includes('/admin/api/produtos/inova-csv/preparar'),
+      'formulário CSV não aparece na nova página');
+    const antiga = await admin.get('/admin/inovafarma');
+    assert([302, 303].includes(antiga.status) &&
+      antiga.location === '/admin/estoque/importar', 'link antigo não redireciona');
+    const legado = await admin.post('/admin/inovafarma/configuracao', {form:{
+      urlConector:'https://conector.fornecedor.com.br/api', estabelecimento:'LOJA-1', intervaloMinutos:'15',
     }});
-    assert([302,303].includes(bloqueio.status)&&bloqueio.location.includes('erro='),
-      'endereço local não foi rejeitado');
-    const salvar=await admin.post('/admin/inovafarma/configuracao',{form:{
-      urlConector:'https://conector.fornecedor.com.br/api',estabelecimento:'LOJA-1',
-      intervaloMinutos:'15',
-    }});
-    assert([302,303].includes(salvar.status)&&salvar.location.includes('salvo='),
-      'não salvou metadados: '+salvar.location);
-    const pagina=await admin.get('/admin/inovafarma');
-    assert(pagina.texto.includes('conector.fornecedor.com.br') &&
-      pagina.texto.includes('LOJA-1'), 'metadados não persistidos');
-    assert(pagina.texto.includes('Ativar integração — indisponível'),
-      'painel não bloqueia ativação');
-    const segredo='TOKEN-FICTICIO-CI-SEM-ERP-1234567890';
-    const tentativa=await admin.post('/admin/inovafarma/credencial',{form:{credencial:segredo}});
-    assert(tentativa.location.includes('erro='), 'sem chave Cloudflare deveria bloquear');
-    const proteger=await admin.get('/admin/inovafarma');
-    assert(!proteger.texto.includes(segredo), 'credencial vazou no HTML');
-    return 'configuração persistida, sem SSRF, token bloqueado sem chave';
+    assert(legado.status === 410 && legado.json?.ok === false,
+      'configuração de integração API antiga não foi desabilitada');
+    const tentativa = await admin.post('/admin/inovafarma/credencial', {
+      form:{credencial:'TOKEN-FICTICIO-CI-SEM-ERP-1234567890'},
+    });
+    assert(tentativa.status === 410 && tentativa.json?.ok === false,
+      'credenciais legadas ainda podem ser modificadas');
+    return 'menu novo visível, redirecionamento antigo e API desativada';
   });
 
   await testar('Super Administrador configura Mercado Pago sem expor token em HTML ou logs', async () => {
