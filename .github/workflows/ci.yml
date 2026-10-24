@@ -40,6 +40,8 @@ jobs:
         run: node --test tests/inovafarma-limpeza-previa.test.js
       - name: InovaFarma raw stock CSV full reconciliation diagnostics
         run: node --test tests/inovafarma-limpeza-formatos-reais.test.js
+      - name: Aprovação do cadastro e ativação no primeiro salvamento com barreiras sanitárias
+        run: node --test tests/aprovacao-ativacao-primeiro-salvar.test.js
       - name: Parcelamento e oferta exibida nas vitrines, busca e detalhe
         run: node --test tests/parcelamento-filtros-estoque.test.js tests/parcelamento-vitrine.test.js
       - name: InovaFarma full catalog replacement (fresh products, history and order protections)
