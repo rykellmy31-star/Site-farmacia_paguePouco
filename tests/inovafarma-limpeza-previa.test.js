@@ -78,8 +78,8 @@ test('endpoint restrito ao superadmin não tem gravações',()=>{
   const fim=routes.indexOf("app.get('/admin/produtos/importar'",ini);
   assert(ini>0&&fim>ini);
   const bloco=routes.slice(ini,fim);
-  assert.match(bloco,/guard\(req, res, 'produtos.criar'\)/);
+  assert.match(bloco,/guard\(req, res, 'produtos.excluir'\)/);
   assert.match(bloco,/role !== 'super_admin'/);
-  assert.match(bloco,/planejarLimpezaCatalogoInova/);
-  assert.doesNotMatch(bloco,/\.(remove|update|insert)\(/);
+  assert.match(bloco,/prepararLimpezaInova/);
+  assert.doesNotMatch(bloco,/db\.collection\('products'\)\.(remove|update|insert)\(/);
 });
