@@ -189,6 +189,7 @@ export function identificarBloqueiosSubstituicaoInova(db) {
       codigoInterno:String(p.codigoInterno||''),
       nome:String(p.nome||''),
       reservado:Number(e.reservado||0),
+      saldo:Number(e.quantidade||0),
       quarentena:Number(e.quarentena||0),
       inovaPendente:Number(e.inovaPendente||0),
       // Pedidos encerrados também podem explicar uma reserva que ficou presa.
@@ -203,6 +204,74 @@ export function identificarBloqueiosSubstituicaoInova(db) {
     };
   });
   return {pedidos,produtos,carrinhosParaEsvaziar:d.cestasAtivas.length};
+}
+
+
+/**
+ * Conciliacao FISICA, exclusivamente manual, de estoque segregado.
+ * Nunca libera uma unidade em quarentena para venda e jamais muda pagamentos.
+ * O responsavel confirma um fato ja ocorrido (descarte, devolucao ao fornecedor
+ * ou unidade nao localizada na contagem). O ato e registrado antes de liberar
+ * a substituicao integral de catalogo.
+ */
+export function conciliarQuarentenaSubstituicaoInova(db,produtoId,form={},operadorId) {
+  if(inovaAtiva())throw new ErroSubstituicaoInova(
+    'A integracao InovaFarma esta ativa. Concilie fisicamente com a operacao desativada.',409);
+  const motivo=String(form.justificativa||'').trim();
+  const destinos=['descarte_fisico','devolucao_fornecedor','divergencia_inventario'];
+  if(!destinos.includes(String(form.destino||''))||motivo.length<20||motivo.length>500||
+    form.confirmacao!=='CONCILIAR QUARENTENA'||form.backupConfirmado!=='1'||
+    form.conferenciaFisica!=='1')
+    throw new ErroSubstituicaoInova(
+      'Confirme a contagem fisica, o backup e o destino da unidade, informe uma justificativa detalhada e digite CONCILIAR QUARENTENA.',400);
+  if(!operadorId)throw new ErroSubstituicaoInova('Operador nao identificado.',403);
+  if(typeof db.storage?.transactionSync!=='function')
+    throw new ErroSubstituicaoInova('Conciliação exige transação atômica no Durable Object.',503);
+  const estado=diagnostico(db);
+  if(estado.abertos.length)throw new ErroSubstituicaoInova(
+    'Existem pedidos em aberto. Confira pagamentos e entregas antes da conciliação.',409);
+  const p=db.collection('products').get(produtoId);
+  if(!p)throw new ErroSubstituicaoInova('Produto não encontrado.',404);
+  const atual=p.estoque||{};
+  const saldo=Number(atual.quantidade??0), quarentena=Number(atual.quarentena??0);
+  const reservado=Number(atual.reservado??0), inovaPendente=Number(atual.inovaPendente??0);
+  if(!Number.isSafeInteger(saldo)||!Number.isSafeInteger(quarentena)||
+    !Number.isSafeInteger(reservado)||!Number.isSafeInteger(inovaPendente)||
+    quarentena<=0||quarentena>saldo||reservado!==0||inovaPendente!==0)
+    throw new ErroSubstituicaoInova(
+      'Estoque inconsistente ou ainda comprometido. É necessária conferência específica.',409);
+  if(String(form.saldoAnterior)!==String(saldo)||
+     String(form.quarentenaAnterior)!==String(quarentena))
+    throw new ErroSubstituicaoInova(
+      'Saldo alterado após abrir a tela. Atualize o diagnóstico e confira novamente.',409);
+  const momento=new Date().toISOString();
+  const movimentoId='baixa_quarentena_'+crypto.randomUUID();
+  try{
+    db.storage.transactionSync(()=>{
+      const atualizado=db.collection('products').update(p.id,{
+        estoque:{...atual,quantidade:saldo-quarentena,quarentena:0},
+        atualizadoEm:momento,
+      });
+      if(!atualizado)throw new Error('Falha no registro do saldo.');
+      const movimento=db.collection('stockMovements').insert({
+        id:movimentoId,produtoId:p.id,produtoNome:p.nome,
+        tipo:'baixa_quarentena',quantidade:quarentena,
+        saldoAntes:saldo,saldoDepois:saldo-quarentena,
+        reservadoAntes:0,reservadoDepois:0,
+        quarentenaAntes:quarentena,quarentenaDepois:0,
+        origem:'conferencia_fisica_pre_substituicao_inovafarma',
+        destino:form.destino,observacao:motivo,
+        usuarioId:String(operadorId),criadoEm:momento,
+      });
+      if(!movimento)throw new Error('Falha ao auditar movimentação.');
+    });
+  }catch{
+    for(const c of ['products','stockMovements'])db.collections?.delete(c);
+    throw new ErroSubstituicaoInova(
+      'Não foi possível concluir a conciliação. A transação foi revertida.',500);
+  }
+  return {ok:true,produtoId:p.id,baixa:quarentena,saldoAnterior:saldo,
+    saldoAtual:saldo-quarentena,movimentoId};
 }
 
 const statusResumo=(d,resumo)=>({
