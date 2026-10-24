@@ -11,7 +11,7 @@ import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.j
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
 import { telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova, telaPendenciasSubstituicaoInova } from '../views/admin/substituir-catalogo-inova.js';
-import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
+import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova, conciliarQuarentenaSubstituicaoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
@@ -1450,6 +1450,42 @@ function registrarApi(app, db) {
   });
 
   /* ------------------------------- ESTOQUE ------------------------------ */
+
+  // Baixa de quarentena exige conferência física anterior e consentimento
+  // explícito do Superadmin. Não altera financeiro nem pedidos.
+  app.post('/admin/api/estoque/quarentena/conciliar', (req,res)=>{
+    if(!guardApi(req,res,'estoque.movimentar'))return;
+    if(req.adminUser.role!=='super_admin'||
+       !can(req.adminUser,'produtos.excluir'))
+      return void res.json({ok:false,erro:'Conciliação exclusiva do Superadmin.'},403);
+    res.set('Cache-Control','no-store');
+    try{
+      const resultado=conciliarQuarentenaSubstituicaoInova(
+        db,String(req.body.produtoId||''),{
+          saldoAnterior:String(req.body.saldoAnterior??''),
+          quarentenaAnterior:String(req.body.quarentenaAnterior??''),
+          destino:String(req.body.destino||''),
+          justificativa:String(req.body.justificativa||''),
+          conferenciaFisica:String(req.body.conferenciaFisica||''),
+          backupConfirmado:String(req.body.backupConfirmado||''),
+          confirmacao:String(req.body.confirmacao||''),
+        },req.adminUser.id);
+      logAdmin(db,req.adminUser,'conciliou_quarentena_inova','produto',resultado.produtoId,{
+        destino:String(req.body.destino||''),
+        quantidade:resultado.baixa,movimentoId:resultado.movimentoId,
+      },req);
+      return void res.json({...resultado,
+        url:'/admin/produtos/substituir-catalogo/pendencias'});
+    }catch(err){
+      const esperado=err instanceof ErroSubstituicaoInova;
+      if(!esperado)console.error('[inova-quarentena] falha de conciliacao:',
+        err?.name||'Erro');
+      return void res.json({ok:false,erro:esperado?err.message:
+        'Falha interna na conciliação de quarentena. Confira o histórico antes de repetir.'},
+        esperado?err.status||400:500);
+    }
+  });
+
   app.post('/admin/api/estoque/movimentar', (req, res) => {
     if (!guardApi(req, res, 'estoque.movimentar')) return;
     if (inovaAtiva()) return void res.json({ ok: false, erro: 'Movimentações de estoque devem ser feitas na InovaFarma.' }, 409);
