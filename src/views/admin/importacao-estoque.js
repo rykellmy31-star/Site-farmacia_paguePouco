@@ -94,12 +94,12 @@ export function telaImportacaoEstoque(ctx) {
       ${painel({
         titulo: '4. Conferir produtos antigos antes de limpar o catálogo',
         corpo: `<p>Compare os produtos já cadastrados no site com o relatório atualizado
-          da <strong>Posição de Estoque do InovaFarma</strong>. A comparação utiliza
+          da <strong>Posição de Estoque do InovaFarma</strong> (CSV). A comparação utiliza
           EAN e código interno, inclusive em produtos que já existiam antes da
           importação inicial.</p>
           <div class="alerta info"><strong>Somente prévia: não exclui nada.</strong>
           Produtos com pedidos, reservas, códigos ambíguos ou sem identificador
-          exigem revisão. Os produtos sem EAN que ficaram pendentes também
+          exigem revisão. Use o relatório integral com 6.128 registros, não o arquivo filtrado com 6.062 itens. O CSV exportado pelo próprio site não substitui a posição de estoque do InovaFarma. Os produtos sem EAN que ficaram pendentes também
           precisam ser regularizados antes de uma limpeza definitiva.</div>
           <form method="post" action="/admin/estoque/limpeza/previa"
                 enctype="multipart/form-data">
