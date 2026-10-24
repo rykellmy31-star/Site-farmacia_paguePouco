@@ -78,7 +78,8 @@ test('prévia não altera preços e condições de pagamento exigem autorizaçã
   const r=prepararPromocoesInova(db,csvRapido(),'super',{},ref);
   assert.equal(r.ok,true);
   assert.equal(r.resumo.prontos,0);
-  assert.equal(r.resumo.pagamentosRestritos,2);
+  assert.equal(r.resumo.pagamentosRestritos,1);
+  assert.equal(r.resumo.semDataFinal,1);
   assert.equal(db.collection('products').get('p1').precoPromocionalCentavos,1700);
   assert.equal(db.collection('products').get('p1').inovaPromocoes,undefined);
   assert.equal(aplicarPromocoesInova(db,r.id,'super',{
