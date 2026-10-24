@@ -133,6 +133,8 @@ function avaliar(db, linhas, politica, momento=new Date()) {
     if(atuais.length>1)resumo.conflitosAtuais++;
     plano.push(linha);
   }
+  resumo.linhasNoRelatorio=linhas.length;
+  resumo.linhasIgnoradas=linhas.length-resumo.campanhasAceitas;
   return {plano,resumo,fingerprint:assinatura(produtos)};
 }
 export function prepararPromocoesInova(db,bytes,operadorId,opcoes={},momento=new Date()) {
