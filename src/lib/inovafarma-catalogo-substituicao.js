@@ -164,6 +164,41 @@ const hashAtual = d => {
     hash.update(JSON.stringify([p.id,p.itens]));
   return hash.digest('hex');
 };
+/**
+ * Apenas identificação das pendências para o Superadmin (sem cliente, CPF,
+ * e-mail ou dados de pagamento). As rotas de pedido/estoque existentes
+ * continuam sendo a única forma de resolver os bloqueios.
+ */
+export function identificarBloqueiosSubstituicaoInova(db) {
+  const d=diagnostico(db);
+  const pedidos=d.abertos.map(p=>({
+    id:String(p.id||''),
+    codigo:String(p.codigo||p.id||''),
+    financeiro:String(p.statusFinanceiro||'desconhecido'),
+    operacional:String(p.statusOperacional||'desconhecido'),
+    conferenciaPagamento:
+      p.statusFinanceiro==='pendente' &&
+      ['criacao_em_andamento','conciliacao_necessaria'].includes(p.pendenciaPagamento),
+    // Jamais presumir que pagamento desconhecido pode ser cancelado.
+  }));
+  const produtos=d.reservados.map(p=>{
+    const e=p.estoque||{};
+    const id=String(p.id||'');
+    return {
+      id,
+      codigoInterno:String(p.codigoInterno||''),
+      nome:String(p.nome||''),
+      reservado:Number(e.reservado||0),
+      quarentena:Number(e.quarentena||0),
+      inovaPendente:Number(e.inovaPendente||0),
+      pedidosRelacionados:d.abertos.filter(o=>
+        (o.itens||[]).some(i=>String(i.produtoId||'')===id)
+      ).map(o=>({id:String(o.id),codigo:String(o.codigo||o.id)})),
+    };
+  });
+  return {pedidos,produtos,carrinhosParaEsvaziar:d.cestasAtivas.length};
+}
+
 const statusResumo=(d,resumo)=>({
   ...resumo,remover:d.antigos.length,pedidosAbertos:d.abertos.length,
   estoqueReservado:d.reservados.length,carrinhosASeremEsvaziados:d.cestasAtivas.length,
@@ -222,6 +257,7 @@ export function consultarSubstituicaoCatalogoInova(db,id,operadorId,agora=new Da
   const {lote,estado,resumo}=loteAtual(db,id,operadorId,agora);
   return {ok:true,id,resumo,
     pronto:!resumo.bloqueado,
+    bloqueios:identificarBloqueiosSubstituicaoInova(db),
     aviso:'Todos os produtos atuais serão retirados, sem aproveitamento. '+
       'Novos produtos entram inativos. Pedidos e pagamentos ficam preservados.'};
 }
