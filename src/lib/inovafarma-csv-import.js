@@ -1,8 +1,9 @@
 /**
  * Importação inicial VOLUNTÁRIA via relatório CSV exportado pelo estabelecimento.
  * Nunca acessa nem modifica o aplicativo InovaFarma. Etapas: preparar -> revisar -> confirmar.
- * A conferência inteira precede qualquer gravação de estoque. Preços/cadastros
- * existentes, pedidos e regras sanitárias não são modificados.
+ * A conferência inteira precede qualquer gravação de estoque e preço.
+ * Preços são importados somente quando presentes e válidos no relatório;
+ * pedidos, imagens e regras sanitárias não são modificados.
  */
 import crypto from 'node:crypto';
 import { nowISO } from './store.js';
@@ -22,6 +23,9 @@ const opcoes = {
     'estoque','estoqueatual','saldodeestoque','saldodisponivel','saldo','estoquedisponivel'],
   codigoInterno: ['codigointerno','codigoproduto','codigodoproduto','codprod','codigo'],
   marca: ['marca','fabricante'],
+  precoVenda: ['precovenda','precodevenda','valorvenda','valordevenda','precounitario',
+    'precounitariovenda','precovarejo','precoproduto','precodoproduto',
+    'precovendaavista','precovenda1','precotabela','precotabelavenda'],
 };
 
 function parseLinhas(texto) {
@@ -45,6 +49,30 @@ function parseLinhas(texto) {
   }
   if(aspas)throw new Error('CSV com aspas não fechadas.');
   addLinha();return linhas;
+}
+
+/**
+ * Preço de VENDA em reais convertido sem ponto flutuante para centavos.
+ * Formatos: R$ 1.234,56; 1234,56; 31.90; 1234; 1.234 (milhar).
+ * Valores negativos, vazios, custo de compra e zero não sobrescrevem preços.
+ */
+export function interpretarPrecoVendaCentavos(valor) {
+  const bruto = String(valor ?? '').trim().replace(/^R\$\s*/i,'').trim();
+  if(!bruto || /[^\d.,\s]/.test(bruto))return null;
+  const v=bruto.replace(/\s/g,'');
+  let inteiro,decimal='';
+  if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(v)) {
+    const [int,dec=''] = v.split(',');
+    inteiro=int.replace(/\./g,'');decimal=dec;
+  } else if(/^\d+(?:,\d{1,2})?$/.test(v)) {
+    [inteiro,decimal='']=v.split(',');
+  } else if(/^\d+\.\d{1,2}$/.test(v)){
+    [inteiro,decimal='']=v.split('.');
+  } else return null;
+  const centavos=Number(inteiro)*100+Number(decimal.padEnd(2,'0'));
+  if(!Number.isSafeInteger(centavos)||centavos<=0||centavos>100_000_000)
+    return null;
+  return centavos;
 }
 
 function carregarCsv(data) {
@@ -74,9 +102,16 @@ function carregarCsv(data) {
     const quantidade=Number(valor.replace(/[,.]0+$/,''));
     if(!Number.isSafeInteger(quantidade)||quantidade>1000000)throw new Error('Quantidade fora do limite seguro.');
     const codigoInterno=get('codigoInterno'),marca=get('marca');
+    // Relatório antigo só de estoque permanece compatível: sem a coluna de
+    // venda não tocamos em preços existentes e os novos ficam inativos/sem preço.
+    // Se a coluna existe, cada linha DEVE conter um preço válido e positivo.
+    const precoCentavos=idx.precoVenda<0 ? null :
+      interpretarPrecoVendaCentavos(get('precoVenda'));
+    if(idx.precoVenda>=0 && precoCentavos===null)
+      throw new Error('Preço de venda inválido ou zerado.');
     if(codigoInterno.length>60||marca.length>80||/[<>\x00-\x1f]/.test(codigoInterno+marca))
       throw new Error('Código ou marca inválidos no arquivo.');
-    itens.push({ean,nome,quantidade,codigoInterno,marca});
+    itens.push({ean,nome,quantidade,codigoInterno,marca,precoCentavos});
   }
   if(itens.length>MAX_LINHAS)throw new Error('O limite é de 10 mil produtos.');
   return itens;
@@ -89,7 +124,10 @@ function avaliar(db,itens) {
     if(p.ean){const k=String(p.ean).trim();porEan.set(k,[...(porEan.get(k)||[]),p]);}
     if(p.codigoInterno){const k=String(p.codigoInterno).trim();porCodigo.set(k,[...(porCodigo.get(k)||[]),p]);}
   }
-  const plano=[];const resumo={novos:0,ajustes:0,semAlteracao:0,esgotados:0,conflitos:0,total:itens.length};
+  const plano=[];const resumo={
+    novos:0,ajustes:0,semAlteracao:0,esgotados:0,conflitos:0,total:itens.length,
+    precosAtualizados:0,precosNovos:0,precosAusentes:0,alertasPreco:0,
+  };
   const seenCod=new Map();
   for(const item of itens) {
     const encontrados=porEan.get(item.ean)||[];
@@ -115,7 +153,17 @@ function avaliar(db,itens) {
     if(tipo==='igual')resumo.semAlteracao++;
     if(tipo==='conflito')resumo.conflitos++;
     if(item.quantidade===0)resumo.esgotados++;
-    plano.push({ ...item, tipo, motivo, produtoId:cadastrado?.id||null });
+    const precoAnteriorCentavos=cadastrado?.precoCentavos??null;
+    const alterarPreco=tipo!=='conflito' && !!cadastrado &&
+      item.precoCentavos!==null && item.precoCentavos!==precoAnteriorCentavos;
+    if(alterarPreco)resumo.precosAtualizados++;
+    if(tipo==='novo' && item.precoCentavos!==null)resumo.precosNovos++;
+    if(item.precoCentavos===null)resumo.precosAusentes++;
+    if(alterarPreco && precoAnteriorCentavos>0 &&
+        (item.precoCentavos>precoAnteriorCentavos*1.5 ||
+         item.precoCentavos<precoAnteriorCentavos*0.5))resumo.alertasPreco++;
+    plano.push({ ...item, tipo, motivo, produtoId:cadastrado?.id||null,
+      precoAnteriorCentavos,alterarPreco });
   }
   return {plano,resumo};
 }
@@ -132,7 +180,7 @@ export function prepararRelatorioEstoque(db,arquivo,{operadorId}={}) {
       hash:crypto.createHash('sha256').update(arquivo).digest('hex'),
     });
     return {ok:true,id,resumo:analise.resumo};
-  }catch{return {ok:false,status:400,erro:'CSV incompatível ou inválido. Confira as colunas, EANs e quantidades inteiras (até 10 mil linhas e 8 MB).'};}
+  }catch{return {ok:false,status:400,erro:'CSV inválido. Confira EANs únicos, quantidades inteiras e, quando houver coluna Preço de Venda, valores positivos no formato R$ 12,90 (até 10 mil linhas e 8 MB).'};}
 }
 
 export function consultarRelatorioEstoque(db,id,operadorId) {
@@ -141,7 +189,8 @@ export function consultarRelatorioEstoque(db,id,operadorId) {
   const vencido=Date.now()-Date.parse(b.criadoEm)>PRAZO_MS;
   if(vencido)return {ok:false,status:410,erro:'Prévia vencida; exporte e envie novamente.'};
   const analise=avaliar(db,b.itens);
-  return {ok:true,id,aplicado:!!b.aplicadoEm,...analise};
+  return {ok:true,id,aplicado:!!b.aplicadoEm,
+    ...analise,resumo:b.aplicadoEm ? b.resumoAplicado||analise.resumo : analise.resumo};
 }
 
 export function aplicarRelatorioEstoque(db,id,operadorId) {
@@ -159,7 +208,7 @@ export function aplicarRelatorioEstoque(db,id,operadorId) {
           nome:item.nome,slug:slugUnicoProduto(db,item.nome),ean:item.ean,
           codigoInterno:item.codigoInterno,sku:'',marca:item.marca,fabricante:'',
           categoriaId:null,subcategoriaId:null,descricao:'',caracteristicas:{},
-          imagens:[],videos:[],precoCentavos:0,precoPromocionalCentavos:0,
+          imagens:[],videos:[],precoCentavos:item.precoCentavos??0,precoPromocionalCentavos:0,
           peso:0,dimensoes:{largura:0,altura:0,comprimento:0},
           ativo:false,destaque:false,sanitario:{
             classificacao:'nao_aplicavel',requerReceita:true,controlado:false,
@@ -170,6 +219,13 @@ export function aplicarRelatorioEstoque(db,id,operadorId) {
           criadoEm:agora,atualizadoEm:agora,
         });
         produtoId=produto.id;
+      }
+      // Reprecificação explícita na prévia, sem substituir promoções, imagens,
+      // nomes, descrições, categoria ou aprovação farmacêutica existentes.
+      if(item.alterarPreco) {
+        db.collection('products').update(produtoId,{
+          precoCentavos:item.precoCentavos,atualizadoEm:agora,
+        });
       }
       if(item.tipo==='novo'||item.tipo==='ajustar') {
         registrarMovimentoEstoque(db,{

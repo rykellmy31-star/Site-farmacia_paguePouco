@@ -19,8 +19,9 @@ export function telaImportacaoEstoque(ctx) {
       ${painel({
         titulo: '1. Enviar relatório de estoque',
         corpo: `<p>O arquivo precisa ter pelo menos estas colunas:
-          <strong>código de barras (EAN), descrição e quantidade em estoque</strong>.
-          Também pode incluir código interno e marca.</p>
+          <strong>código de barras (EAN), descrição, quantidade em estoque e preço de venda</strong>.
+          Também pode incluir código interno e marca. O preço pode estar em formato
+          brasileiro (<strong>R$ 12,90</strong> ou <strong>12,90</strong>). Não utilize preço de custo.</p>
           <form method="post" action="/admin/api/produtos/inova-csv/preparar" enctype="multipart/form-data">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
             <div class="campo">
@@ -32,17 +33,22 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '2. Conferir e confirmar os saldos',
+        titulo: '2. Conferir estoque e preços antes de confirmar',
         corpo: `<p class="texto-pequeno">Antes da importação, o sistema mostrará quantos produtos
           serão cadastrados, atualizados, permanecerão iguais ou apresentam conflitos.
           Somente <strong>depois de confirmar</strong> haverá alteração.</p>
-          <p class="texto-pequeno">Para produtos existentes, apenas o saldo é ajustado;
-          preços, imagens, categorias, pedidos e cadastro sanitário são preservados.
+          <p class="texto-pequeno">Para produtos existentes, <strong>o saldo e o preço de venda serão atualizados</strong>
+          se o relatório trouxer essa coluna. A prévia exibirá o valor anterior e o novo,
+          com alerta para mudanças expressivas.
+          Imagens, categorias, pedidos e cadastro sanitário são preservados.
           Produto com quantidade zero fica esgotado. Se houver reservas de pedidos
           incompatíveis, o arquivo é bloqueado para evitar inconsistências.</p>
-          <p class="texto-pequeno">Produtos novos são cadastrados com o saldo informado,
-          mas ficam <strong>inativos</strong> até sua revisão comercial e sanitária.
-          Produtos que não aparecem no relatório não são zerados automaticamente.</p>`,
+          <p class="texto-pequeno">Produtos novos são cadastrados com <strong>nome, código de barras, saldo e preço de venda</strong>
+          do relatório, mas ficam <strong>inativos</strong> até revisão comercial e sanitária.
+          A imagem ainda deverá ser adicionada no painel.
+          Produtos que não aparecem no relatório não são zerados automaticamente.
+          Se faltar a coluna de preço no arquivo, os preços existentes não serão substituídos,
+          e os produtos novos permanecerão inativos e sem preço.</p>`,
       })}
       ${painel({
         titulo: '3. Atualizações futuras',
