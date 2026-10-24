@@ -219,7 +219,7 @@ export function aplicarBlocoRoboInova(db,{arquivoHash,bloco}={}) {
         const item=aplicarProduto(db,it,agora,ind);
         if(item&&detalhes.length<50)detalhes.push(item);
       }
-      db.collection(batchesCol).update(lote.id,{aplicadoEm:agora,items:[]});
+      db.collection(batchesCol).update(lote.id,{aplicadoEm:agora});
       const terminou=bloco===job.blocos-1;
       const estado=db.collection(jobsCol).update(job.id,{
         aplicados:job.aplicados+lote.items.length,
