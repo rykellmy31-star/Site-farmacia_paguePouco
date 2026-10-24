@@ -37,8 +37,8 @@ jobs:
       - name: Validar fluxos críticos da loja
         run: npm test
 
-      - name: Validar parcelamento e filtros antes da publicação
-        run: node --test tests/parcelamento-filtros-estoque.test.js
+      - name: Validar parcelamento no checkout e nas vitrines antes da publicação
+        run: node --test tests/parcelamento-filtros-estoque.test.js tests/parcelamento-vitrine.test.js
 
       - name: Proteger limpeza do catálogo, descontos e importações
         run: |
