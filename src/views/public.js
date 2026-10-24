@@ -11,6 +11,7 @@ import {
 } from './partials.js';
 import { formatDate } from '../lib/format.js';
 import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
+import { melhorParcelamentoSemJuros } from '../lib/payments/index.js';
 
 /* ------------------------------------------------------------------ */
 /* HOME                                                                */
@@ -127,6 +128,7 @@ function vitrinesPersonalizadas(db, ctx) {
       link: v.link || '',
       produtos,
       rolagem: v.rolagem !== false,
+      db,
     });
   }).join('');
 }
@@ -152,10 +154,10 @@ export function homePage(ctx) {
           </div>` : ''}
         </section>`;
       case 'categorias': return secaoDepartamentos(arvore);
-      case 'ofertas': return secaoVitrina({ id: 'ofertas', titulo: s.titulo || 'Ofertas do dia', link: '/ofertas', produtos: vitrineProdutos(db, 'ofertas', s.limite || 12) });
-      case 'destaques': return secaoVitrina({ id: 'destaques', titulo: s.titulo || 'Destaques', produtos: vitrineProdutos(db, 'destaques', s.limite || 8) });
-      case 'mais_vendidos': return secaoVitrina({ id: 'mais-vendidos', titulo: s.titulo || 'Mais vendidos', produtos: vitrineProdutos(db, 'mais_vendidos', s.limite || 8) });
-      case 'novidades': return secaoVitrina({ id: 'novidades', titulo: s.titulo || 'Novidades', produtos: vitrineProdutos(db, 'novidades', s.limite || 8) });
+      case 'ofertas': return secaoVitrina({ id: 'ofertas', titulo: s.titulo || 'Ofertas do dia', link: '/ofertas', produtos: vitrineProdutos(db, 'ofertas', s.limite || 12), db });
+      case 'destaques': return secaoVitrina({ id: 'destaques', titulo: s.titulo || 'Destaques', produtos: vitrineProdutos(db, 'destaques', s.limite || 8), db });
+      case 'mais_vendidos': return secaoVitrina({ id: 'mais-vendidos', titulo: s.titulo || 'Mais vendidos', produtos: vitrineProdutos(db, 'mais_vendidos', s.limite || 8), db });
+      case 'novidades': return secaoVitrina({ id: 'novidades', titulo: s.titulo || 'Novidades', produtos: vitrineProdutos(db, 'novidades', s.limite || 8), db });
       case 'vitrines': return vitrinesPersonalizadas(db, ctx);
       case 'entregas': return secaoEntregas(settings);
       case 'institucional': return secaoInstitucional(settings);
@@ -249,7 +251,7 @@ export function categoriaPage(ctx, { categoria, produtos, total, pagina, porPagi
         </div>
       </div>` : ''}
       ${barraOrdenacao(ordenar, total, filtros)}
-      ${vitrina(produtos, { vazia: 'Nenhum produto nesta categoria no momento.' })}
+      ${vitrina(produtos, { db: ctx.db, vazia: 'Nenhum produto nesta categoria no momento.' })}
       ${paginacao({ pagina, total, porPagina, baseUrl: `/categoria/${categoria.slug}`, query: { ordenar } })}
     </div>`,
   });
@@ -269,7 +271,7 @@ export function buscaPage(ctx, { termo, produtos, total, pagina, porPagina, orde
           ${marcas.slice(0, 20).map((m) => `<a class="botao pequeno secundario" href="/marca/${e(encodeURIComponent(m.nome))}">${e(m.nome)} (${m.total})</a>`).join('')}
         </div></div>` : ''}
       ${barraOrdenacao(ordenar, total, filtros)}
-      ${vitrina(produtos, { vazia: 'Nenhum produto encontrado. Tente outra palavra-chave ou verifique a ortografia.' })}
+      ${vitrina(produtos, { db: ctx.db, vazia: 'Nenhum produto encontrado. Tente outra palavra-chave ou verifique a ortografia.' })}
       ${paginacao({ pagina, total, porPagina, baseUrl: '/busca', query: { q: termo, ordenar } })}
     </div>`,
   });
@@ -305,6 +307,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
   const imagens = produto.imagens || [];
   const videos = produto.videos || [];
   const preco = precoVigenteCentavos(produto);
+  const parcelamentoSemJuros = melhorParcelamentoSemJuros(ctx.db, preco);
   const disponivel = estoqueDisponivel(produto);
   const aviso = avisoMedicamento(produto, configLoja);
   const s = produto.sanitario || {};
@@ -365,7 +368,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
             ${temPromocao(produto) ? `<span class="preco-antigo">${money(produto.precoCentavos)}</span>` : ''}
             <span class="preco">${money(preco)}</span>
             ${temPromocao(produto) ? `<span class="etiqueta laranja">-${descontoPercentual(produto)}%</span>` : ''}
-            <p class="texto-pequeno texto-suave mb-0 mt-1">Em até 6x sem juros nos cartões. Consulte as condições no checkout.</p>
+            ${parcelamentoSemJuros ? `<p class="texto-pequeno texto-suave mb-0 mt-1">Em até ${parcelamentoSemJuros.numero}x sem juros nos cartões. Consulte as condições no checkout.</p>` : ''}
           </div>
 
           ${venda.ok && disponivel > 0 ? `
@@ -437,7 +440,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
       ${relacionados.length ? `
       <section class="secao">
         <div class="cabecalho-secao"><h2>Quem viu este produto também comprou</h2></div>
-        ${vitrina(relacionados, { rolagem: true })}
+        ${vitrina(relacionados, { rolagem: true, db: ctx.db })}
       </section>` : ''}
     </div>`,
   });
@@ -536,7 +539,7 @@ export function paginaOfertas(ctx, { produtos, total, pagina, porPagina }) {
       ${migalhas([{ texto: 'Início', url: '/' }, { texto: 'Ofertas' }])}
       <h1>Ofertas e promoções</h1>
       <p class="texto-suave">${total} produto(s) em promoção.</p>
-      ${vitrina(produtos, { vazia: 'Nenhuma oferta ativa no momento.' })}
+      ${vitrina(produtos, { db: ctx.db, vazia: 'Nenhuma oferta ativa no momento.' })}
       ${paginacao({ pagina, total, porPagina, baseUrl: '/ofertas' })}
     </div>`,
   });

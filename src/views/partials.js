@@ -4,15 +4,16 @@ import { formatBRL } from '../lib/format.js';
 import { precoVigenteCentavos, temPromocao, descontoPercentual, imagemPrincipal, productUrl, podeVender, estoqueDisponivel } from '../lib/catalog.js';
 import { ICONES, money } from './layout.js';
 import { STATUS_FINANCEIRO, STATUS_OPERACIONAL } from '../lib/orders.js';
+import { melhorParcelamentoSemJuros } from '../lib/payments/index.js';
 
-export function cartaoProduto(produto, { mostrarParcela = true, parcelas = 3 } = {}) {
+export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}) {
   const venda = podeVender(produto);
   const preco = precoVigenteCentavos(produto);
   const original = Number(produto.precoCentavos || 0);
   const promo = temPromocao(produto);
   const disponivel = estoqueDisponivel(produto);
   const img = imagemPrincipal(produto);
-  const parcela = preco / Math.max(1, parcelas);
+  const parcelamentoSemJuros = mostrarParcela ? melhorParcelamentoSemJuros(db, preco) : null;
   const bloqueio = venda.bloqueioSanitario ? venda.motivo : null;
 
   return `
@@ -25,7 +26,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, parcelas = 3 } =
     <h3 class="nome"><a href="${e(productUrl(produto))}">${e(produto.nome)}</a></h3>
     ${promo ? `<span class="preco-antigo">${money(original)}</span>` : ''}
     <span class="preco">${money(preco)}</span>
-    ${mostrarParcela && preco > 0 ? `<span class="parcela">ou ${parcelas}x de ${money(Math.round(parcela))} sem juros</span>` : ''}
+    ${parcelamentoSemJuros ? `<span class="parcela">ou até ${parcelamentoSemJuros.numero}x sem juros</span>` : ''}
     <div class="acoes">
       ${bloqueio
         ? `<p class="aviso-sanitario mb-0">${e(bloqueio)}</p>`
@@ -36,13 +37,13 @@ export function cartaoProduto(produto, { mostrarParcela = true, parcelas = 3 } =
   </article>`;
 }
 
-export function vitrina(produtos, { rolagem = false, vazia = 'Nenhum produto encontrado.' } = {}) {
+export function vitrina(produtos, { rolagem = false, vazia = 'Nenhum produto encontrado.', db = null } = {}) {
   const itens = Array.isArray(produtos) ? produtos.filter(Boolean) : [];
   if (!itens.length) return `<div class="estado-vazio">${e(vazia)}</div>`;
-  return `<div class="vitrine ${rolagem ? 'rolagem' : ''}">${itens.map((p) => cartaoProduto(p)).join('')}</div>`;
+  return `<div class="vitrine ${rolagem ? 'rolagem' : ''}">${itens.map((p) => cartaoProduto(p, { db })).join('')}</div>`;
 }
 
-export function secaoVitrina({ id, titulo, link, produtos, rolagem = true }) {
+export function secaoVitrina({ id, titulo, link, produtos, rolagem = true, db = null }) {
   const itens = Array.isArray(produtos) ? produtos.filter(Boolean) : [];
   if (!itens.length) return '';
   return `
@@ -51,7 +52,7 @@ export function secaoVitrina({ id, titulo, link, produtos, rolagem = true }) {
       <h2>${e(titulo)}</h2>
       ${link ? `<a class="ver-todos" href="${e(link)}">Ver todos ${ICONES.seta}</a>` : ''}
     </div>
-    ${vitrina(itens, { rolagem })}
+    ${vitrina(itens, { rolagem, db })}
   </section>`;
 }
 
