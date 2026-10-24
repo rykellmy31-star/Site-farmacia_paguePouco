@@ -60,13 +60,13 @@ test('CSV original com capa, campos de custos e EAN faltante gera saldos seguros
   const linhasExtras=Array.from({length:2996},(_,i)=>linha(900001+i,
     String(7893000000000+i),i%3));
   const originalLongo=csvOriginal.replace('ESTOQUE:;;;;;;;;;;;;;;;;;12;;;',
-    linhasExtras.join('\\r\\n')+'\\r\\nESTOQUE:;;;;;;;;;;;;;;;;;12;;;');
+    linhasExtras.join('\r\n')+'\r\nESTOQUE:;;;;;;;;;;;;;;;;;12;;;');
   const dados=lerRelatorioOriginalRobo(Buffer.from(originalLongo,'utf8'));
   assert.equal(dados.itens.length,3000);
   assert.equal(dados.resumo.semEan,1);
   assert.equal(dados.resumo.eanInvalido,1);
   assert.equal(dados.resumo.negativosNeutralizados,1);
-  assert.deepEqual(dados.itens.map(x=>x.quantidade),[0,0,2,3]);
+  assert.deepEqual(dados.itens.slice(0,4).map(x=>x.quantidade),[0,0,2,3]);
   assert.equal(dados.itens[0].ean,'');
   assert.equal(dados.itens[2].ean,'');
   assert.equal(dados.itens[0].precoCentavos,721);
