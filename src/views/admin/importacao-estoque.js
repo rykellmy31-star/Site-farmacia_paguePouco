@@ -71,7 +71,28 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '4. Atualizações futuras',
+        titulo: '4. Conferir produtos antigos antes de limpar o catálogo',
+        corpo: `<p>Compare os produtos já cadastrados no site com o relatório atualizado
+          da <strong>Posição de Estoque do InovaFarma</strong>. A comparação utiliza
+          EAN e código interno, inclusive em produtos que já existiam antes da
+          importação inicial.</p>
+          <div class="alerta info"><strong>Somente prévia: não exclui nada.</strong>
+          Produtos com pedidos, reservas, códigos ambíguos ou sem identificador
+          exigem revisão. Os produtos sem EAN que ficaram pendentes também
+          precisam ser regularizados antes de uma limpeza definitiva.</div>
+          <form method="post" action="/admin/estoque/limpeza/previa"
+                enctype="multipart/form-data">
+            <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            <div class="campo">
+              <label for="arquivoConciliacaoInova">Relatório atual de estoque do InovaFarma (CSV)</label>
+              <input type="file" name="arquivo" id="arquivoConciliacaoInova"
+                     accept=".csv,text/csv" required>
+            </div>
+            <button class="botao" type="submit">Conferir produtos antigos sem excluir</button>
+          </form>`,
+      })}
+      ${painel({
+        titulo: '5. Atualizações futuras',
         corpo: `<p class="texto-pequeno">Após importar seu primeiro relatório, poderemos usar
           um monitor separado no computador Windows para detectar novas exportações.
           Esse robô ainda não está instalado nem ativo. Atualmente, a importação
