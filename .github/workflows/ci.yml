@@ -36,6 +36,8 @@ jobs:
         run: node --test tests/importacao-estoque-menu.test.js
       - name: InovaFarma legacy catalog reconciliation is read only and preserves orders
         run: node --test tests/inovafarma-limpeza-previa.test.js
+      - name: InovaFarma raw stock CSV full reconciliation diagnostics
+        run: node --test tests/inovafarma-limpeza-formatos-reais.test.js
       - name: InovaFarma archive confirmation, reversibility and protected catalog tests
         run: node --test tests/inovafarma-limpeza-segura.test.js
       - name: CSV initial stock import safety and zero inventory
