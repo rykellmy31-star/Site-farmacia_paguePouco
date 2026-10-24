@@ -146,9 +146,19 @@ test('reset integral produz somente IDs novos, arquiva antigos e preserva pedido
   const pedido=pedidoEncerrado();
   const {db}=criarDB({pedidos:[pedido]});
   const p=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
-  const aplicado=aplicarSubstituicaoCatalogoInova(db,p.id,'super',{
-    frase:'SUBSTITUIR TODO O CATALOGO',autorizou:'1',backupConfirmado:'1'
-  },now);
+  const originalTransaction=db.storage.transactionSync;
+  let origemErro=null;
+  db.storage.transactionSync=fn=>originalTransaction(()=>{
+    try { return fn(); } catch(err) { origemErro=err; throw err; }
+  });
+  let aplicado;
+  try {
+    aplicado=aplicarSubstituicaoCatalogoInova(db,p.id,'super',{
+      frase:'SUBSTITUIR TODO O CATALOGO',autorizou:'1',backupConfirmado:'1'
+    },now);
+  } catch(err) {
+    throw new Error('A causa interna da transação nos testes é: '+String(origemErro?.message||origemErro?.name||'desconhecida'),{cause:err});
+  }
   assert.equal(aplicado.ok,true);
   assert.equal(aplicado.antigosArquivados,2);
   assert.equal(aplicado.criados,6128);
