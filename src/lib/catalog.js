@@ -48,6 +48,7 @@ export function sanitarioDefault() {
  */
 export function podeVender(produto) {
   if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
+  if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
   if (!produto.ativo) return { ok: false, motivo: 'Produto inativo.', codigo: 'INATIVO', bloqueioSanitario: false };
   const s = { ...sanitarioDefault(), ...(produto.sanitario || {}) };
 
