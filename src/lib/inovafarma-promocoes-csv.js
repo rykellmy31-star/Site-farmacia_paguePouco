@@ -47,11 +47,11 @@ export function analisarPromocoesInovaCsv(csv) {
   let campanha = null, cabecalho = false;
   for (const [index, r] of rows.entries()) {
     if (r[0] === 'Promoção') {
-      campanha = { codigo: r[2] || '', nome: r[5] || '', inicio: null, fim: null };
+      campanha = { codigo: r[2] || '', nome: r[5] || '', inicio: null, fim: null, formasPagamento: [] };
       cabecalho = false; continue;
     }
     if (campanha && date(r[0]) && date(r[2])) {
-      campanha = { ...campanha, inicio: date(r[0]), fim: date(r[2]) };
+      const formasPagamento = [[6,7,'vista'],[8,10,'cheque'],[11,14,'cartao'],[15,18,'cartao_digital'],[19,21,'prazo']]\n        .filter(([nome,flag]) => r[nome] && r[flag] === '[X]').map(([, , tipo]) => tipo);\n      campanha = { ...campanha, inicio: date(r[0]), fim: date(r[2]), formasPagamento };
       continue;
     }
     if (r[0] === 'Código' && r[1] === 'Produto') {
@@ -63,7 +63,7 @@ export function analisarPromocoesInovaCsv(csv) {
     const desconto = percent(r[21]), preco = money(r[24]), promocional = money(r[27]);
     if (!campanha?.inicio || !campanha?.fim || campanha.inicio > campanha.fim ||
       !r[1] || desconto === null || preco === null || preco <= 0 ||
-      promocional === null || promocional > preco) {
+      promocional === null || promocional > preco ||\n      !Number.isSafeInteger(preco) || !Number.isSafeInteger(promocional)) {
       erros.push({ linha: index + 1, codigo: r[0] }); continue;
     }
     promocoes.push({ codigoInterno: r[0], nome: r[1], descontoPercentual: desconto,
@@ -75,6 +75,6 @@ export function analisarPromocoesInovaCsv(csv) {
   for (const p of promocoes) contagem.set(p.codigoInterno, (contagem.get(p.codigoInterno)||0)+1);
   return { promocoes, erros, total: promocoes.length,
     codigosDistintos: contagem.size,
-    codigosComMultiplasPromocoes: [...contagem].filter(([,n])=>n>1).map(([k])=>k),
+    codigosComMultiplasPromocoes: [...contagem].filter(([,n])=>n>1).map(([k])=>k),\n    campanhas: [...new Map(promocoes.map(p => [p.campanha.codigo, p.campanha])).values()],
     aviso: 'Somente leitura. Não aplicar automaticamente: campanhas podem ter regras de dia, pagamento e sobreposição.' };
 }
