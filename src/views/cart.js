@@ -2,6 +2,7 @@
 import { escapeHtml as e } from '../lib/security.js';
 import { money, ICONES } from './layout.js';
 import { productUrl, imagemPrincipal } from '../lib/catalog.js';
+import { melhorParcelamentoSemJuros } from '../lib/payments/index.js';
 
 export function htmlItensCarrinho(cart, { editavel = true } = {}) {
   if (!(cart.itens || []).length) {
@@ -35,12 +36,34 @@ export function htmlItensCarrinho(cart, { editavel = true } = {}) {
   }).join('');
 }
 
-export function htmlResumoCarrinho(cart, totais, { mostrarFrete = true } = {}) {
+/**
+ * A mensagem usa o MESMO cálculo de parcelas sem juros do checkout e vitrine.
+ * Considera os itens juntos após cupom. O frete não entra na antecipação
+ * do carrinho; o valor final será recalculado quando o cliente o escolher.
+ */
+export function htmlParcelamentoCesta(db, totais) {
+  if (!db || !totais || !(Number(totais.quantidadeItens) > 0)) return '';
+  const produtosCentavos = Math.max(0,
+    Number(totais.subtotalCentavos || 0) - Number(totais.descontoCupom || 0));
+  const opcao = melhorParcelamentoSemJuros(db, produtosCentavos);
+  if (!opcao) return '';
+  // Em quantias ímpares, não arredondar cada parcela como se sua soma fosse
+  // exata: o provedor pode distribuir 1 centavo entre as parcelas.
+  const valorParcela = produtosCentavos % opcao.numero === 0
+    ? ` de ${money(produtosCentavos / opcao.numero)}` : '';
+  return `<p class="parcelamento-cesta texto-pequeno" role="status">
+    No cartão: <strong>até ${opcao.numero}x${valorParcela} sem juros</strong>
+    <span class="texto-suave">sobre os produtos após descontos. Confira o total com frete no checkout.</span>
+  </p>`;
+}
+
+export function htmlResumoCarrinho(cart, totais, { mostrarFrete = true, db = null, exibirParcelamento = false } = {}) {
   return `
   <div class="resumo-linha"><span>Subtotal (${totais.quantidadeItens} ${totais.quantidadeItens === 1 ? 'item' : 'itens'})</span><strong>${money(totais.subtotalCentavos)}</strong></div>
   ${totais.descontoCupom > 0 ? `<div class="resumo-linha"><span>Desconto (${e(cart.cupom?.codigo || '')})</span><strong style="color:var(--sucesso)">− ${money(totais.descontoCupom)}</strong></div>` : ''}
   ${mostrarFrete ? `<div class="resumo-linha"><span>Frete</span><strong>${totais.freteGratis ? '<span style="color:var(--sucesso)">Grátis</span>' : (totais.freteCentavos ? money(totais.freteCentavos) : 'Calcular no checkout')}</strong></div>` : ''}
-  <div class="resumo-linha total"><span>Total</span><span>${money(totais.totalCentavos)}</span></div>`;
+  <div class="resumo-linha total"><span>Total</span><span>${money(totais.totalCentavos)}</span></div>
+  ${exibirParcelamento ? htmlParcelamentoCesta(db, totais) : ''}`;
 }
 
 export function htmlGavetaCarrinho(cart, totais) {
@@ -49,7 +72,7 @@ export function htmlGavetaCarrinho(cart, totais) {
     <button class="botao pequeno secundario" type="button" data-remover-cupom>Remover</button></div>` : ''}`;
 }
 
-export function htmlRodapeCarrinho(cart, totais) {
+export function htmlRodapeCarrinho(cart, totais, db = null) {
   if (!(cart.itens || []).length) return '';
   return `
   <form class="mb-2" data-form-cupom>
@@ -58,7 +81,7 @@ export function htmlRodapeCarrinho(cart, totais) {
       <button class="botao pequeno secundario" type="submit">Aplicar</button>
     </div>
   </form>
-  ${htmlResumoCarrinho(cart, totais, { mostrarFrete: false })}
+  ${htmlResumoCarrinho(cart, totais, { mostrarFrete: false, db, exibirParcelamento: true })}
   <a class="botao bloquinho destaque mt-2" href="/checkout">Finalizar compra</a>
   <a class="botao bloquinho secundario mt-1" href="/carrinho">Ver cesta completa</a>`;
 }
