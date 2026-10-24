@@ -158,7 +158,9 @@ const hashAtual = d => {
     hash.update(JSON.stringify(p));
   for(const p of d.pedidos.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))))
     hash.update(JSON.stringify([p.id,p.statusFinanceiro,p.statusOperacional,p.atualizadoEm]));
-  for(const p of d.carrinhos.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))))
+  // Carrinhos vazios podem ser criados por visitantes enquanto o operador
+  // confere. Só carrinhos que contêm produtos atuais invalidam a prévia.
+  for(const p of d.cestasAtivas.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))))
     hash.update(JSON.stringify([p.id,p.itens]));
   return hash.digest('hex');
 };
