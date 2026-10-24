@@ -126,8 +126,12 @@ export function installmentOptions(db, totalCents) {
  * Null significa nao exibir informacao de parcelamento.
  */
 export function melhorParcelamentoSemJuros(db,precoCentavos) {
-  if(!db)return null;
-  const opcoes=installmentOptions(db,precoCentavos);
+  const valor=Number(precoCentavos);
+  // Abaixo do minimo nenhum parcelamento de duas ou mais vezes e possivel;
+  // evite consultar configuracoes e anuncie apenas quando elegivel.
+  if(!db||!Number.isSafeInteger(valor)||valor<MINIMO_COMPRA_PARCELADA_CENTAVOS)
+    return null;
+  const opcoes=installmentOptions(db,valor);
   return opcoes.filter(p=>p.numero>=2&&p.semJuros===true&&p.juros===false).at(-1)||null;
 }
 
