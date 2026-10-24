@@ -15,6 +15,8 @@ import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.j
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado } from '../lib/inovafarma-limpeza-segura.js';
 import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
 import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
+import { telaPreviaAplicacaoPromocoesInova } from '../views/admin/inovafarma-promocoes-aplicar.js';
+import { prepararPromocoesInova, consultarPromocoesInova, aplicarPromocoesInova } from '../lib/inovafarma-promocoes-aplicacao.js';
 import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
 import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-catalog-import.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
@@ -325,6 +327,78 @@ export function registrarRotasAdmin(app, db) {
           '<p><a href="/admin/estoque/importar">Voltar</a></p>'
       }));
     }
+  });
+
+  // Etapa 1 — Importar CSV e criar uma proposta sem alterar os produtos.
+  app.post('/admin/estoque/promocoes/preparar',
+    { maxBodyBytes: 8 * 1024 * 1024 + 128 * 1024 }, (req,res)=>{
+    if(!guard(req,res,'promocoes.editar'))return;
+    if(!can(req.adminUser,'produtos.editar')||req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Aplicação de promoções restrita ao Super Administrador.');
+    res.set('Cache-Control','no-store');
+    const arquivo=(req.files||[]).find(f=>f.field==='arquivo');
+    if(!arquivo || !/\.csv$/i.test(String(arquivo.filename||'')) ||
+       !arquivo.data?.length || arquivo.data.length>8*1024*1024)
+      return void res.status(400).html('Relatório de Promoções CSV inválido (até 8 MB).');
+    const preparado=prepararPromocoesInova(db,arquivo.data,req.adminUser.id,{
+      aceitaTodosOnline:String(req.body.aceitaTodosOnline||''),
+      fimSemData:String(req.body.fimSemData||'')
+    });
+    if(!preparado.ok)return void res.status(preparado.status||400).html(
+      paginaAdmin(ctxAdmin(req,db),{titulo:'CSV de promoções inválido',ativo:'importacao_estoque',
+        conteudo:'<h1>Não foi possível preparar os descontos</h1><p>'+
+        e(preparado.erro)+'</p><p><a href="/admin/estoque/importar">Voltar</a></p>'}));
+    logAdmin(db,req.adminUser,'preparou_descontos_inovafarma','sistema',null,{
+      aptos:preparado.resumo.prontos,codigos:preparado.resumo.codigos
+    },req);
+    res.redirect('/admin/estoque/promocoes/aplicacao/'+encodeURIComponent(preparado.id));
+  });
+
+  // Etapa 2 — Revisar valores exatos e confirmar por escrito.
+  app.get('/admin/estoque/promocoes/aplicacao/:id',(req,res)=>{
+    if(!guard(req,res,'promocoes.editar'))return;
+    if(!can(req.adminUser,'produtos.editar')||req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Revisão restrita ao Super Administrador.');
+    res.set('Cache-Control','no-store');
+    const proposta=consultarPromocoesInova(db,String(req.params.id),req.adminUser.id);
+    if(!proposta.ok)return void res.status(proposta.status||400).html(
+      paginaAdmin(ctxAdmin(req,db),{titulo:'Prévia indisponível',ativo:'importacao_estoque',
+        conteudo:'<h1>Prévia indisponível</h1><p>'+e(proposta.erro)+
+          '</p><a href="/admin/estoque/importar">Reenviar relatório</a>'}));
+    res.html(telaPreviaAplicacaoPromocoesInova(ctxAdmin(req,db),proposta));
+  });
+
+  // Etapa 3 — Confirmação dupla; atualiza somente campanhas do produto.
+  app.post('/admin/estoque/promocoes/aplicar',(req,res)=>{
+    if(!guard(req,res,'promocoes.editar'))return;
+    if(!can(req.adminUser,'produtos.editar')||req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Aplicação restrita ao Super Administrador.');
+    res.set('Cache-Control','no-store');
+    const id=String(req.body.loteId||'');
+    if(!/^[a-z0-9]{6,64}$/i.test(id))
+      return void res.status(400).html('Identificador de conferência inválido.');
+    const resultado=aplicarPromocoesInova(db,id,req.adminUser.id,{
+      frase:String(req.body.frase||''),
+      confirmado:String(req.body.confirmado||''),
+      aceitaTodosOnline:String(req.body.aceitaTodosOnline||''),
+    });
+    if(!resultado.ok)return void res.status(resultado.status||409).html(
+      paginaAdmin(ctxAdmin(req,db),{titulo:'Descontos não aplicados',ativo:'importacao_estoque',
+        conteudo:'<h1>Nenhum desconto foi aplicado</h1><p>'+e(resultado.erro)+
+          '</p><a href="/admin/estoque/importar">Conferir novamente</a>'}));
+    logAdmin(db,req.adminUser,'aplicou_descontos_inovafarma','sistema',id,{
+      atualizados:resultado.atualizados,campanhas:resultado.resumo.campanhasAceitas,
+      formaPagamentoOnlineAutorizada:String(req.body.aceitaTodosOnline||'')==='1',
+    },req);
+    return void res.html(paginaAdmin(ctxAdmin(req,db),{
+      titulo:'Descontos aplicados',ativo:'importacao_estoque',
+      conteudo:'<h1>Descontos do InovaFarma atualizados</h1>'+
+        '<div class="alerta sucesso"><strong>'+e(resultado.atualizados)+
+        ' produtos receberam campanhas promocionais.</strong> As ofertas serão exibidas '+
+        'somente nos dias válidos, sem alterar preços normais, estoque ou pedidos anteriores.</div>'+
+        '<p>As campanhas vencidas serão desativadas automaticamente pelo cálculo de preço.</p>'+
+        '<a class="botao" href="/admin/produtos">Ver produtos</a>'
+    }));
   });
 
   // 1) Envia relatório integral e prepara candidatos, sem tocar em produtos.
