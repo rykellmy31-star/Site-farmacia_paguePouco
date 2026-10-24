@@ -2,7 +2,7 @@
 import { escapeHtml as e, sanitizeHtml } from '../../lib/security.js';
 import { paginaAdmin, painel, tabelaAdmin, cartaoMetrica, campoAdmin, barraFerramentas, etiquetaStatus, graficoBarras, paginacaoAdmin, money } from './layout.js';
 import { formatDateTime, formatDate, formatNumber } from '../../lib/format.js';
-import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, podeVender } from '../../lib/catalog.js';
+import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, podeVender, precoVigenteCentavos } from '../../lib/catalog.js';
 import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
@@ -143,8 +143,9 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
             </td>
             <td>${e(cat?.nome || '—')}</td>
             <td>
-              ${money(p.precoPromocionalCentavos || p.precoCentavos)}
+              ${money(precoVigenteCentavos(p))}
               ${temPromocao(p) ? `<br><span class="texto-pequeno texto-suave"><s>${money(p.precoCentavos)}</s> −${descontoPercentual(p)}%</span>` : ''}
+              ${p.inovaPromocoes?.length ? '<br><span class="texto-pequeno texto-suave">Promoção InovaFarma (vigência automática)</span>' : ''}
             </td>
             <td>
               <strong>${e(p.estoque?.quantidade ?? 0)}</strong>
