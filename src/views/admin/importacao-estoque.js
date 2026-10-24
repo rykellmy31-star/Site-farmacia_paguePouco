@@ -119,11 +119,15 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '5. Atualizações futuras',
-        corpo: `<p class="texto-pequeno">Após importar seu primeiro relatório, poderemos usar
-          um monitor separado no computador Windows para detectar novas exportações.
-          Esse robô ainda não está instalado nem ativo. Atualmente, a importação
-          só ocorre quando você envia e confirma um relatório.</p>`,
+        titulo: '5. Robô de exportações InovaFarma — preparação local',
+        corpo: `<p class="texto-pequeno"><strong>Fase 1 disponível para instalar no Windows.</strong>
+          O robô monitora a pasta de relatórios exportados, valida CSVs de estoque e
+          promoções, impede duplicatas e organiza cópias para revisão.</p>
+          <p class="texto-pequeno"><strong>Ainda não está instalado nem enviando atualizações
+          automaticamente.</strong> Por segurança, a importação no site continua
+          exigindo envio e confirmação humana. Não modifica o ERP.</p>
+          <p><a href="https://github.com/rykellmy31-star/Site-farmacia_paguePouco/blob/main/docs/18-robo-windows-inovafarma.md"
+          target="_blank" rel="noopener noreferrer" class="botao secundario">Ver instalação do robô Windows</a></p>`,
       })}
     `,
   });
