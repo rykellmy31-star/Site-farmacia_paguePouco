@@ -129,7 +129,7 @@ test('Painel prepara aprovação sem reload e sem perder fotos, informa comporta
     req:{pathname:'/admin/produtos/p1',query:new URLSearchParams()},csrf:'teste',podeAprovar:true};
   const tela=telaProdutoForm(ctx,{produto,categorias:[],marcas:[],todasMidia:[]});
   assert.match(tela,/data-aprovar-produto="p1"/);
-  assert.match(tela,/Ao clicar em Aprovar cadastro, clique em Salvar alterações/);
+  assert.match(tela,/Após clicar em Aprovar cadastro, clique em Salvar alterações/);
   const js=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
   assert.match(js,/input\[name="aprovarAoSalvar"\]/);
   assert.match(js,/Aprovação preparada — salve o produto/);
