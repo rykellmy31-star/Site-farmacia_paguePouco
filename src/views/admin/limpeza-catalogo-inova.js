@@ -10,11 +10,41 @@ const status = {
   conferir_identificacao: 'Conferir: identificação ambígua/sem código',
   candidato_sem_historico: 'Candidato à limpeza, após conferência',
   vinculado_pedidos: 'Histórico de pedidos: não remover',
-  com_reserva: 'Reservas/quarentena: não remover'
+  com_reserva: 'Reservas/quarentena: não remover',
+  ja_arquivado: 'Já arquivado anteriormente'
 };
 export function telaPreviaLimpezaInova(ctx, analise) {
   const { resumo, itens } = analise;
-  const candidatos = itens.filter(p => p.status !== 'preservar');
+  const candidatos = itens.filter(p => p.status !== 'preservar' && p.status !== 'ja_arquivado');
+  const {id, fonte, habilitado, inalterado, elegiveis, emCarrinhos} = analise;
+  const n = elegiveis?.length || 0;
+  const bloqueios = fonte && !fonte.coberturaCompleta ?
+    '<div class="alerta erro"><strong>Limpeza bloqueada:</strong> relatório incompleto ou com códigos repetidos. ' +
+    'Registros: ' + e(fonte.total) + ' (mínimo para esta primeira limpeza: ' +
+    e(fonte.minimoEsperado) + '), linhas inválidas: ' + e(fonte.invalidos) +
+    ', códigos repetidos: ' + e(fonte.repetidos) + '. Use a exportação integral do InovaFarma, ' +
+    'incluindo os 66 registros pendentes, em vez do CSV filtrado de 6.062 itens.</div>' : '';
+  const acao = !id ? '' : '<div class="mt-2">' + bloqueios +
+    '<p><strong>Elegíveis ao arquivamento reversível:</strong> ' + e(n) +
+    ' · <strong>Em carrinhos (protegidos):</strong> ' + e(emCarrinhos?.length || 0) +
+    ' · <strong>Já arquivados:</strong> ' + e(resumo.jaArquivados || 0) + '</p>' +
+    (!inalterado ? '<div class="alerta erro">Catálogo alterado após a conferência. Envie novamente o CSV.</div>' : '') +
+    (habilitado ? '<form method="post" action="/admin/estoque/limpeza/aplicar">' +
+      '<input type="hidden" name="_csrf" value="' + e(ctx.csrf) + '">' +
+      '<input type="hidden" name="loteId" value="' + e(id) + '">' +
+      '<p><label><input type="checkbox" name="conferido" value="1" required> ' +
+      'Conferi o relatório integral e autorizo arquivar <strong>' + e(n) +
+      '</strong> produtos antigos, preservando registros e pedidos.</label></p>' +
+      '<div class="campo"><label for="confirmarLimpeza">Digite LIMPAR PRODUTOS ANTIGOS</label>' +
+      '<input id="confirmarLimpeza" type="text" name="frase" required autocomplete="off" ' +
+      'placeholder="LIMPAR PRODUTOS ANTIGOS"></div>' +
+      '<button class="botao perigo" type="submit">Limpar produtos antigos</button>' +
+      '</form>' : '<button class="botao perigo" type="button" disabled>' +
+        'Limpar produtos antigos — indisponível até corrigir pendências</button>') +
+    '<p class="texto-pequeno">A limpeza é reversível: os produtos saem da vitrine e ' +
+    'da lista principal, mas permanecem no banco com opção de restauração. ' +
+    'Antes de operações definitivas, confira também os backups em ' +
+    '<a href="/admin/sistema">Sistema e backups</a>.</p></div>';
   const linhas = candidatos.slice(0, 120).map(p => [
     '<tr><td>', e(p.codigoInterno || '—'), '</td><td>', e(p.ean || '—'),
     '</td><td>', e(p.nome || '—'), '</td><td>',
@@ -46,6 +76,8 @@ export function telaPreviaLimpezaInova(ctx, analise) {
         '<thead><tr><th>Código interno</th><th>EAN</th><th>Produto</th><th>Situação</th></tr></thead>' +
         '<tbody>' + (linhas || '<tr><td colspan="4">Nenhuma exceção identificada.</td></tr>') +
         '</tbody></table></div>' +
-        '<p class="texto-pequeno">Somente conferência. Não existe botão para excluir em massa nesta tela.</p>' })
+        '<p class="texto-pequeno">Os produtos com pedidos, reservas ou identificação incerta não serão arquivados automaticamente.</p>' }) +
+      painel({ titulo: 'Limpar produtos antigos', corpo:
+        acao || '<p>Esta primeira conferência não habilita a limpeza. Use o relatório integral para continuar.</p>' })
   });
 }
