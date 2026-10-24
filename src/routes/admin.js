@@ -1161,6 +1161,7 @@ function registrarApi(app, db) {
           descricao: obj.descricao || '',
         };
         if (existente) {
+          if (existente.inovaArquivado?.em) { erros++; continue; }
           db.collection('products').update(existente.id, dados);
           if (obj.quantidade && !inovaAtiva()) {
             registrarMovimentoEstoque(db, { produtoId: existente.id, tipo: 'ajuste', quantidade: Number(obj.quantidade), origem: 'importacao_csv', usuarioId: req.adminUser.id });
