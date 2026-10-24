@@ -29,6 +29,7 @@ function fakeDB(){
       all:()=>[...map.values()],
       count:()=>map.size,
       find:pred=>[...map.values()].filter(pred),
+      findOne:pred=>[...map.values()].find(pred)||null,
       insert(doc){const d={...doc,id:doc.id||'id_'+Math.random().toString(36).slice(2)};
         map.set(String(d.id),d);return d;},
       update(id,patch){const d=map.get(String(id));if(!d)return null;
@@ -56,8 +57,12 @@ function enviarTudo(db,itens,geradoEm='2026-10-24T19:38:56-03:00',hash=sha){
   return last;
 }
 test('CSV original com capa, campos de custos e EAN faltante gera saldos seguros',()=>{
-  const dados=lerRelatorioOriginalRobo(Buffer.from(csvOriginal,'utf8'));
-  assert.equal(dados.itens.length,4);
+  const linhasExtras=Array.from({length:2996},(_,i)=>linha(900001+i,
+    String(7893000000000+i),i%3));
+  const originalLongo=csvOriginal.replace('ESTOQUE:;;;;;;;;;;;;;;;;;12;;;',
+    linhasExtras.join('\\r\\n')+'\\r\\nESTOQUE:;;;;;;;;;;;;;;;;;12;;;');
+  const dados=lerRelatorioOriginalRobo(Buffer.from(originalLongo,'utf8'));
+  assert.equal(dados.itens.length,3000);
   assert.equal(dados.resumo.semEan,1);
   assert.equal(dados.resumo.eanInvalido,1);
   assert.equal(dados.resumo.negativosNeutralizados,1);
