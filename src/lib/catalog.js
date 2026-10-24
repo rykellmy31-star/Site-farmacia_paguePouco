@@ -168,7 +168,7 @@ export function searchProducts(db, {
   porPagina = 24, precoMin = null, precoMax = null, apenasDisponiveis = true,
   apenasVendaveis = true, promocao = false, termos = null,
 } = {}) {
-  let rows = db.collection('products').all();
+  let rows = db.collection('products').all().filter(p => !p.inovaArquivado?.em);
 
   if (apenasVendaveis) rows = rows.filter((p) => podeVender(p).ok || p.ativo);
   if (apenasDisponiveis) rows = rows.filter((p) => !apenasVendaveis || podeVender(p).ok);
