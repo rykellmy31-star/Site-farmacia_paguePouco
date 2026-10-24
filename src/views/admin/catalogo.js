@@ -120,6 +120,8 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
           <option value="arquivados" ${filtros.status === 'arquivados' ? 'selected' : ''}>Arquivados (recuperáveis)</option>
           <option value="todos_incluindo_arquivados" ${filtros.status === 'todos_incluindo_arquivados' ? 'selected' : ''}>Todos, incluindo arquivados</option>
           <option value="estoque_baixo" ${filtros.status === 'estoque_baixo' ? 'selected' : ''}>Estoque baixo</option>
+          <option value="estoque_zerado" ${filtros.status === 'estoque_zerado' ? 'selected' : ''}>Estoque zerado</option>
+          <option value="em_estoque" ${filtros.status === 'em_estoque' ? 'selected' : ''}>Em estoque</option>
           <option value="bloqueado" ${filtros.status === 'bloqueado' ? 'selected' : ''}>Bloqueados para venda</option>
         </select>
         <button class="botao secundario" type="submit">Filtrar</button>

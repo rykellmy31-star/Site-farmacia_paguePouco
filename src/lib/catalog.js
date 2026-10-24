@@ -83,6 +83,21 @@ export function podeVender(produto) {
   return { ok: true, motivo: null, codigo: null, bloqueioSanitario: false };
 }
 
+/**
+ * Filtros de inventario fisico do painel. Nao confundem saldo cadastrado com
+ * disponibilidade para venda (que depende de reservas, quarentena e aprovacao).
+ * Produtos sem saldo informado e saldos negativos sao exibidos como esgotados.
+ */
+export function filtrarProdutosPorEstoque(produtos,status) {
+  if (status !== 'estoque_zerado' && status !== 'em_estoque') return produtos;
+  return produtos.filter(p => {
+    const saldo=Number(p.estoque?.quantidade ?? 0);
+    return status === 'em_estoque'
+      ? Number.isFinite(saldo) && saldo > 0
+      : !Number.isFinite(saldo) || saldo <= 0;
+  });
+}
+
 export function estoqueDisponivel(produto) {
   if (inovaAtiva()) return estoqueInovaDisponivel(produto);
   const e = produto?.estoque || {};

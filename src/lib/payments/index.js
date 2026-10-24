@@ -81,32 +81,42 @@ export function enabledMethods(db) {
   };
 }
 
-export function maxInstallments(db) {
-  const settings = paymentSettings(db) || {};
-  return Math.max(1, Math.min(12, Number(settings.parcelamentoMaximo) || 6));
+// Política comercial fixa: ate 6x; compras parceladas a partir de R$ 50,
+// com minimo de R$ 25 sobre o valor da COMPRA por parcela (antes dos juros).
+// Configuracoes anteriores de R$ 5 ou de ate 12x nao podem afrouxar a regra.
+export const LIMITE_PARCELAS_LOJA = 6;
+export const MINIMO_PARCELA_LOJA_CENTAVOS = 2500;
+export const MINIMO_COMPRA_PARCELADA_CENTAVOS = 5000;
+
+export function maxInstallments(_db) {
+  return LIMITE_PARCELAS_LOJA;
 }
 
 export function installmentOptions(db, totalCents) {
   const settings = paymentSettings(db) || {};
-  const max = maxInstallments(db);
-  const semJuros = Math.max(1, Math.min(max, Number(settings.parcelasSemJuros) || 3));
-  const taxaJurosMes = Number(settings.taxaJurosMes) || 0; // % ao mês, repassada se houver
-  const valorMinimoParcela = Number(settings.valorMinimoParcela) || 500; // centavos
+  const semJuros = Math.max(1, Math.min(LIMITE_PARCELAS_LOJA,
+    Number(settings.parcelasSemJuros) || 3));
+  const taxaJurosMes = Number(settings.taxaJurosMes) || 0;
+  const totalBase = Number(totalCents);
+  if (!Number.isSafeInteger(totalBase) || totalBase < 0) return [];
   const opts = [];
-  for (let n = 1; n <= max; n++) {
-    let total = totalCents;
+  for (let n = 1; n <= LIMITE_PARCELAS_LOJA; n++) {
+    // A elegibilidade leva em conta o valor real da compra, sem juros:
+    // R$ 49,99 -> 1x; R$ 50 -> 2x; R$ 75 -> 3x; R$ 150 -> 6x.
+    if (n > 1 && (totalBase < MINIMO_COMPRA_PARCELADA_CENTAVOS ||
+        totalBase < n * MINIMO_PARCELA_LOJA_CENTAVOS)) break;
+    let total = totalBase;
     let juros = false;
     if (n > semJuros && taxaJurosMes > 0) {
-      // juros compostos (Price simplificado): total = PV * (1+i)^n
       const i = taxaJurosMes / 100;
-      total = Math.round(totalCents * Math.pow(1 + i, n));
+      total = Math.round(totalBase * Math.pow(1 + i, n));
       juros = true;
     }
+    if (!Number.isSafeInteger(total) || total < totalBase) break;
     const parcela = Math.round(total / n);
-    if (parcela < valorMinimoParcela && n > 1) break;
-    opts.push({ numero: n, total, parcela, juros, semJuros: !juros, texto: `${n}x de R$ ${(parcela / 100).toFixed(2).replace('.', ',')}${juros ? ' com juros' : ' sem juros'}` });
+    opts.push({ numero: n, total, parcela, juros, semJuros: !juros,
+      texto: `${n}x de R$ ${(parcela / 100).toFixed(2).replace('.', ',')}${juros ? ' com juros' : ' sem juros'}` });
   }
-  if (!opts.length) opts.push({ numero: 1, total: totalCents, parcela: totalCents, juros: false, semJuros: true, texto: `1x de R$ ${(totalCents / 100).toFixed(2).replace('.', ',')}` });
   return opts;
 }
 

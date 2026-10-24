@@ -486,12 +486,12 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
           ${campoAdmin({ nome: 'meios_debit_card', rotulo: 'Cartão de débito', tipo: 'checkbox', valor: !!configPag.meios?.debit_card })}
         </div>
         <div class="campo-linha">
-          ${campoAdmin({ nome: 'parcelamentoMaximo', rotulo: 'Parcelamento máximo', tipo: 'number', min: '1', max: '12', valor: configPag.parcelamentoMaximo || 6 })}
-          ${campoAdmin({ nome: 'parcelasSemJuros', rotulo: 'Parcelas sem juros', tipo: 'number', min: '1', max: '12', valor: configPag.parcelasSemJuros || 3 })}
+          <div class="campo"><label>Parcelamento máximo</label><p><strong>6x (limite fixo da farmácia)</strong></p></div>
+          ${campoAdmin({ nome: 'parcelasSemJuros', rotulo: 'Parcelas sem juros', tipo: 'number', min: '1', max: '6', valor: Math.max(1, Math.min(6, Number(configPag.parcelasSemJuros) || 3)) })}
         </div>
         <div class="campo-linha">
           ${campoAdmin({ nome: 'taxaJurosMes', rotulo: 'Taxa de juros ao mês (%)', tipo: 'number', step: '0.01', min: '0', valor: configPag.taxaJurosMes || 0, dica: 'Somente se a farmácia repassar juros ao cliente.' })}
-          ${campoAdmin({ nome: 'valorMinimoParcela', rotulo: 'Valor mínimo da parcela (R$)', tipo: 'number', step: '0.01', min: '0', valor: ((configPag.valorMinimoParcela || 500) / 100).toFixed(2) })}
+          <div class="campo"><label>Valor mínimo por parcela</label><p><strong>R$ 25,00 (regra fixa)</strong></p><p class="texto-pequeno">Parcelamento a partir de R$ 50,00: 2x a partir de R$ 50,00, 3x a partir de R$ 75,00, até 6x a partir de R$ 150,00. Juros não aumentam a quantidade de parcelas permitida.</p></div>
         </div>
         ${campoAdmin({ nome: 'descontoPixPercentual', rotulo: 'Desconto no Pix (%)', tipo: 'number', step: '0.01', min: '0', valor: configPag.descontoPixPercentual || 0 })}
         ${campoAdmin({ nome: 'mensagemCheckout', rotulo: 'Mensagem no checkout', tipo: 'textarea', valor: configPag.mensagemCheckout || '' })}
