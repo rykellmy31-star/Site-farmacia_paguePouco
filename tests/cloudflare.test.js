@@ -173,10 +173,33 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const dashboard = await call('/admin');
   assert.equal(dashboard.status, 200);
   const dashboardHtml = await dashboard.text();
+  // O menu substitui a integração API antiga por importação CSV visível.
+  assert.match(dashboardHtml, /Importação de estoque/);
+  assert.doesNotMatch(dashboardHtml, /Integração InovaFarma/);
+  const novaImportacao = await call('/admin/estoque/importar');
+  assert.equal(novaImportacao.status, 200);
+  const importacaoHtml = await novaImportacao.text();
+  assert.match(importacaoHtml, /<h1 class="mt-0">Importação de estoque<\/h1>/);
+  assert.match(importacaoHtml, /action="\/admin\/api\/produtos\/inova-csv\/preparar"/);
+  assert.match(importacaoHtml, /Conferir relatório antes de importar/);
+  assert.doesNotMatch(importacaoHtml, /action="\/admin\/inovafarma\/credencial"/);
+  const atalhoAntigo = await call('/admin/inovafarma');
+  assert.equal(atalhoAntigo.status, 303);
+  assert.equal(atalhoAntigo.headers.get('location'), '/admin/estoque/importar');
   const adminCsrf = /window\.PP_ADMIN=({[^<]+?});<\/script>/.exec(dashboardHtml);
   assert.ok(adminCsrf, 'O painel precisa publicar o token CSRF para ações AJAX.');
   const adminToken = JSON.parse(adminCsrf[1]).csrf;
   assert.ok(adminToken, 'O token CSRF do administrador não pode ficar vazio.');
+  const integracaoLegada = await call('/admin/inovafarma/configuracao', {
+    method: 'POST',
+    body: new URLSearchParams({ _csrf: adminToken, urlConector: 'https://exemplo.invalid/' }),
+  });
+  assert.equal(integracaoLegada.status, 410, 'configuração da API legada deve permanecer inativa');
+  const integracaoRemocao = await call('/admin/inovafarma/credencial/remover', {
+    method: 'POST', body: new URLSearchParams({ _csrf: adminToken }),
+  });
+  assert.equal(integracaoRemocao.status, 410, 'rotas antigas não podem apagar credenciais salvas');
+
   assert.notEqual(adminToken, csrf, 'O token administrativo não pode ser o do visitante.');
   const adminFormHtml = await (await call('/admin/configuracoes')).text();
   assert.match(adminFormHtml, new RegExp('name="_csrf" value="' + adminToken + '"'));
@@ -288,11 +311,16 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
     method:'POST',body:csvInovaForm,
   });
   assert.equal(prepararCsv.status,200);
+  assert.match(importacaoHtml, /name="arquivo"/);
+
   const preparada=await prepararCsv.json();
     assert.ok(preparada.url.startsWith('/admin/produtos/importar/relatorio/csv_'));
   const previewResponse=await call(preparada.url);
   assert.equal(previewResponse.status,200);
-  assert.match(await previewResponse.text(),/Confirmar importação inicial/);
+  const previewHtml = await previewResponse.text();
+  assert.match(previewHtml,/Confirmar importação inicial/);
+  assert.match(previewHtml,/href="\/admin\/estoque\/importar"/);
+
   const antesConfirmar=await call('/admin/api/sistema/backup',{
     method:'POST',body:new URLSearchParams({_csrf:adminToken}),
   });
