@@ -131,7 +131,7 @@ test('preparar só grava prévia privada, sem remover ou aproveitar cadastros',(
   assert.equal(db.collection('products').get('antigo_001').ativo,true);
   const v=consultarSubstituicaoCatalogoInova(db,p.id,'super',now);
   assert.equal(v.pronto,true);
-  assert.equal(consultarSubstituicaoCatalogoInova(db,p.id,'intruso',now).ok,undefined);
+  assert.throws(()=>consultarSubstituicaoCatalogoInova(db,p.id,'intruso',now),/não encontrada/);
 });
 test('sem checkbox do backup/confirmacão explícita, a coleção permanece intacta',()=>{
   const {db}=criarDB({pedidos:[pedidoEncerrado()]});
