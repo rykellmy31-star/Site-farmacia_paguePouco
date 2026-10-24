@@ -1254,6 +1254,12 @@ function registrarApi(app, db) {
     if (inovaAtiva() && Number.isFinite(novaQtd) && novaQtd !== Number(estoque.quantidade || 0)) {
       return void res.json({ ok: false, erro: 'Quantidade gerenciada pela InovaFarma: edite o estoque no ERP.' }, 409);
     }
+    const totalProtegido = Number(estoque.reservado || 0) +
+      Number(estoque.quarentena || 0) + Number(estoque.inovaPendente || 0);
+    if (Number.isFinite(novaQtd) && (!Number.isSafeInteger(novaQtd) ||
+        !Number.isSafeInteger(totalProtegido) || novaQtd < totalProtegido)) {
+      return void res.json({ok:false,erro:'Quantidade menor que o estoque reservado ou segregado em quarentena. Faça conciliação física antes de reduzir.'},409);
+    }
     if (Number.isFinite(novaQtd) && novaQtd !== Number(estoque.quantidade || 0)) {
       registrarMovimentoEstoque(db, {
         produtoId: produto.id, tipo: 'ajuste', quantidade: novaQtd,
@@ -1502,9 +1508,13 @@ function registrarApi(app, db) {
     if (!produto) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
     const saldo = Number(produto.estoque?.quantidade || 0);
     const reservado = Number(produto.estoque?.reservado || 0);
-    if ((tipo === 'saida' && qtd > saldo - reservado) ||
-        (tipo === 'ajuste' && qtd < reservado)) {
-      return void res.json({ ok: false, erro: 'Movimentação excede estoque disponível ou compromete reservas de pedidos.' }, 409);
+    const quarentena = Number(produto.estoque?.quarentena || 0);
+    const inovaPendente = Number(produto.estoque?.inovaPendente || 0);
+    const protegido = reservado + quarentena + inovaPendente;
+    if (!Number.isSafeInteger(saldo) || !Number.isSafeInteger(protegido) || protegido < 0 ||
+        (tipo === 'saida' && qtd > saldo - protegido) ||
+        (tipo === 'ajuste' && qtd < protegido)) {
+      return void res.json({ ok: false, erro: 'Movimentação comprometeria reserva, quarentena ou pendência de sincronização. Use conciliação física para quarentena.' }, 409);
     }
     const mov = registrarMovimentoEstoque(db, {
       produtoId, tipo: tipo || 'entrada', quantidade: qtd,
