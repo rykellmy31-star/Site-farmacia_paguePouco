@@ -12,6 +12,12 @@ export function telaImportacaoEstoque(ctx) {
     conteudo: `
       <h1 class="mt-0">Importação de estoque</h1>
       <div class="alerta info">
+        <strong>Quer zerar todos os produtos e não reaproveitar nenhum cadastro antigo?</strong>
+        Utilize a função específica
+        <a class="botao" href="/admin/produtos/substituir-catalogo">Substituir todo o catálogo pelo InovaFarma</a>.
+        A importação de estoque abaixo apenas atualiza/cadastra produtos e NÃO remove os atuais.
+      </div>
+      <div class="alerta info">
         <strong>Importação inicial por relatório do InovaFarma.</strong>
         Exporte a Posição de Estoque no aplicativo Windows em formato CSV e envie aqui.
         Não é necessário informar senha, API ou permitir acesso ao seu computador.
@@ -92,7 +98,7 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '4. Conferir produtos antigos antes de limpar o catálogo',
+        titulo: '4. Limpeza por comparação (alternativa, sem zerar tudo)',
         corpo: `<p>Compare os produtos já cadastrados no site com o relatório atualizado
           da <strong>Posição de Estoque do InovaFarma</strong> (CSV). A comparação utiliza
           EAN e código interno, inclusive em produtos que já existiam antes da

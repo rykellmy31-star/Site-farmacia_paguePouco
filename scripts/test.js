@@ -231,7 +231,7 @@ async function main() {
   /** Localiza o id de um produto pela busca do painel (funciona inclusive para os bloqueados). */
   async function idProdutoPorTermo(termo) {
     const r = await admin.get(`/admin/produtos?q=${encodeURIComponent(termo)}`);
-    const ignorar = new Set(['novo', 'importar', 'exportar', 'inovafarma']);
+    const ignorar = new Set(['novo', 'importar', 'exportar', 'inovafarma', 'substituir-catalogo']);
     for (const m of r.texto.matchAll(/\/admin\/produtos\/([A-Za-z0-9_-]{4,})"/g)) {
       if (!ignorar.has(m[1])) return m[1];
     }

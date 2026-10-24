@@ -10,6 +10,8 @@ import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
+import { telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova } from '../views/admin/substituir-catalogo-inova.js';
+import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
@@ -290,6 +292,114 @@ export function registrarRotasAdmin(app, db) {
   });
 
   // Nova página principal, sem API ou login no ERP. Apenas superadmin.
+  // Zerar completamente a tabela de produtos e cadastrar APENAS novos itens do
+  // CSV integral InovaFarma; a importação comum e a conciliação não fazem isso.
+  app.get('/admin/produtos/substituir-catalogo', (req, res) => {
+    if (!guard(req,res,'produtos.excluir')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('Operação exclusiva do superadministrador.');
+    res.set('Cache-Control','no-store');
+    res.html(telaSubstituirCatalogoInova(ctxAdmin(req, db)));
+  });
+
+  app.post('/admin/estoque/substituicao/preparar',
+    {maxBodyBytes:8*1024*1024+128*1024}, (req, res) => {
+    if (!guard(req,res,'produtos.excluir')) return;
+    if (req.adminUser.role !== 'super_admin' || !can(req.adminUser,'produtos.criar'))
+      return void res.status(403).html('Sem permissão para substituir o catálogo.');
+    res.set('Cache-Control','no-store');
+    const arquivo=(req.files||[]).find(f=>f.field==='arquivo');
+    if(!arquivo||!/\.csv$/i.test(String(arquivo.filename||''))||
+        !arquivo.data?.length||arquivo.data.length>8*1024*1024)
+      return void res.status(400).html(paginaAdmin(ctxAdmin(req,db),{
+        titulo:'CSV integral obrigatório',ativo:'produtos',
+        conteudo:'<h1>Selecione o arquivo CSV completo</h1>'+
+          '<p>Use o arquivo InovaFarma contendo os 6.128 produtos, saldos e preços.</p>'+
+          '<a href="/admin/produtos/substituir-catalogo">Voltar</a>'
+      }));
+    try {
+      const prev=prepararSubstituicaoCatalogoInova(db,arquivo.data,req.adminUser.id);
+      return void res.redirect('/admin/estoque/substituicao/revisar/'+
+        encodeURIComponent(prev.id));
+    } catch (err) {
+      const esperado=err instanceof ErroSubstituicaoInova;
+      if(!esperado)console.error('[inova-substituicao] falha interna na prévia:',
+        err?.name||'Erro');
+      return void res.status(esperado?err.status||400:500).html(paginaAdmin(
+        ctxAdmin(req,db),{titulo:'Substituição não preparada',ativo:'produtos',
+          conteudo:'<h1>Não foi possível preparar a substituição</h1><p>'+
+          e(esperado?err.message:'Falha interna na preparação do catálogo. Nenhum produto foi alterado.')+
+          '</p><a href="/admin/produtos/substituir-catalogo">Voltar</a>'
+        }));
+    }
+  });
+
+  app.get('/admin/estoque/substituicao/revisar/:id',(req,res)=>{
+    if(!guard(req,res,'produtos.excluir'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Operação exclusiva do superadministrador.');
+    res.set('Cache-Control','no-store');
+    try {
+      const prev=consultarSubstituicaoCatalogoInova(db,String(req.params.id),
+        req.adminUser.id);
+      return void res.html(telaRevisaoSubstituirCatalogoInova(ctxAdmin(req,db),prev));
+    }catch(err){
+      const esperado=err instanceof ErroSubstituicaoInova;
+      return void res.status(esperado?err.status||400:500).html(paginaAdmin(
+        ctxAdmin(req,db),{titulo:'Conferência indisponível',ativo:'produtos',
+          conteudo:'<h1>Conferência não disponível</h1><p>'+
+            e(esperado?err.message:'Falha ao conferir catálogo; nenhum produto foi alterado.')+
+            '</p><a href="/admin/produtos/substituir-catalogo">Voltar</a>'
+        }));
+    }
+  });
+
+  app.post('/admin/estoque/substituicao/aplicar',(req,res)=>{
+    if(!guard(req,res,'produtos.excluir'))return;
+    if(req.adminUser.role!=='super_admin'||!can(req.adminUser,'produtos.criar'))
+      return void res.status(403).html('Sem permissão para substituir o catálogo.');
+    res.set('Cache-Control','no-store');
+    const id=String(req.body.loteId||'');
+    if(!/^sub_[0-9a-f-]{36}$/.test(id))
+      return void res.status(400).html('Lote de substituição inválido.');
+    try{
+      const resultado=aplicarSubstituicaoCatalogoInova(db,id,req.adminUser.id,{
+        frase:String(req.body.frase||''),
+        backupConfirmado:String(req.body.backupConfirmado||''),
+        autorizou:String(req.body.autorizou||''),
+      });
+      logAdmin(db,req.adminUser,'substituiu_todo_catalogo_inovafarma','sistema',id,{
+        produtosAnterioresArquivados:resultado.antigosArquivados,
+        produtosNovosCriados:resultado.criados,carrinhosLimpados:resultado.carrinhosLimpos,
+        estoqueNegativo:resultado.estoqueNegativo,semEAN:resultado.semEAN,
+      },req);
+      return void res.html(paginaAdmin(ctxAdmin(req,db),{
+        titulo:'Catálogo substituído',ativo:'produtos',
+        conteudo:'<h1>Catálogo novo importado do InovaFarma</h1>'+
+          '<div class="alerta sucesso"><strong>'+e(resultado.antigosArquivados)+
+          ' produtos antigos saíram da tabela atual.</strong> Foram criados '+
+          '<strong>'+e(resultado.criados)+' cadastros totalmente novos</strong>, '+
+          'sem reaproveitar os produtos anteriores.</div>'+
+          '<p>Todos os novos produtos estão inativos para revisão. Pedidos, pagamentos e '+
+          'históricos anteriores foram mantidos. Os cadastros antigos ficaram apenas em '+
+          'arquivo privado de segurança para auditoria.</p>'+
+          '<p>Confira preços, fotos, estoque e regras sanitárias antes de ativar vendas.</p>'+
+          '<a class="botao" href="/admin/produtos">Ver novo catálogo</a>'
+      }));
+    }catch(err){
+      const esperado=err instanceof ErroSubstituicaoInova;
+      if(!esperado)console.error('[inova-substituicao] erro interno na aplicação:',
+        err?.name||'Erro');
+      return void res.status(esperado?err.status||400:500).html(paginaAdmin(
+        ctxAdmin(req,db),{titulo:'Substituição bloqueada',ativo:'produtos',
+          conteudo:'<h1>Substituição não realizada</h1><p>'+
+            e(esperado?err.message:
+              'Falha interna durante a troca. O banco reverteu a transação; tente novamente após auditoria.')+
+            '</p><a href="/admin/produtos/substituir-catalogo">Voltar</a>'
+        }));
+    }
+  });
+
   app.get('/admin/estoque/importar', (req, res) => {
     if (!guard(req, res, 'produtos.criar')) return;
     if (req.adminUser.role !== 'super_admin')

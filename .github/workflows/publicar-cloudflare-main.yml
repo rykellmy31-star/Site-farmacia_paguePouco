@@ -43,6 +43,9 @@ jobs:
           node --test tests/inovafarma-promocoes-csv.test.js tests/inovafarma-promocoes-layout-real.test.js tests/inovafarma-promocoes-admin.test.js
           node --test tests/inovafarma-csv-import.test.js
 
+      - name: Impedir publicação de reset sem testes de histórico e segurança
+        run: node --test tests/inovafarma-catalogo-substituicao.test.js
+
       - name: Homologar componentes Cloudflare em armazenamento local isolado
         run: npm run test:cloudflare
 
