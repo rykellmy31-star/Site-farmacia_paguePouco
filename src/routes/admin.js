@@ -12,7 +12,7 @@ import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
-import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado } from '../lib/inovafarma-limpeza-segura.js';
+import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
 import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
 import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
 import { telaPreviaAplicacaoPromocoesInova } from '../views/admin/inovafarma-promocoes-aplicar.js';
@@ -422,11 +422,21 @@ export function registrarRotasAdmin(app, db) {
         habilitado:previa.habilitado, inalterado:true,
         elegiveis:previa.elegiveis, emCarrinhos:previa.emCarrinhos,
       }));
-    } catch {
-      return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
-        titulo: 'Não foi possível conferir', ativo: 'importacao_estoque',
-        conteudo: '<h1>CSV inválido</h1><p>Confira os códigos internos e as linhas do relatório integral.</p>' +
-          '<p><a href="/admin/estoque/importar">Voltar</a></p>'
+    } catch (err) {
+      const esperado = err instanceof ErroRelatorioInova;
+      if (!esperado) {
+        // Não atribuir falhas de banco ao CSV nem expor exceções/credenciais.
+        console.error('[inova-limpeza] falha interna de conferência:', err?.name || 'Erro');
+      }
+      const mensagem = esperado ? err.message :
+        'O arquivo não foi aplicado: houve um erro interno ao preparar a conferência. ' +
+        'O catálogo não foi alterado. Verifique os registros de execução do Worker.';
+      return void res.status(esperado ? 400 : 500).html(paginaAdmin(ctxAdmin(req, db), {
+        titulo: esperado ? 'Relatório não reconhecido' : 'Conferência indisponível',
+        ativo: 'importacao_estoque',
+        conteudo: '<h1>' + (esperado ? 'Não foi possível ler o relatório' :
+          'Não foi possível concluir a conferência') + '</h1><p>' + e(mensagem) + '</p>' +
+          '<p><a class="botao secundario" href="/admin/estoque/importar">Voltar à importação</a></p>'
       }));
     }
   });
