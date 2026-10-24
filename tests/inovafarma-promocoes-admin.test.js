@@ -13,7 +13,8 @@ test('importação de estoque oferece prévia CSV de promoções com CSRF e sem 
   const html=telaImportacaoEstoque(ctx);
   assert.match(html,/action="\/admin\/estoque\/promocoes\/conferir"/);
   assert.match(html,/name="_csrf" value="TOKEN_TESTE"/);
-  assert.match(html,/Conferir promoções sem alterar a loja/);
+  assert.match(html,/Somente conferir promoções/);
+  assert.match(html,/formaction="\/admin\/estoque\/promocoes\/preparar"/);
   assert.doesNotMatch(html,/action="\/admin\/estoque\/promocoes\/aplicar"/);
 });
 test('prévia mostra conflitos e protege HTML do relatório',()=>{
