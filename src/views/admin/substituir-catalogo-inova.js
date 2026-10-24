@@ -38,7 +38,7 @@ export function telaSubstituirCatalogoInova(ctx) {
       '<p><a class="botao secundario" href="/admin/produtos">Voltar aos produtos</a></p>',
   });
 }
-export function detalhesPendenciasSubstituicao(bloqueios) {
+export function detalhesPendenciasSubstituicao(bloqueios,ctx=null) {
   if(!bloqueios)return '';
   const pedidos=bloqueios.pedidos||[];
   const produtos=bloqueios.produtos||[];
@@ -64,6 +64,45 @@ export function detalhesPendenciasSubstituicao(bloqueios) {
       '<td><a class="botao pequeno secundario" href="/admin/produtos/'+
       txt(encodeURIComponent(p.id))+'">Abrir produto</a></td></tr>';
   }).join('');
+
+  // So o diagnostico autenticado oferece a confirmacao fisica. A previa de
+  // substituicao continua sem qualquer acao de baixa de estoque.
+  const conciliacoes=ctx&&!pedidos.length?produtos
+    .filter(p=>Number(p.quarentena)>0&&Number(p.reservado)===0&&
+      Number(p.inovaPendente)===0)
+    .slice(0,20).map(p=>painel({
+      titulo:'Conciliação física da quarentena — '+txt(p.nome),
+      corpo:
+        '<div class="alerta aviso"><strong>Atenção:</strong> este formulário só registra uma '+
+        'baixa de '+txt(qtd(p.quarentena))+' unidade(s) que JÁ tenham sido descartadas, '+
+        'devolvidas ao fornecedor ou comprovadamente não localizadas na contagem física. '+
+        'Não use para apagar um bloqueio sem conferir a mercadoria. '+
+        'O sistema não libera esta unidade para venda e não modifica pedidos.</div>'+
+        '<p>Saldo total registrado: <strong>'+txt(qtd(p.saldo))+
+        '</strong> · Em quarentena: <strong>'+txt(qtd(p.quarentena))+'</strong></p>'+
+        '<form method="post" action="/admin/api/estoque/quarentena/conciliar">'+
+        '<input type="hidden" name="_csrf" value="'+txt(ctx.csrf)+'">'+
+        '<input type="hidden" name="produtoId" value="'+txt(p.id)+'">'+
+        '<input type="hidden" name="saldoAnterior" value="'+txt(p.saldo)+'">'+
+        '<input type="hidden" name="quarentenaAnterior" value="'+txt(p.quarentena)+'">'+
+        '<div class="campo"><label>Destino físico confirmado</label>'+
+        '<select name="destino" required><option value="">Selecione após conferir</option>'+
+        '<option value="descarte_fisico">Descarte físico já realizado</option>'+
+        '<option value="devolucao_fornecedor">Devolução ao fornecedor já realizada</option>'+
+        '<option value="divergencia_inventario">Não localizado na contagem física (divergência documentada)</option>'+
+        '</select></div>'+
+        '<div class="campo"><label>Justificativa da conferência (20–500 caracteres)</label>'+
+        '<textarea name="justificativa" minlength="20" maxlength="500" required '+
+        'placeholder="Informe data, conferência e destino comprovado da unidade"></textarea></div>'+
+        '<div class="campo"><label><input type="checkbox" name="conferenciaFisica" value="1" required> '+
+        'Confirmei a situação real da unidade e estou registrando uma baixa já ocorrida.</label></div>'+
+        '<div class="campo"><label><input type="checkbox" name="backupConfirmado" value="1" required> '+
+        'Guardei um backup do banco fora do site antes desta baixa.</label></div>'+
+        '<div class="campo"><label>Digite CONCILIAR QUARENTENA</label>'+
+        '<input name="confirmacao" required autocomplete="off" placeholder="CONCILIAR QUARENTENA"></div>'+
+        '<button class="botao perigo" type="submit">Registrar baixa auditada da quarentena</button>'+
+        '</form>'
+    })).join(''):'';
   return painel({titulo:'Pendências que impedem a substituição — identifique e resolva',corpo:
     '<div class="alerta aviso"><strong>Não é erro do CSV.</strong> A troca está bloqueada '+
     'para proteger pagamentos, entregas e reservas. Não cancele pedidos pagos nem '+
@@ -91,7 +130,7 @@ export function detalhesPendenciasSubstituicao(bloqueios) {
     '<p><a class="botao secundario" href="/admin/produtos/substituir-catalogo">'+
     'Reenviar CSV depois de resolver as pendências</a></p>'+
     '<p class="texto-pequeno">O envio deve ser repetido porque a proposta anterior '+
-    'é invalidada sempre que pedidos ou produtos forem alterados.</p>',
+    'é invalidada sempre que pedidos ou produtos forem alterados.</p>'+conciliacoes,
   });
 }
 
@@ -109,8 +148,8 @@ export function telaPendenciasSubstituicaoInova(ctx,bloqueios) {
       '<h1>Pedidos e produtos que bloqueiam a substituição</h1>'+
       '<div class="alerta info"><strong>Consulta somente leitura.</strong> '+
       'Os dados abaixo são consultados agora no banco da farmácia. '+
-      'Não é necessário reenviar o CSV para identificar pendências, e nada é cancelado, '+
-      'liberado, apagado ou atualizado nesta página.</div>'+
+      'Não é necessário reenviar o CSV. A consulta não altera nada; eventual '+
+      'conciliação física exige confirmação separada do Superadmin.</div>'+
       painel({titulo:'Situação atual da loja',corpo:
         '<p><strong>Pedidos que impedem a troca:</strong> '+txt(nPedidos)+
         ' · <strong>Produtos com estoque comprometido:</strong> '+txt(nProdutos)+
@@ -118,7 +157,7 @@ export function telaPendenciasSubstituicaoInova(ctx,bloqueios) {
         '<p><strong>Importante:</strong> pedidos pagos ou pendentes precisam de verificação real. '+
         'Estoque em quarentena ou com sincronização pendente exige conciliação, não apenas zerar a quantidade.</p>'})+
       (nPedidos||nProdutos?
-        detalhesPendenciasSubstituicao(bloqueios):
+        detalhesPendenciasSubstituicao(bloqueios,ctx):
         painel({titulo:'Nenhum bloqueio operacional encontrado',corpo:
           '<p>Não há pedidos ou reservas impedindo a troca neste instante. '+
           'O envio integral do CSV e a confirmação do backup ainda são obrigatórios.</p>'}))+
