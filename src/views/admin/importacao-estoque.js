@@ -119,15 +119,16 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '5. Robô de exportações InovaFarma — preparação local',
-        corpo: `<p class="texto-pequeno"><strong>Fase 1 disponível para instalar no Windows.</strong>
-          O robô monitora a pasta de relatórios exportados, valida CSVs de estoque e
-          promoções, impede duplicatas e organiza cópias para revisão.</p>
-          <p class="texto-pequeno"><strong>Ainda não está instalado nem enviando atualizações
-          automaticamente.</strong> Por segurança, a importação no site continua
-          exigindo envio e confirmação humana. Não modifica o ERP.</p>
-          <p><a href="https://github.com/rykellmy31-star/Site-farmacia_paguePouco/blob/main/docs/18-robo-windows-inovafarma.md"
-          target="_blank" rel="noopener noreferrer" class="botao secundario">Ver instalação do robô Windows</a></p>`,
+        titulo: '5. Robô InovaFarma — envio automático do CSV',
+        corpo: `<p class="texto-pequeno"><strong>Sincronização automática por exportação CSV disponível.</strong>
+          Depois do pareamento inicial no computador Windows, basta exportar o
+          relatório de Posição de Estoque para C:\\InovaExportacoes. O robô envia
+          automaticamente os saldos e preços de venda ao site.</p>
+          <p class="texto-pequeno">Produtos sem EAN podem ser vinculados por código interno único.
+          Estoques negativos viram zero; identificações conflitantes e pedidos pagos
+          ainda não conciliados com o ERP ficam separados para revisão. Produtos
+          novos entram inativos. Promoções usam relatório separado.</p>
+          <p><a class="botao" href="/admin/robo-inovafarma">Abrir painel do Robô InovaFarma e parear Windows</a></p>`,
       })}
     `,
   });
