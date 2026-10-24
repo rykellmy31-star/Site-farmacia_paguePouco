@@ -195,6 +195,32 @@ test('pedido Pix pendente ou reservas impedem a substituição',()=>{
     assert.equal(db.collection('products').count(),2);
   }
 });
+test('falha depois de remover antigos causa rollback completo sem catálogo parcial',()=>{
+  const {db}=criarDB({pedidos:[pedidoEncerrado()]});
+  const pre=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
+  const orig=db.collection.bind(db);
+  let count=0;
+  db.collection=(name)=>{
+    const col=orig(name);
+    if(name!=='products')return col;
+    const insert=col.insert;
+    col.insert=(documento)=>{
+      if(String(documento.id).startsWith('inova_novo_') && ++count===900)
+        throw new Error('falha simulada durante a importação');
+      return insert(documento);
+    };
+    return col;
+  };
+  assert.throws(()=>aplicarSubstituicaoCatalogoInova(db,pre.id,'super',{
+    frase:'SUBSTITUIR TODO O CATALOGO',autorizou:'1',backupConfirmado:'1'
+  },now),/transação revertida/);
+  assert.equal(db.collection('products').count(),2);
+  assert.equal(db.collection('products').get('antigo_001').ativo,true);
+  assert.equal(db.collection('inovaCatalogoHistorico').count(),0);
+  assert.equal(db.collection('inovaCatalogoSubstituicoes').get(pre.id).aplicadoEm,null);
+  assert.equal(db.collection('orders').count(),1);
+});
+
 test('mudança de produto ou carrinho invalida prévia; carrinho vazio novo não invalida',()=>{
   const {db}=criarDB({pedidos:[pedidoEncerrado()]});
   const p=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
