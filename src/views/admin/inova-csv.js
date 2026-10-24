@@ -5,10 +5,10 @@ export function telaPreviaRelatorioInova(ctx, previa) {
   const n=previa.resumo;
   const bloqueado=n.conflitos>0;
   return paginaAdmin(ctx,{
-    titulo:'Conferir relatório de estoque',ativo:'produtos',
+    titulo:'Conferir relatório de estoque',ativo:'importacao_estoque',
     conteudo:`
       <h1>Prévia do estoque — relatório exportado</h1>
-      <p><a href="/admin/produtos/importar">Voltar para importar produtos</a></p>
+      <p><a href="/admin/estoque/importar">Voltar para Importação de estoque</a></p>
       <div class="alerta aviso">
         <strong>Nenhuma alteração foi realizada nesta etapa.</strong>
         Produtos existentes conservarão nome, preço, visibilidade, categorias e dados sanitários.

@@ -32,6 +32,8 @@ jobs:
         run: node --test tests/pitr-readiness.test.js
       - name: Verify isolated backup restore and recurring Cloudflare alarms
         run: node --test tests/restore-rehearsal.test.js tests/financial-alarm.test.js
+      - name: Menu e pagina dedicada de importacao de estoque
+        run: node --test tests/importacao-estoque-menu.test.js
       - name: CSV initial stock import safety and zero inventory
         run: node --test tests/inovafarma-csv-import.test.js
       - name: INOVAFARMA stock connector safety tests

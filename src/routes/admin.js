@@ -7,10 +7,9 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { config } from '../config.js';
 import { inovaAtiva } from '../lib/inovafarma-stock.js';
-import { diagnosticoInova, salvarConfiguracaoInova, armazenarCredencialInova, apagarCredencialInova } from '../lib/inovafarma-panel.js';
-import { telaIntegracaoInova } from '../views/admin/inovafarma.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
+import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
 import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
 import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-catalog-import.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
@@ -280,6 +279,15 @@ export function registrarRotasAdmin(app, db) {
     }));
   });
 
+  // Nova página principal, sem API ou login no ERP. Apenas superadmin.
+  app.get('/admin/estoque/importar', (req, res) => {
+    if (!guard(req, res, 'produtos.criar')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('403 — Importação de estoque restrita ao Super Administrador.');
+    res.set('Cache-Control', 'no-store');
+    res.html(telaImportacaoEstoque(ctxAdmin(req, db)));
+  });
+
   app.get('/admin/produtos/importar', (req, res) => {
     if (!guard(req, res, 'produtos.criar')) return;
     res.html(telaImportar(ctxAdmin(req, db)));
@@ -438,53 +446,26 @@ export function registrarRotasAdmin(app, db) {
     }));
   });
 
-  /* ======================== INTEGRAÇÃO INOVAFARMA ======================= */
+  /* ============== ENDEREÇOS ANTIGOS DE INTEGRAÇÃO ============== */
+  // A API externa não será usada. Preservar os dados antigos e bloquear
+  // configuração/credenciais, mesmo para quem conheça links legados.
   app.get('/admin/inovafarma', (req, res) => {
-    if (!guard(req, res, 'inovafarma.ver')) return;
-    const ctx = ctxAdmin(req, db);
+    if (!guard(req, res, 'produtos.criar')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('403 — Acesso restrito ao Super Administrador.');
     res.set('Cache-Control', 'no-store');
-    res.html(telaIntegracaoInova(ctx, {
-      dados: diagnosticoInova(db),
-      erro: req.query.get('erro') || '',
-      salvo: req.query.get('salvo') || '',
-    }));
+    res.redirect('/admin/estoque/importar');
   });
-
-  const guardInovaSuper = (req, res) => {
-    if (!req.adminUser) return void res.redirect('/admin/login'), false;
-    if (req.adminUser.role !== 'super_admin') {
-      res.status(403).html('403 — Somente Super Administrador pode alterar a integração InovaFarma.');
-      return false;
-    }
-    return true;
+  const integracaoAntigaDesativada = (req, res) => {
+    if (!guardApi(req, res, 'produtos.criar')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.json({ ok: false, erro: 'Sem permissão.' }, 403);
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: false, erro: 'Integração via API desativada. Use Importação de estoque no painel.' }, 410);
   };
-  const falhaInova = (res, msg) => res.redirect('/admin/inovafarma?erro=' + encodeURIComponent(msg));
-  app.post('/admin/inovafarma/configuracao', (req, res) => {
-    if (!guardInovaSuper(req, res)) return;
-    const r = salvarConfiguracaoInova(db, {
-      urlConector: req.body.urlConector,
-      estabelecimento: req.body.estabelecimento,
-      intervaloMinutos: req.body.intervaloMinutos,
-    });
-    if (!r.ok) return void falhaInova(res, r.erro);
-    logAdmin(db, req.adminUser, 'salvou_configuracao_inova', 'integracao', 'inovafarma',
-      { status: 'aguardando_homologacao' }, req);
-    res.redirect('/admin/inovafarma?salvo=1');
-  });
-  app.post('/admin/inovafarma/credencial', { maxBodyBytes: 5 * 1024 }, (req, res) => {
-    if (!guardInovaSuper(req, res)) return;
-    const r = armazenarCredencialInova(db, req.body.credencial);
-    if (!r.ok) return void falhaInova(res, r.erro);
-    // O conteúdo e o tamanho da credencial jamais entram em auditoria.
-    logAdmin(db, req.adminUser, 'salvou_credencial_inova', 'integracao', 'inovafarma', {}, req);
-    res.redirect('/admin/inovafarma?salvo=credencial');
-  });
-  app.post('/admin/inovafarma/credencial/remover', (req, res) => {
-    if (!guardInovaSuper(req, res)) return;
-    apagarCredencialInova(db);
-    logAdmin(db, req.adminUser, 'removeu_credencial_inova', 'integracao', 'inovafarma', {}, req);
-    res.redirect('/admin/inovafarma?salvo=remocao');
-  });
+  app.post('/admin/inovafarma/configuracao', integracaoAntigaDesativada);
+  app.post('/admin/inovafarma/credencial', integracaoAntigaDesativada);
+  app.post('/admin/inovafarma/credencial/remover', integracaoAntigaDesativada);
 
   /* ============================== VENDEDORES ============================ */
   app.get('/admin/vendedores', (req, res) => {
