@@ -4,10 +4,11 @@
  * Uma campanha semanal só funciona no dia explicitamente gravado na importação.
  */
 const DIAS = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
+const DATA_BR_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone:'America/Bahia',year:'numeric',month:'2-digit',day:'2-digit'
+});
 export function diaLocalFarmacia(referencia = new Date()) {
-  const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Bahia', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(referencia);
+  const partes = DATA_BR_FORMATTER.formatToParts(referencia);
   const campo = n => partes.find(p => p.type === n)?.value;
   return [campo('year'),campo('month'),campo('day')].join('-');
 }
