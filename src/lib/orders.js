@@ -665,7 +665,9 @@ export function metricas(db, { de = null, ate = null } = {}) {
   const pagos = pedidos.filter((o) => o.statusFinanceiro === 'aprovado');
   const receita = pagos.reduce((a, o) => a + Number(o.totalCentavos || 0), 0);
   const ticket = pagos.length ? Math.round(receita / pagos.length) : 0;
-  const produtos = db.collection('products').all();
+  // Cadastros arquivados permanecem para auditoria, mas não entram nos
+  // indicadores do catálogo comercial atual.
+  const produtos = db.collection('products').all().filter(p => !p.inovaArquivado?.em);
   const estoqueBaixo = produtos.filter((p) => {
     const e = p.estoque || {};
     return Number(e.quantidade || 0) <= Number(e.minimo || 0);
