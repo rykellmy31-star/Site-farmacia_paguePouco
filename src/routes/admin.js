@@ -36,7 +36,7 @@ import {
   telaUsuarios, telaAuditoria, telaSistema, telaAparencia,
 } from '../views/admin/config.js';
 import {
-  montarArvore, slugUnicoProduto, slugUnicoCategoria, marcasDisponiveis, podeVender,
+  montarArvore, slugUnicoProduto, slugUnicoCategoria, marcasDisponiveis, podeVender, filtrarProdutosPorEstoque,
 } from '../lib/catalog.js';
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
@@ -274,6 +274,7 @@ export function registrarRotasAdmin(app, db) {
     if (status === 'ativo') todos = todos.filter((p) => p.ativo);
     if (status === 'inativo') todos = todos.filter((p) => !p.ativo);
     if (status === 'estoque_baixo') todos = todos.filter((p) => Number(p.estoque?.quantidade || 0) <= Number(p.estoque?.minimo || 0));
+    todos = filtrarProdutosPorEstoque(todos, status);
     if (status === 'bloqueado') todos = todos.filter((p) => p.ativo && !podeVender(p).ok);
     todos.sort((a, b) => String(b.atualizadoEm || '').localeCompare(String(a.atualizadoEm || '')));
     const total = todos.length;
@@ -1964,10 +1965,12 @@ function registrarApi(app, db) {
         credit_card: req.body.meios_credit_card === '1',
         debit_card: req.body.meios_debit_card === '1',
       },
-      parcelamentoMaximo: Number(req.body.parcelamentoMaximo) || 6,
-      parcelasSemJuros: Number(req.body.parcelasSemJuros) || 3,
+      // Limites comerciais fixos: nenhum valor enviado pelo navegador ou
+      // configuracao legada permite acima de 6x ou abaixo de R$ 25 por parcela.
+      parcelamentoMaximo: 6,
+      parcelasSemJuros: Math.max(1, Math.min(6, Number(req.body.parcelasSemJuros) || 3)),
       taxaJurosMes: Number(req.body.taxaJurosMes) || 0,
-      valorMinimoParcela: toCents(req.body.valorMinimoParcela || '5'),
+      valorMinimoParcela: 2500,
       descontoPixPercentual: Number(req.body.descontoPixPercentual) || 0,
       mensagemCheckout: cleanText(req.body.mensagemCheckout, 500),
     }, req.adminUser, req);
