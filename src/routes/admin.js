@@ -11,7 +11,7 @@ import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.j
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
 import { telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova, telaPendenciasSubstituicaoInova } from '../views/admin/substituir-catalogo-inova.js';
-import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
+import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova, conciliarQuarentenaSubstituicaoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
@@ -1254,6 +1254,12 @@ function registrarApi(app, db) {
     if (inovaAtiva() && Number.isFinite(novaQtd) && novaQtd !== Number(estoque.quantidade || 0)) {
       return void res.json({ ok: false, erro: 'Quantidade gerenciada pela InovaFarma: edite o estoque no ERP.' }, 409);
     }
+    const totalProtegido = Number(estoque.reservado || 0) +
+      Number(estoque.quarentena || 0) + Number(estoque.inovaPendente || 0);
+    if (Number.isFinite(novaQtd) && (!Number.isSafeInteger(novaQtd) ||
+        !Number.isSafeInteger(totalProtegido) || novaQtd < totalProtegido)) {
+      return void res.json({ok:false,erro:'Quantidade menor que o estoque reservado ou segregado em quarentena. Faça conciliação física antes de reduzir.'},409);
+    }
     if (Number.isFinite(novaQtd) && novaQtd !== Number(estoque.quantidade || 0)) {
       registrarMovimentoEstoque(db, {
         produtoId: produto.id, tipo: 'ajuste', quantidade: novaQtd,
@@ -1450,6 +1456,42 @@ function registrarApi(app, db) {
   });
 
   /* ------------------------------- ESTOQUE ------------------------------ */
+
+  // Baixa de quarentena exige conferência física anterior e consentimento
+  // explícito do Superadmin. Não altera financeiro nem pedidos.
+  app.post('/admin/api/estoque/quarentena/conciliar', (req,res)=>{
+    if(!guardApi(req,res,'estoque.movimentar'))return;
+    if(req.adminUser.role!=='super_admin'||
+       !can(req.adminUser,'produtos.excluir'))
+      return void res.json({ok:false,erro:'Conciliação exclusiva do Superadmin.'},403);
+    res.set('Cache-Control','no-store');
+    try{
+      const resultado=conciliarQuarentenaSubstituicaoInova(
+        db,String(req.body.produtoId||''),{
+          saldoAnterior:String(req.body.saldoAnterior??''),
+          quarentenaAnterior:String(req.body.quarentenaAnterior??''),
+          destino:String(req.body.destino||''),
+          justificativa:String(req.body.justificativa||''),
+          conferenciaFisica:String(req.body.conferenciaFisica||''),
+          backupConfirmado:String(req.body.backupConfirmado||''),
+          confirmacao:String(req.body.confirmacao||''),
+        },req.adminUser.id);
+      logAdmin(db,req.adminUser,'conciliou_quarentena_inova','produto',resultado.produtoId,{
+        destino:String(req.body.destino||''),
+        quantidade:resultado.baixa,movimentoId:resultado.movimentoId,
+      },req);
+      return void res.json({...resultado,
+        url:'/admin/produtos/substituir-catalogo/pendencias'});
+    }catch(err){
+      const esperado=err instanceof ErroSubstituicaoInova;
+      if(!esperado)console.error('[inova-quarentena] falha de conciliacao:',
+        err?.name||'Erro');
+      return void res.json({ok:false,erro:esperado?err.message:
+        'Falha interna na conciliação de quarentena. Confira o histórico antes de repetir.'},
+        esperado?err.status||400:500);
+    }
+  });
+
   app.post('/admin/api/estoque/movimentar', (req, res) => {
     if (!guardApi(req, res, 'estoque.movimentar')) return;
     if (inovaAtiva()) return void res.json({ ok: false, erro: 'Movimentações de estoque devem ser feitas na InovaFarma.' }, 409);
@@ -1466,9 +1508,13 @@ function registrarApi(app, db) {
     if (!produto) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
     const saldo = Number(produto.estoque?.quantidade || 0);
     const reservado = Number(produto.estoque?.reservado || 0);
-    if ((tipo === 'saida' && qtd > saldo - reservado) ||
-        (tipo === 'ajuste' && qtd < reservado)) {
-      return void res.json({ ok: false, erro: 'Movimentação excede estoque disponível ou compromete reservas de pedidos.' }, 409);
+    const quarentena = Number(produto.estoque?.quarentena || 0);
+    const inovaPendente = Number(produto.estoque?.inovaPendente || 0);
+    const protegido = reservado + quarentena + inovaPendente;
+    if (!Number.isSafeInteger(saldo) || !Number.isSafeInteger(protegido) || protegido < 0 ||
+        (tipo === 'saida' && qtd > saldo - protegido) ||
+        (tipo === 'ajuste' && qtd < protegido)) {
+      return void res.json({ ok: false, erro: 'Movimentação comprometeria reserva, quarentena ou pendência de sincronização. Use conciliação física para quarentena.' }, 409);
     }
     const mov = registrarMovimentoEstoque(db, {
       produtoId, tipo: tipo || 'entrada', quantidade: qtd,
