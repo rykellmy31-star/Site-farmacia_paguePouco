@@ -1,0 +1,83 @@
+name: Publicar Farmácia Pague Pouco na Cloudflare
+
+# Somente alterações aprovadas e integradas à main podem publicar.
+# Nenhum deploy a partir de PR, fork ou branch de desenvolvimento.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: producao-cloudflare-site-farmacia-paguepouco
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    if: github.repository == 'rykellmy31-star/Site-farmacia_paguePouco' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Baixar versão aprovada
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+
+      - name: Validar fluxos críticos da loja
+        run: npm test
+
+      - name: Proteger limpeza do catálogo, descontos e importações
+        run: |
+          node --test tests/inovafarma-limpeza-previa.test.js tests/inovafarma-limpeza-segura.test.js
+          node --test tests/inovafarma-promocoes-csv.test.js tests/inovafarma-promocoes-layout-real.test.js tests/inovafarma-promocoes-admin.test.js
+          node --test tests/inovafarma-csv-import.test.js
+
+      - name: Homologar componentes Cloudflare em armazenamento local isolado
+        run: npm run test:cloudflare
+
+      - name: Preparar arquivos de publicação
+        run: npm run build
+
+      - name: Compilar Worker sem implantar
+        run: npm run check:cloudflare
+
+      - name: Verificar credenciais de publicação (sem exibir valores)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "::error::Configure CLOUDFLARE_API_TOKEN com permissão Workers Scripts Edit no GitHub Actions."
+            exit 1
+          fi
+          if [ -z "$CF_ACCOUNT" ]; then
+            echo "::error::Configure CLOUDFLARE_ACCOUNT_ID em GitHub Actions Variables."
+            exit 1
+          fi
+          echo "Variáveis presentes; os valores não serão exibidos."
+
+      # wrangler.jsonc contém nome e binding existentes do Worker.
+      # keep_vars=true preserva variáveis e segredos da produção; o banco
+      # Durable Object é persistente e nunca é recriado por este workflow.
+      - name: Publicar Worker existente na Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.jsonc
+
+      - name: Testar site publicado (somente leitura, sem pedidos ou pagamentos)
+        run: node scripts/smoke-cloudflare-readonly.mjs
+
+      - name: Confirmar SHA publicado no GitHub Actions
+        run: echo "PUBLICACAO_GITHUB_SHA=${{ github.sha }}"
