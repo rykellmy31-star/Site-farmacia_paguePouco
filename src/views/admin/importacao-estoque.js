@@ -51,7 +51,27 @@ export function telaImportacaoEstoque(ctx) {
           e os produtos novos permanecerão inativos e sem preço.</p>`,
       })}
       ${painel({
-        titulo: '3. Atualizações futuras',
+        titulo: '3. Conferir descontos e promoções do InovaFarma',
+        corpo: `<p>O <strong>Relatório de Promoções</strong> é diferente do relatório de estoque:
+          ele mostra campanhas, preços promocionais, desconto percentual e período.
+          Envie o CSV que você exportou no menu Relatório de Promoções do InovaFarma.</p>
+          <div class="alerta info"><strong>Prévia somente leitura.</strong>
+            O site não aplicará nenhum desconto ao conferir o relatório.
+            Campanhas por dia da semana, promoções futuras e condições de pagamento
+            precisarão ser revisadas antes de permitir atualização automática.</div>
+          <form method="post" action="/admin/estoque/promocoes/conferir"
+                enctype="multipart/form-data">
+            <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            <div class="campo">
+              <label for="arquivoPromocoesInova">Selecione Relatório de Promoções (CSV)</label>
+              <input type="file" name="arquivo" id="arquivoPromocoesInova"
+                     accept=".csv,text/csv" required>
+            </div>
+            <button class="botao" type="submit">Conferir promoções sem alterar a loja</button>
+          </form>`,
+      })}
+      ${painel({
+        titulo: '4. Atualizações futuras',
         corpo: `<p class="texto-pequeno">Após importar seu primeiro relatório, poderemos usar
           um monitor separado no computador Windows para detectar novas exportações.
           Esse robô ainda não está instalado nem ativo. Atualmente, a importação

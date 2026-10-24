@@ -10,6 +10,8 @@ import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
+import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
+import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
 import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
 import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-catalog-import.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
@@ -286,6 +288,37 @@ export function registrarRotasAdmin(app, db) {
       return void res.status(403).html('403 — Importação de estoque restrita ao Super Administrador.');
     res.set('Cache-Control', 'no-store');
     res.html(telaImportacaoEstoque(ctxAdmin(req, db)));
+  });
+
+  // Relatório de promoções separado do estoque. Preview em memória, sem gravar
+  // dados no catálogo, DB ou aplicar qualquer desconto.
+  app.post('/admin/estoque/promocoes/conferir', { maxBodyBytes: 8 * 1024 * 1024 + 128 * 1024 }, (req, res) => {
+    if (!guard(req, res, 'produtos.criar')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('Acesso exclusivo ao Super Administrador.');
+    res.set('Cache-Control', 'no-store');
+    const arquivo = (req.files || []).find(f => f.field === 'arquivo');
+    if (!arquivo || !/\.csv$/i.test(String(arquivo.filename || '')) ||
+        !arquivo.data?.length || arquivo.data.length > 8 * 1024 * 1024)
+      return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
+        titulo: 'CSV de promoções inválido', ativo: 'importacao_estoque',
+        conteudo: '<h1>Arquivo inválido</h1><p>Selecione o Relatório de Promoções em CSV (até 8 MB).</p>' +
+          '<p><a href="/admin/estoque/importar">Voltar</a></p>'
+      }));
+    try {
+      let texto;
+      try { texto = new TextDecoder('utf-8', { fatal: true }).decode(arquivo.data); }
+      catch { texto = new TextDecoder('windows-1252').decode(arquivo.data); }
+      const previa = previsualizarPromocoesInova(db, texto);
+      return void res.html(telaPreviaPromocoesInova(ctxAdmin(req, db), previa));
+    } catch (err) {
+      return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
+        titulo: 'Não foi possível conferir promoções', ativo: 'importacao_estoque',
+        conteudo: '<h1>Não foi possível conferir o relatório</h1>' +
+          '<p>' + e(err?.message || 'Verifique o formato do arquivo.') + '</p>' +
+          '<p><a href="/admin/estoque/importar">Voltar</a></p>'
+      }));
+    }
   });
 
   app.get('/admin/produtos/importar', (req, res) => {
