@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {
   lerCatalogoNovoInova, prepararSubstituicaoCatalogoInova,
-  consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova,
+  consultarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova,
+  aplicarSubstituicaoCatalogoInova,
   ErroSubstituicaoInova,
 } from '../src/lib/inovafarma-catalogo-substituicao.js';
 import {
@@ -195,6 +196,60 @@ test('pedido Pix pendente ou reservas impedem a substituição',()=>{
     assert.equal(db.collection('products').count(),2);
   }
 });
+test('prévia bloqueada identifica pedido e produto exatos, sem expor dados de cliente',()=>{
+  const pedido={id:'pedido_001',codigo:'PP2026000789',
+    statusFinanceiro:'pendente',statusOperacional:'aguardando_pagamento',
+    pendenciaPagamento:'criacao_em_andamento',
+    cliente:{nome:'CLIENTE PRIVADO',email:'privado@exemplo.com'},
+    itens:[{produtoId:'antigo_001',quantidade:1}],
+    atualizadoEm:'2026-10-24T18:30:00Z'};
+  const {db}=criarDB({pedidos:[pedido],reservas:2});
+  db.collection('products').update('antigo_001',{nome:'<script>alert("x")</script>'});
+  const qtdProdutos=db.collection('products').count();
+  const pre=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
+  const consulta=consultarSubstituicaoCatalogoInova(db,pre.id,'super',now);
+  assert.equal(consulta.pronto,false);
+  assert.equal(consulta.resumo.pedidosAbertos,1);
+  assert.equal(consulta.resumo.estoqueReservado,1);
+  assert.equal(consulta.bloqueios.pedidos[0].codigo,'PP2026000789');
+  assert.equal(consulta.bloqueios.pedidos[0].conferenciaPagamento,true);
+  assert.equal(consulta.bloqueios.produtos[0].reservado,2);
+  assert.equal(consulta.bloqueios.produtos[0].pedidosRelacionados[0].id,'pedido_001');
+  assert.equal(db.collection('products').count(),qtdProdutos);
+  assert.equal(db.collection('orders').get('pedido_001').statusFinanceiro,'pendente');
+  const ctx={
+    adminUser:{role:'super_admin',nome:'Super'},csrf:'CSRF_TESTE',
+    settings:{empresa:{nomeFantasia:'Farmácia'},tema:{}},
+    req:{pathname:'/admin/produtos/substituir-catalogo',query:new URLSearchParams()},
+  };
+  const html=telaRevisaoSubstituirCatalogoInova(ctx,consulta);
+  assert.match(html,/PP2026000789/);
+  assert.match(html,/href="\/admin\/pedidos\/pedido_001"/);
+  assert.match(html,/href="\/admin\/produtos\/antigo_001"/);
+  assert.match(html,/Confira a cobrança no Mercado Pago antes de cancelar/);
+  assert.match(html,/Quarentena/);
+  assert.doesNotMatch(html,/CLIENTE PRIVADO/);
+  assert.doesNotMatch(html,/privado@exemplo.com/);
+  assert.doesNotMatch(html,/<script>alert\("x"\)<\/script>/);
+  assert.match(html,/&lt;script&gt;/);
+  assert.doesNotMatch(html,/action="\/admin\/estoque\/substituicao\/aplicar"/);
+});
+
+test('produto em quarentena sem pedido é exibido para conciliação, não zerado',()=>{
+  const {db}=criarDB({pedidos:[pedidoEncerrado()],carrinhos:false});
+  const p=db.collection('products').get('antigo_002');
+  db.collection('products').update(p.id,{estoque:{quantidade:3,quarentena:3,reservado:0,inovaPendente:0}});
+  const antes=identificarBloqueiosSubstituicaoInova(db);
+  assert.equal(antes.pedidos.length,0);
+  assert.equal(antes.produtos.length,1);
+  assert.equal(antes.produtos[0].quarentena,3);
+  assert.equal(antes.produtos[0].pedidosRelacionados.length,0);
+  const pre=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
+  const consulta=consultarSubstituicaoCatalogoInova(db,pre.id,'super',now);
+  assert.equal(consulta.pronto,false);
+  assert.equal(db.collection('products').get(p.id).estoque.quarentena,3);
+});
+
 test('falha depois de remover antigos causa rollback completo sem catálogo parcial',()=>{
   const {db}=criarDB({pedidos:[pedidoEncerrado()]});
   const pre=prepararSubstituicaoCatalogoInova(db,csv(),'super',now);
