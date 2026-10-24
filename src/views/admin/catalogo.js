@@ -365,6 +365,27 @@ export function telaImportar(ctx) {
         <a class="botao" href="/admin/api/produtos/exportar.csv" download>Baixar CSV</a>`,
     })}
     ${painel({
+      titulo: 'Importar estoque inicial do InovaFarma — relatório CSV',
+      corpo: `<div class="alerta info"><strong>Etapa 1: importar o estoque existente.</strong>
+        No InovaFarma para Windows, exporte o relatório Posição de Estoque como CSV.
+        O arquivo deve trazer <strong>código de barras (EAN), descrição e quantidade em estoque</strong>.
+        A importação primeiro apresenta uma prévia: <strong>nenhum saldo muda antes da sua confirmação.</strong>
+        Não precisa informar login ou senha do ERP.</div>
+        <p class="texto-pequeno">Produtos já cadastrados são identificados exclusivamente pelo EAN:
+          alteramos somente o saldo, sem substituir preço, imagens, descrições, categoria ou dados sanitários.
+          Produtos novos são cadastrados com o saldo recebido, mas ficam inativos até revisão.
+          Estoque zero significa esgotado quando não houver pedidos reservados.
+          Arquivos sem produtos não zeram automaticamente todo o catálogo.</p>
+        <form method="post" action="/admin/api/produtos/inova-csv/preparar" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+          <div class="campo"><label for="arquivoInovaCsv">Relatório do InovaFarma (.csv)</label>
+            <input type="file" id="arquivoInovaCsv" name="arquivo" accept=".csv,text/csv" required></div>
+          <button class="botao" type="submit">Conferir relatório antes de importar</button>
+        </form>
+        <p class="texto-pequeno">Depois da importação inicial, poderemos instalar no Windows o monitor
+          automático de novos relatórios. Esse monitor ainda não está ativo.</p>`,
+    })}
+    ${painel({
       titulo: 'Importar produtos (CSV)',
       corpo: `<p class="texto-pequeno">Colunas aceitas: <code>nome,sku,ean,marca,fabricante,categoria,subcategoria,preco,precoPromocional,quantidade,estoqueMinimo,peso,descricao,ativo</code>.
         A primeira linha deve conter o cabeçalho. Produtos são criados; se o SKU já existir, o cadastro é atualizado.
