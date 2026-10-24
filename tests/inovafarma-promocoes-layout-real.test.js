@@ -21,7 +21,7 @@ test('aceita o layout do relatório exportado do InovaFarma', () => {
   assert.equal(r.promocoes[0].precoPromocionalCentavos, 1719);
   assert.equal(r.promocoes[0].descontoPercentual, 30);
   assert.equal(r.promocoes[0].campanha.inicio, '2026-10-01');
-  assert.ok(r.promocoes[0].campanha.formasPagamento.includes('vista'));
+  assert.ok(r.promocoes[0].campanha.formasPagamento.includes('a_vista'));
 });
 test('prévia cruza código interno e sinaliza regra de pagamento sem gravar', () => {
   const db = { collection(name) {
@@ -39,4 +39,20 @@ test('prévia sinaliza campanhas vencidas', () => {
   const db = { collection: () => ({ all: () => [{id:'1', codigoInterno:'834991'}] }) };
   const r = previsualizarPromocoesInova(db, csv, new Date('2026-11-01T12:00:00Z'));
   assert.equal(r.resumo.foraDaVigencia, 1);
+});
+
+
+test('campanha semanal sem data final permanece pendente de revisão', () => {
+  const linhas = csv.split('\r\n');
+  linhas[2] = 'Promoção;;151;;;TERÇA DO SUPLEMENTO';
+  linhas[4] = ';;;;;;Vista;[X];Cheque;;[X];Cartão;;;[X]';
+  linhas.splice(5, 0, '25/06/2025;;;;;;;;;;;;;;;Cart. Digital;;;[X]');
+  const semanal = linhas.join('\r\n');
+  const lido = analisarPromocoesInovaCsv(semanal);
+  assert.equal(lido.promocoes[0].campanha.fim, null);
+  assert.equal(lido.promocoes[0].campanha.diaSugerido, 'terca');
+  const db = { collection: () => ({ all: () => [{id:'1', codigoInterno:'834991'}] }) };
+  const previa = previsualizarPromocoesInova(db, semanal, new Date('2026-10-24T12:00:00Z'));
+  assert.equal(previa.resumo.recorrenciaParaRevisar, 1);
+  assert.equal(previa.aplicarAutomaticamente, false);
 });
