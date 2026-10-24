@@ -51,7 +51,7 @@ export function analisarPromocoesInovaCsv(csv) {
       cabecalho = false; continue;
     }
     if (campanha && date(r[0]) && date(r[2])) {
-      const formasPagamento = [[6,7,'vista'],[8,10,'cheque'],[11,14,'cartao'],[15,18,'cartao_digital'],[19,20,'prazo']]\n        .filter(([nome,flag]) => r[nome] && r[flag] === '[X]').map(([, , tipo]) => tipo);\n      campanha = { ...campanha, inicio: date(r[0]), fim: date(r[2]), formasPagamento };
+      const formasPagamento = [[6,7,'vista'],[8,10,'cheque'],[11,14,'cartao'],[15,18,'cartao_digital'],[19,21,'prazo']]\n        .filter(([nome,flag]) => r[nome] && r[flag] === '[X]').map(([, , tipo]) => tipo);\n      campanha = { ...campanha, inicio: date(r[0]), fim: date(r[2]), formasPagamento };
       continue;
     }
     if (r[0] === 'Código' && r[1] === 'Produto') {
