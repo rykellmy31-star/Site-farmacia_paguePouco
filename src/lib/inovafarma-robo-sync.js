@@ -156,9 +156,15 @@ function criarNovoInativo(db,it,agora){
     criadoEm:agora,atualizadoEm:agora,
   });
 }
-function aplicarProduto(db,it,agora,indicadores) {
+function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set()) {
   const produtos=db.collection('products');
   const todos=produtos.all();
+  if(it.ean && duplicadosEan.has(it.ean)){
+    indicadores.pendentes++;return detalhe(it,'ean_duplicado_no_relatorio');
+  }
+  if(todos.some(p=>p.inovaArquivado?.em&&String(p.codigoInterno||'')===it.codigoInterno)){
+    indicadores.pendentes++;return detalhe(it,'codigo_arquivado_nao_recriar');
+  }
   const porCodigo=todos.filter(p=>String(p.codigoInterno||'')===it.codigoInterno&&!p.inovaArquivado?.em);
   const eanValido=EAN.test(it.ean);
   const porEan=eanValido?todos.filter(p=>String(p.ean||'')===it.ean&&!p.inovaArquivado?.em):[];
@@ -221,12 +227,21 @@ export function aplicarBlocoRoboInova(db,{arquivoHash,bloco}={}) {
   // A aplicação é sequencial e reentrante. Não pode pular blocos.
   if(bloco>0&&!db.collection(batchesCol).get(arquivoHash+':'+(bloco-1))?.aplicadoEm)
     return err('Aplique o bloco anterior primeiro.',409);
+  const vistosEan=new Map(),duplicadosEan=new Set();
+  for(let n=0;n<job.blocos;n++){
+    for(const it of db.collection(batchesCol).get(arquivoHash+':'+n).items){
+      if(!EAN.test(it.ean))continue;
+      if(vistosEan.has(it.ean)&&vistosEan.get(it.ean)!==it.codigoInterno)
+        duplicadosEan.add(it.ean);
+      else vistosEan.set(it.ean,it.codigoInterno);
+    }
+  }
   const ind={atualizados:0,semAlteracao:0,novosInativos:0,pendentes:0};
   const detalhes=[];const agora=nowISO();
   try{
     return transacionar(db,()=>{
       for(const it of lote.items){
-        const item=aplicarProduto(db,it,agora,ind);
+        const item=aplicarProduto(db,it,agora,ind,duplicadosEan);
         if(item&&detalhes.length<50)detalhes.push(item);
       }
       db.collection(batchesCol).update(lote.id,{aplicadoEm:agora});
