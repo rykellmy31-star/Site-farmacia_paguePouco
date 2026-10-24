@@ -42,6 +42,8 @@ jobs:
         run: node --test tests/inovafarma-csv-import.test.js
       - name: InovaFarma promotional CSV parse, preview and safety (no database writes)
         run: node --test tests/inovafarma-promocoes-csv.test.js tests/inovafarma-promocoes-layout-real.test.js tests/inovafarma-promocoes-admin.test.js
+      - name: InovaFarma promotional discounts application and checkout validity
+        run: node --test tests/inovafarma-promocoes-aplicacao.test.js
       - name: INOVAFARMA stock connector safety tests
         run: node --test tests/inovafarma-stock.test.js
       - name: Existing integration tests (simulated payments only)
