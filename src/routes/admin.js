@@ -10,6 +10,8 @@ import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { diagnosticoInova, salvarConfiguracaoInova, armazenarCredencialInova, apagarCredencialInova } from '../lib/inovafarma-panel.js';
 import { telaIntegracaoInova } from '../views/admin/inovafarma.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
+import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
+import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
 import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-catalog-import.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
 import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
@@ -286,6 +288,49 @@ export function registrarRotasAdmin(app, db) {
   // Revisão do catálogo recebido da InovaFarma. Permissão exclusiva de Super
   // Administrador: todos os demais perfis são bloqueados NO SERVIDOR.
   // Esta página não contata o ERP e não aciona publicações automáticas.
+  // Exportação do ERP feita manualmente no Windows. Não loga no InovaFarma.
+  // Preparo registra APENAS a prévia. Estoque muda só na segunda confirmação.
+  app.post('/admin/api/produtos/inova-csv/preparar', (req, res) => {
+    if (!guardApi(req, res, 'produtos.criar')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.json({ok:false,erro:'Somente o superadministrador pode importar o estoque.'},403);
+    const arquivo=(req.files||[]).find(f=>f.field==='arquivo');
+    if(!arquivo || !/\.csv$/i.test(String(arquivo.filename||'')))
+      return void res.json({ok:false,erro:'Selecione o relatório exportado em CSV.'},400);
+    const resultado=prepararRelatorioEstoque(db,arquivo.data,{operadorId:req.adminUser.id});
+    if(!resultado.ok)return void res.json(resultado,resultado.status||400);
+    logAdmin(db,req.adminUser,'preparou_relatorio_estoque','sistema',null,{
+      total:resultado.resumo.total,conflitos:resultado.resumo.conflitos,
+    },req);
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,url:'/admin/produtos/importar/relatorio/'+resultado.id});
+  });
+
+  app.get('/admin/produtos/importar/relatorio/:id', (req,res)=>{
+    if(!guard(req,res,'produtos.criar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente o superadministrador pode conferir a importação.');
+    const previa=consultarRelatorioEstoque(db,req.params.id,req.adminUser.id);
+    if(!previa.ok)return void res.status(previa.status||400).html('Prévia indisponível. Retorne a Importar produtos.');
+    res.set('Cache-Control','no-store');
+    res.html(telaPreviaRelatorioInova(ctxAdmin(req,db),previa));
+  });
+
+  app.post('/admin/api/produtos/inova-csv/aplicar',(req,res)=>{
+    if(!guardApi(req,res,'produtos.criar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.json({ok:false,erro:'Somente o superadministrador pode confirmar.'},403);
+    if(req.body.confirmar!=='1'||!/^csv_[0-9a-f-]{36}$/.test(String(req.body.loteId||'')))
+      return void res.json({ok:false,erro:'Confirmação do relatório inválida.'},400);
+    const resultado=aplicarRelatorioEstoque(db,String(req.body.loteId),req.adminUser.id);
+    if(!resultado.ok)return void res.json(resultado,resultado.status||409);
+    logAdmin(db,req.adminUser,'aplicou_relatorio_estoque','sistema',null,{
+      total:resultado.total,novos:resultado.novos,ajustes:resultado.ajustes,esgotados:resultado.esgotados,
+    },req);
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,url:'/admin/produtos/importar/relatorio/'+String(req.body.loteId)+'?aplicado=1'});
+  });
+
   app.get('/admin/produtos/inovafarma', (req, res) => {
     if (!guard(req, res, 'inovafarma.ver')) return;
     if (req.adminUser.role !== 'super_admin')

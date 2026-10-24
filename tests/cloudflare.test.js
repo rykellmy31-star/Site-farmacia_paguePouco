@@ -276,6 +276,48 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
     Buffer.from('2026/10/arquivo-inexistente.png').toString('base64url'))).status, 404,
     'arquivo inexistente deve devolver 404');
 
+  // Prova de ponta a ponta: o relatório do ERP é recebido por sessão privada,
+  // a prévia não muda dados, somente uma confirmação válida aplica o saldo.
+  const csvInovaForm = new FormData();
+  csvInovaForm.append('_csrf', adminToken);
+  csvInovaForm.append('arquivo', new Blob([
+    'Codigo de Barras;Descricao;Estoque Atual;Codigo Interno\n' +
+    '7891234500009;Sabonete laboratorio;0;INOVATEST9000\n',
+  ], {type:'text/csv'}), 'relatorio-inicial.csv');
+  const prepararCsv=await call('/admin/api/produtos/inova-csv/preparar', {
+    method:'POST',body:csvInovaForm,
+  });
+  assert.equal(prepararCsv.status,200);
+  const preparada=await prepararCsv.json();
+    assert.ok(preparada.url.startsWith('/admin/produtos/importar/relatorio/csv_'));
+  const previewResponse=await call(preparada.url);
+  assert.equal(previewResponse.status,200);
+  assert.match(await previewResponse.text(),/Confirmar importação inicial/);
+  const antesConfirmar=await call('/admin/api/sistema/backup',{
+    method:'POST',body:new URLSearchParams({_csrf:adminToken}),
+  });
+  assert.equal((await antesConfirmar.json()).collections.products?.some(
+    p=>p.ean==='7891234500009'),false,'a prévia não cadastra produto');
+  const confirmar=()=>call('/admin/api/produtos/inova-csv/aplicar',{
+    method:'POST',body:new URLSearchParams({
+      _csrf:adminToken,loteId:preparada.url.split('/').at(-1),confirmar:'1',
+    }),
+  });
+  const aplicado=await confirmar();
+  assert.equal(aplicado.status,200);
+  assert.equal((await aplicado.json()).ok,true);
+  const duplicado=await confirmar();
+  assert.equal(duplicado.status,409,'confirmação repetida não dobra o estoque');
+  const depoisConfirmar=await call('/admin/api/sistema/backup',{
+    method:'POST',body:new URLSearchParams({_csrf:adminToken}),
+  });
+  const pCsv=(await depoisConfirmar.json()).collections.products.find(
+    p=>p.ean==='7891234500009');
+  assert.ok(pCsv);
+  assert.equal(pCsv.estoque.quantidade,0);
+  assert.equal(pCsv.ativo,false,'produto novo não pode ser anunciado sem revisão');
+  assert.equal(pCsv.sanitario.requerReceita,true);
+
   // Fluxo real do editor de produtos: a rota GET exibe o formulário,
   // mas o action POST deve apontar para /admin/api/produtos(/:id).
   const newProductPage = await call('/admin/produtos/novo');
