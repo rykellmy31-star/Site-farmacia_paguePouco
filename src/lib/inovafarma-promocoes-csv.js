@@ -21,7 +21,7 @@ export function analisarPromocoesInovaCsv(csv) {
   }
   if (quoted) throw new Error('CSV com aspas incompletas');
   row.push(field.trim()); if (row.some(Boolean)) rows.push(row);
-  if (!rows[0]?.[0]?.includes('RELATÓRIO DE PROMOÇÕES'))
+  if (!rows[0]?.[0]?.normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('RELATORIO DE PROMOCOES'))
     throw new Error('Arquivo não é o Relatório de Promoções');
   const money = v => {
     const s = String(v || '').replace(/\s/g, '');
@@ -51,7 +51,7 @@ export function analisarPromocoesInovaCsv(csv) {
       cabecalho = false; continue;
     }
     if (campanha && date(r[0]) && date(r[2])) {
-      const formasPagamento = [[6,7,'vista'],[8,10,'cheque'],[11,14,'cartao'],[15,18,'cartao_digital'],[19,21,'prazo']]\n        .filter(([nome,flag]) => r[nome] && r[flag] === '[X]').map(([, , tipo]) => tipo);\n      campanha = { ...campanha, inicio: date(r[0]), fim: date(r[2]), formasPagamento };
+      const formasPagamento = [[6,7,'vista'],[8,10,'cheque'],[11,14,'cartao'],[15,18,'cartao_digital'],[19,20,'prazo']]\n        .filter(([nome,flag]) => r[nome] && r[flag] === '[X]').map(([, , tipo]) => tipo);\n      campanha = { ...campanha, inicio: date(r[0]), fim: date(r[2]), formasPagamento };
       continue;
     }
     if (r[0] === 'Código' && r[1] === 'Produto') {
