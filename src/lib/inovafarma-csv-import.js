@@ -117,6 +117,12 @@ function carregarCsv(data) {
   return itens;
 }
 
+// Reutiliza exatamente a validação do CSV de estoque para conferir o catálogo
+// sem armazenar lotes ou alterar registros no banco.
+export function lerItensRelatorioEstoqueSomenteLeitura(arquivo) {
+  return carregarCsv(arquivo);
+}
+
 function avaliar(db,itens) {
   const existentes=db.collection('products').all();
   const porEan=new Map(),porCodigo=new Map();

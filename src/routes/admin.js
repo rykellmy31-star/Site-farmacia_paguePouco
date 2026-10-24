@@ -10,6 +10,9 @@ import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
+import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
+import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
+import { lerItensRelatorioEstoqueSomenteLeitura } from '../lib/inovafarma-csv-import.js';
 import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
 import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
 import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
@@ -316,6 +319,36 @@ export function registrarRotasAdmin(app, db) {
         titulo: 'Não foi possível conferir promoções', ativo: 'importacao_estoque',
         conteudo: '<h1>Não foi possível conferir o relatório</h1>' +
           '<p>' + e(err?.message || 'Verifique o formato do arquivo.') + '</p>' +
+          '<p><a href="/admin/estoque/importar">Voltar</a></p>'
+      }));
+    }
+  });
+
+  // Auditoria do catálogo legada é SOMENTE LEITURA. Não desativa ou remove.
+  app.post('/admin/estoque/limpeza/previa',
+    { maxBodyBytes: 8 * 1024 * 1024 + 128 * 1024 }, (req, res) => {
+    if (!guard(req, res, 'produtos.criar')) return;
+    if (req.adminUser.role !== 'super_admin')
+      return void res.status(403).html('Conferência restrita ao Super Administrador.');
+    res.set('Cache-Control', 'no-store');
+    const arquivo = (req.files || []).find(f => f.field === 'arquivo');
+    if (!arquivo || !/\.csv$/i.test(String(arquivo.filename || '')) ||
+        !arquivo.data?.length || arquivo.data.length > 8 * 1024 * 1024)
+      return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
+        titulo: 'Relatório inválido', ativo: 'importacao_estoque',
+        conteudo: '<h1>Relatório inválido</h1><p>Selecione o CSV da Posição de Estoque (até 8 MB).</p>'
+      }));
+    try {
+      const itens = lerItensRelatorioEstoqueSomenteLeitura(arquivo.data);
+      const previa = planejarLimpezaCatalogoInova(
+        db.collection('products').all(), itens, db.collection('orders').all()
+      );
+      return void res.html(telaPreviaLimpezaInova(ctxAdmin(req, db), previa));
+    } catch {
+      return void res.status(400).html(paginaAdmin(ctxAdmin(req, db), {
+        titulo: 'Não foi possível conferir', ativo: 'importacao_estoque',
+        conteudo: '<h1>CSV inválido</h1><p>Confira código de barras, código interno, ' +
+          'quantidade e preço de venda do arquivo antes da comparação.</p>' +
           '<p><a href="/admin/estoque/importar">Voltar</a></p>'
       }));
     }
