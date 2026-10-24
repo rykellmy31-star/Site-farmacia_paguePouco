@@ -55,12 +55,12 @@ export function detalhesPendenciasSubstituicao(bloqueios) {
   const linhasProdutos=produtos.slice(0,20).map(p=>{
     const relacionados=(p.pedidosRelacionados||[]).slice(0,3).map(o=>
       '<a href="/admin/pedidos/'+txt(encodeURIComponent(o.id))+'">'+
-      txt(o.codigo)+'</a>').join(', ');
+      txt(o.codigo)+'</a> <span class="texto-pequeno">('+txt(o.financeiro)+' / '+txt(o.operacional)+')</span>').join(', ');
     return '<tr><td><strong>'+txt(p.nome)+'</strong><br>'+
       '<span class="texto-pequeno">Código interno: '+txt(p.codigoInterno||'—')+'</span></td>'+
       '<td>'+txt(p.reservado)+'</td><td>'+txt(p.quarentena)+'</td>'+
       '<td>'+txt(p.inovaPendente)+'</td>'+
-      '<td>'+(relacionados||'Sem relação com os pedidos abertos')+'</td>'+
+      '<td>'+(relacionados||'Nenhum pedido vinculado localizado')+'</td>'+
       '<td><a class="botao pequeno secundario" href="/admin/produtos/'+
       txt(encodeURIComponent(p.id))+'">Abrir produto</a></td></tr>';
   }).join('');
