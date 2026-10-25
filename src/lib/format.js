@@ -42,9 +42,9 @@ export function fromCents(cents) {
   return Math.round(Number(cents ?? 0)) / 100;
 }
 
-// Toda data/hora exibida ao cliente e à equipe segue o horário da farmácia;
+// Toda data/hora exibida ao cliente e à equipe segue o horário de Brasília;
 // registros persistidos continuam em UTC para conciliação, segurança e ordenação.
-export const FUSO_LOJA = 'America/Bahia';
+export const FUSO_LOJA = 'America/Sao_Paulo';
 
 export function formatDate(iso, opts = {}) {
   if (!iso) return '—';

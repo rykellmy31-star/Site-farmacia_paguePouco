@@ -2,6 +2,7 @@
 import {paginaAdmin} from '../views/admin/layout.js';
 import {escapeHtml as e, csrfToken} from '../lib/security.js';
 import {getAllSettings} from '../lib/settings.js';
+import {formatDateTime} from '../lib/format.js';
 import {can} from '../lib/permissions.js';
 import {logAdmin} from '../lib/audit.js';
 import {
@@ -67,8 +68,9 @@ export function registrarRotasRoboInova(app,db) {
           <strong>Sem alteração:</strong> ${ultimo.semAlteracao};
           <strong>Novos inativos:</strong> ${ultimo.novosInativos};
           <strong>Pendências:</strong> ${ultimo.pendentes}.</p>
-          <p>Relatório exportado em: ${e(ultimo.geradoEm)};
-          processamento: ${e(ultimo.concluidoEm||ultimo.iniciadoEm)}</p>
+          <p>Relatório exportado em: ${e(formatDateTime(ultimo.geradoEm))};
+          processamento: ${e(formatDateTime(ultimo.concluidoEm || ultimo.iniciadoEm))}
+          <span class="texto-pequeno">(horário de Brasília)</span></p>
           ${ultimo.detalhes?.length?`<h3>Conferências necessárias</h3><ul>${ultimo.detalhes.map(x=>
             `<li>Código ${e(x.codigoInterno)}: ${e(x.motivo)}</li>`).join('')}</ul>`:''}
           `:'<p>Nenhum relatório sincronizado por este robô.</p>'}

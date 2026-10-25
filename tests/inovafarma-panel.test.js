@@ -23,8 +23,8 @@ const KEY = 'segredo-apenas-para-testes-32-bytes-distinto-mp';
 const ctx=(db,role='super_admin')=>({db,settings:{empresa:{nomeFantasia:'Farmácia Pague Pouco'},tema:{}},
   adminUser:{role,id:'admin1',nome:'Admin'},permissoes:{},csrf:'token-teste',req:{pathname:'/admin/inovafarma'} });
 
-test('exibe a hora exata em America/Bahia (-3), independente do fuso do servidor',()=>{
-  assert.equal(FUSO_LOJA,'America/Bahia');
+test('exibe a hora exata em America/Sao_Paulo (-3), independente do fuso do servidor',()=>{
+  assert.equal(FUSO_LOJA,'America/Sao_Paulo');
   const old=process.env.TZ;
   try {
     process.env.TZ='UTC';
@@ -33,10 +33,12 @@ test('exibe a hora exata em America/Bahia (-3), independente do fuso do servidor
     assert.equal(formatDate('2026-10-22T01:10:00.000Z'),'21/10/2026');
     assert.equal(formatDate('2026-10-21'),'21/10/2026');
     assert.equal(formatDateTime('invalido'),'—');
+    assert.equal(formatDateTime('2026-10-25T17:07:19.024Z'),'25/10/2026 14:07');
+    assert.equal(formatDateTime('2026-10-25T13:34:13-03:00'),'25/10/2026 13:34');
   } finally { if(old === undefined)delete process.env.TZ; else process.env.TZ=old; }
 });
 
-test('horário do atendimento usa dia e hora da Bahia mesmo no Worker UTC',()=>{
+test('horário do atendimento usa dia e hora de Brasília mesmo no Worker UTC',()=>{
   const whatsapp={respeitarHorario:true,mensagemIndisponivel:'Fechado',horarios:[
     {dia:'quarta',ativo:true,inicio:'14:00',fim:'15:00'},
     {dia:'quinta',ativo:false,inicio:'00:00',fim:'00:00'},

@@ -169,6 +169,9 @@ test('rotas autenticadas /webhooks e painel Superadmin, sem remover CSRF geral',
   assert.match(route,/req.adminUser.role!=='super_admin'/);
   assert.match(route,/name="backup"/);
   assert.match(route,/Cache-Control','no-store/);
+  assert.match(route,/formatDateTime\(ultimo\.geradoEm\)/);
+  assert.match(route,/formatDateTime\(ultimo\.concluidoEm \|\| ultimo\.iniciadoEm\)/);
+  assert.match(route,/horário de Brasília/);
   const source=fs.readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
   assert.match(source,/registrarRotasRoboInova\(app, db\)/);
 });
