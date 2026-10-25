@@ -133,6 +133,19 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
          <p class="texto-pequeno texto-suave">Registro histórico da compra. Não será modificado por edições futuras no vendedor.</p>`
       : '<p>Atendimento geral — nenhum vendedor selecionado no pedido.</p>' })}
 
+    ${pedido.statusFinanceiro === 'aprovado' ? painel({
+      titulo: 'Recebimento do pedido pela equipe',
+      corpo: pedido.pedidoRecebidoEm
+        ? `<p>✓ <strong>Pedido recebido</strong><br>Funcionário: ${e(pedido.pedidoRecebidoNome || 'Equipe')}<br>Data e hora: ${formatDateTime(pedido.pedidoRecebidoEm)}</p>`
+        : ctx.permissoes?.podeEditarPedidos
+          ? `<p>O pagamento foi aprovado. Confirme que a equipe tomou conhecimento deste pedido para encerrar os lembretes.</p>
+            <form method="post" action="/admin/pedidos/${e(pedido.id)}/recebido">
+              <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+              <button type="submit" class="botao">✓ Pedido Recebido</button>
+            </form>`
+          : '<p>Aguardando confirmação de um funcionário autorizado.</p>',
+    }) : ''}
+
     <div class="cartoes">
       ${cartaoMetrica('Total', money(pedido.totalCentavos), `${(pedido.itens || []).reduce((a, i) => a + i.quantidade, 0)} itens`)}
       ${cartaoMetrica('Pagamento', STATUS_FINANCEIRO[pedido.statusFinanceiro]?.nome || pedido.statusFinanceiro)}
