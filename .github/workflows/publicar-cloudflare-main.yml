@@ -42,6 +42,8 @@ jobs:
       - name: Validar parcelas sem juros em produto, checkout e sacola antes do deploy
         run: node --test tests/parcelamento-filtros-estoque.test.js tests/parcelamento-vitrine.test.js tests/parcelamento-cesta-dinamico.test.js
 
+      - name: Validar notificacoes de venda paga no Windows
+        run: node --test tests/avisos-vendas-desktop.test.js
       - name: Validar robo local e sincronizacao automatica antes do deploy
         run: node --test tests/inovafarma-robo-windows.test.js tests/inovafarma-robo-auto.test.js
 
