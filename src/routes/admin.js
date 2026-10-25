@@ -922,6 +922,26 @@ export function registrarRotasAdmin(app, db) {
     res.redirect('/admin/pedidos?visibilidade=ocultos&aviso=' + encodeURIComponent('Pedido restaurado para a conta do cliente.'));
   });
 
+  app.post('/admin/pedidos/:id/recebido', (req, res) => {
+    if (!guard(req, res, 'pedidos.editar')) return;
+    const pedido = db.collection('orders').get(req.params.id);
+    if (!pedido) return void res.status(404).html('Pedido não encontrado.');
+    if (pedido.statusFinanceiro !== 'aprovado')
+      return void res.status(409).html('Somente pedidos com pagamento aprovado podem ser recebidos.');
+    if (!pedido.pedidoRecebidoEm) {
+      const em = new Date().toISOString();
+      db.collection('orders').update(pedido.id, {
+        pedidoRecebidoEm: em,
+        pedidoRecebidoPor: req.adminUser.id,
+        pedidoRecebidoNome: req.adminUser.nome,
+        atualizadoEm: em,
+      });
+      logAdmin(db, req.adminUser, 'pedido_recebido', 'pedido', pedido.id,
+        { codigo: pedido.codigo, em }, req);
+    }
+    return void res.redirect('/admin/pedidos/' + encodeURIComponent(pedido.id));
+  });
+
   app.get('/admin/pedidos/:id', (req, res) => {
     if (!guard(req, res, 'pedidos.ver')) return;
     const ctx = ctxAdmin(req, db);
