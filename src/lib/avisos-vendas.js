@@ -5,7 +5,7 @@
 const HORIZONTE_MS = 48 * 60 * 60 * 1000;
 export function listarVendasPagasParaAviso(db, {agoraMs=Date.now(),limite=100}={}) {
   const inicio=agoraMs-HORIZONTE_MS;
-  return db.collection('orders').all().filter(p=>p?.statusFinanceiro==='aprovado')
+  return db.collection('orders').all().filter(p=>p?.statusFinanceiro==='aprovado' && !p?.pedidoRecebidoEm)
     .map(p=>{
       const confirmado=(p.historico||[]).findLast(
         h=>h?.tipo==='financeiro'&&h?.status==='aprovado'&&Number.isFinite(Date.parse(h.em)));
