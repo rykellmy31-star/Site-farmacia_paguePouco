@@ -72,6 +72,7 @@ ${headExtra}
     </span>
     <span class="espaco"></span>
     <span class="texto-pequeno esconde-mobile">${e(usuario.nome)} · ${e(ROLES[usuario.role]?.nome || usuario.role)}</span>
+    ${can(usuario, "pedidos.ver") ? `<button type="button" class="botao pequeno secundario" id="pp-avisos-vendas" aria-label="Ativar alertas de pedidos pagos">🔔 Ativar avisos</button>` : ""}
     <a href="/" target="_blank" rel="noopener">Ver site ↗</a>
     <a href="/admin/sair">Sair</a>
   </div>
@@ -89,6 +90,7 @@ ${headExtra}
 <div class="notificacao" id="notificacaoAdmin" role="status"></div>
 <script>window.PP_ADMIN=${JSON.stringify({ csrf: ctx.csrf, role: usuario.role })};</script>
 <script src="/js/admin.js?v=estornos-pendentes-v4" defer></script>
+${can(usuario, 'pedidos.ver') ? '<script src="/js/avisos-vendas.js?v=20261025" defer></script>' : ''}
 ${corpoExtra}
 </body>
 </html>`;

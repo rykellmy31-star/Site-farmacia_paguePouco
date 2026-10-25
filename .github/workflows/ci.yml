@@ -26,6 +26,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Payment and Pix safety regressions (offline, mocked provider)
         run: node --test tests/payment-safety.test.js tests/pix-reconciliation.test.js tests/report-permissions.test.js tests/checkout-recovery.test.js tests/cart-integrity.test.js tests/admin-reconciliation-queue.test.js tests/order-notifications.test.js tests/customer-addresses.test.js tests/coupon-policy.test.js tests/session-security.test.js tests/cep-freight.test.js tests/developer-credit.test.js tests/branding-favicon.test.js tests/mercadopago-credentials.test.js tests/mercadopago-pix-diagnostics.test.js tests/compact-purchase-ui.test.js tests/cloudflare-production-config.test.js tests/paid-pix-status.test.js tests/order-history-privacy.test.js tests/sellers.test.js tests/inovafarma-panel.test.js tests/inovafarma-automation.test.js tests/inovafarma-catalog-import.test.js tests/order-status-banner-background.test.js tests/financial-ops-health.test.js tests/cloudflare-real-backup-cli.test.js tests/order-visibility.test.js
+      - name: Desktop sale alerts - authorization and paid events
+        run: node --test tests/avisos-vendas-desktop.test.js
       - name: Nested category navigation regression
         run: node --test tests/categorias-aninhadas.test.js
       - name: Verify PITR recovery readiness is read only and admin restricted

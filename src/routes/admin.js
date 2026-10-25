@@ -59,6 +59,7 @@ import { cadastrarVendedor, editarVendedor, metricasVendedores } from '../lib/se
 import { telaVendedores } from '../views/admin/sellers.js';
 import { validarNovoCupom } from '../lib/coupon-validation.js';
 import { pedidoOcultoDoCliente, ocultarPedidoDoCliente, restaurarPedidoAoCliente } from '../lib/order-visibility.js';
+import { listarVendasPagasParaAviso } from '../lib/avisos-vendas.js';
 
 const CARTAO_403 = (req) => ({
   ok: false, erro: 'Seu perfil não tem permissão para esta ação.',
@@ -850,6 +851,13 @@ export function registrarRotasAdmin(app, db) {
         'vendedor', anterior.id, { nome: anterior.nome, codigoInova: anterior.codigoInova }, req);
     }
     res.redirect('/admin/vendedores?salvo=1');
+  });
+
+  /* Notificações locais de pagamento aprovado: somente usuários autorizados. */
+  app.get('/admin/api/avisos-vendas', (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (!guardApi(req, res, 'pedidos.ver')) return;
+    return void res.json({ ok: true, vendas: listarVendasPagasParaAviso(db) });
   });
 
   /* =============================== PEDIDOS ============================== */
