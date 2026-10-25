@@ -19,6 +19,44 @@ const protegerAdmin=(req,res)=>{
   return true;
 };
 export function registrarRotasRoboInova(app,db) {
+  // Leitura exclusiva do catálogo já sincronizado. O robô Windows e seus lotes não são alterados.
+  const blocoProdutosNovos=(ultimo,req)=>{
+    if(ultimo?.status!=='concluido')return '';
+    if(!ultimo.novosInativos)return '<p>Nenhum produto novo foi cadastrado neste relatório.</p>';
+    const inicio=Date.parse(ultimo.iniciadoEm||'');
+    const fim=Date.parse(ultimo.concluidoEm||'');
+    const novos=Number.isFinite(inicio)&&Number.isFinite(fim)&&fim>=inicio?
+      db.collection('products').all().filter(p=>{
+        if(p.inovaCatalogo?.origem!=='robo_csv_automatico')return false;
+        const data=Date.parse(p.inovaCatalogo.importadoEm||'');
+        return Number.isFinite(data)&&data>=inicio&&data<=fim;
+      }).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR')):[];
+    const titulo='<h3>Produtos novos cadastrados neste relatório ('+
+      e(String(ultimo.novosInativos))+')</h3>';
+    if(!novos.length)return titulo+
+      '<p>O relatório registrou novos produtos, mas não foi possível localizá-los no catálogo atual. Confira se foram removidos ou substituídos após a importação.</p>';
+    const porPagina=50;
+    const paginas=Math.ceil(novos.length/porPagina);
+    const solicitada=Number(req.query?.get('novosPagina')||1);
+    const pagina=Number.isSafeInteger(solicitada)?
+      Math.min(Math.max(1,solicitada),paginas):1;
+    const itens=novos.slice((pagina-1)*porPagina,pagina*porPagina).map(p=>
+      '<li><a href="/admin/produtos/'+encodeURIComponent(String(p.id))+'"><strong>'+
+      e(p.nome||'Produto sem nome')+'</strong></a> — Código interno: '+
+      e(p.codigoInterno||'não informado')+
+      (p.ean?' · EAN: '+e(p.ean):'')+
+      ' · Situação atual: '+(p.inovaArquivado?.em?'arquivado':p.ativo?'ativo':'inativo')+
+      '</li>').join('');
+    const anterior=pagina>1?'<a href="/admin/robo-inovafarma?novosPagina='+
+      (pagina-1)+'">Anterior</a> ':'';
+    const proxima=pagina<paginas?'<a href="/admin/robo-inovafarma?novosPagina='+
+      (pagina+1)+'">Próxima</a>':'';
+    const navegacao=paginas>1?'<p>Página '+pagina+' de '+paginas+'. '+
+      anterior+proxima+'</p>':'';
+    return titulo+'<p class="texto-pequeno">Localizados no cadastro atual: '+novos.length+
+      '. Todos entram inicialmente inativos; a situação abaixo é a atual.</p>'+
+      '<ol start="'+((pagina-1)*porPagina+1)+'">'+itens+'</ol>'+navegacao;
+  };
   const html=(req,{token='',mensagem=''}={})=>{
     const estado=consultarRoboInova(db);
     const ultimo=estado.ultimo;
@@ -71,6 +109,7 @@ export function registrarRotasRoboInova(app,db) {
           <p>Relatório exportado em: ${e(formatDateTime(ultimo.geradoEm))};
           processamento: ${e(formatDateTime(ultimo.concluidoEm || ultimo.iniciadoEm))}
           <span class="texto-pequeno">(horário de Brasília)</span></p>
+          ${blocoProdutosNovos(ultimo,req)}
           ${ultimo.detalhes?.length?`<h3>Conferências necessárias</h3><ul>${ultimo.detalhes.map(x=>
             `<li>Código ${e(x.codigoInterno)}: ${e(x.motivo)}</li>`).join('')}</ul>`:''}
           `:'<p>Nenhum relatório sincronizado por este robô.</p>'}
