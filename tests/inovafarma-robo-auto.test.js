@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {lerRelatorioOriginalRobo,dataExtracaoRobo,sincronizarRobo} from '../scripts/inovafarma-robo-auto-client.mjs';
 import {configurarRoboInova,autenticarRoboInova,receberBlocoRoboInova,
-  aplicarBlocoRoboInova,consultarRoboInova} from '../src/lib/inovafarma-robo-sync.js';
+  aplicarBlocoRoboInova,consultarRoboInova,consultarAlteracoesUltimoRoboInova} from '../src/lib/inovafarma-robo-sync.js';
 
 const linha=(codigo,ean,qtd,preco='7,21')=>{
   const cols=Array(21).fill('');
@@ -126,10 +126,19 @@ test('arquivo completo: concilia código interno sem EAN, não toca em pedidos, 
   assert.equal(db.collection('products').get('reservado').estoque.reservado,3);
   assert.equal(db.collection('orders').get('pedido-antigo').totalCentavos,1999);
   assert.equal(r.pendentes,1);
+  const mudancas=db.collection('inovaRoboBlocos').get(sha+':0').alteracoes;
+  assert.deepEqual(mudancas,[{
+    produtoId:'existente',nome:'Nome preservado',
+    codigoInterno:'800001',ean:'7891000000001',
+    estoqueAntes:9,estoqueDepois:5,
+    precoAntesCentavos:1900,precoDepoisCentavos:1525,
+  }],'registrar antes e depois, incluindo preco, sem alterar pedidos ou promocoes');
   const novos=db.collection('products').all().filter(x=>x.id!=='existente'&&x.id!=='reservado');
   assert.equal(novos.length,198);
   assert.ok(novos.every(x=>x.ativo===false));
   assert.equal(aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:0}).duplicado,true);
+  assert.equal(db.collection('inovaRoboBlocos').get(sha+':0').alteracoes.length,1,
+    'reenvio nao registra a mesma alteracao duas vezes');
   assert.equal(db.collection('products').count(),200);
   assert.equal(aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:2}).ok,false);
   const second=aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:1});
@@ -139,6 +148,55 @@ test('arquivo completo: concilia código interno sem EAN, não toca em pedidos, 
   assert.equal(painel.ultimo.pendentes,1);
   assert.equal(painel.ultimo.atualizados,1);
   assert.equal(painel.ultimo.novosInativos,398);
+});
+
+test('relatório pagina atualizações completas e não inventa histórico legado',()=>{
+  const db=fakeDB();
+  configurarRoboInova(db);
+  db.collection('inovaRoboConfiguracao').update('principal',{ultimaExecucao:sha});
+  db.collection('inovaRoboExecucoes').insert({id:sha,status:'concluido',atualizados:2,blocos:1});
+  const produtoA={produtoId:'p1',nome:'Álcool',codigoInterno:'1001',ean:'',estoqueAntes:15,estoqueDepois:14,
+    precoAntesCentavos:500,precoDepoisCentavos:500};
+  const produtoB={produtoId:'p2',nome:'Vitamina',codigoInterno:'1002',ean:'',estoqueAntes:7,estoqueDepois:7,
+    precoAntesCentavos:800,precoDepoisCentavos:900};
+  db.collection('inovaRoboBlocos').insert({id:sha+':0',aplicadoEm:new Date().toISOString(),
+    alteracoes:[produtoB,produtoA]});
+  const p1=consultarAlteracoesUltimoRoboInova(db,{pagina:1,porPagina:1});
+  assert.equal(p1.disponivel,true);assert.equal(p1.total,2);
+  assert.equal(p1.paginas,2);assert.deepEqual(p1.itens,[produtoA]);
+  const p2=consultarAlteracoesUltimoRoboInova(db,{pagina:2,porPagina:1});
+  assert.deepEqual(p2.itens,[produtoB]);
+  assert.equal(consultarAlteracoesUltimoRoboInova(db,{pagina:99,porPagina:1}).pagina,2);
+  db.collection('inovaRoboBlocos').update(sha+':0',{alteracoes:undefined});
+  const antigo=consultarAlteracoesUltimoRoboInova(db);
+  assert.equal(antigo.disponivel,false);
+  assert.equal(antigo.motivo,'sem_historico');
+  db.collection('inovaRoboBlocos').update(sha+':0',{alteracoes:[produtoA]});
+  assert.equal(consultarAlteracoesUltimoRoboInova(db).motivo,'divergencia');
+});
+
+test('salva apenas atualizações reais, incluindo mudança só de estoque ou só de preço',()=>{
+  const db=fakeDB();configurarRoboInova(db);
+  for(const [id,preco,qtd] of [['800001',1525,9],['800002',2000,2],['800003',1525,2]]){
+    db.collection('products').insert({
+      id:'produto-'+id,codigoInterno:id,ean:String(7891000000000+Number(id)-800000),
+      nome:'Teste '+id,precoCentavos:preco,ativo:true,
+      estoque:{quantidade:qtd,reservado:0,quarentena:0},
+    });
+  }
+  const itens=arquivo();
+  itens[0].quantidade=8; // Muda apenas quantidade.
+  itens[1].quantidade=2; // Muda apenas preço.
+  itens[2].quantidade=2; // Sem mudança.
+  enviarTudo(db,itens);
+  const r=aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:0});
+  assert.equal(r.ok,true);assert.equal(r.atualizados,2);
+  const a=db.collection('inovaRoboBlocos').get(sha+':0').alteracoes;
+  assert.equal(a.length,2);assert.deepEqual(a.map(v=>v.codigoInterno),['800001','800002']);
+  assert.deepEqual([a[0].estoqueAntes,a[0].estoqueDepois,a[0].precoAntesCentavos,a[0].precoDepoisCentavos],
+    [9,8,1525,1525]);
+  assert.deepEqual([a[1].estoqueAntes,a[1].estoqueDepois,a[1].precoAntesCentavos,a[1].precoDepoisCentavos],
+    [2,2,2000,1525]);
 });
 test('Cliente Windows transmite formato JSON sem cartão, CPF ou preço de custo',async()=>{
   const linhas=Array.from({length:3000},(_,i)=>linha(800001+i,
@@ -172,6 +230,8 @@ test('rotas autenticadas /webhooks e painel Superadmin, sem remover CSRF geral',
   assert.match(route,/formatDateTime\(ultimo\.geradoEm\)/);
   assert.match(route,/formatDateTime\(ultimo\.concluidoEm \|\| ultimo\.iniciadoEm\)/);
   assert.match(route,/horário de Brasília/);
+  assert.match(route,/blocoProdutosAtualizados\(ultimo,req\)/);
+  assert.match(route,/formatBRL\(p\.precoAntesCentavos\/100\)/);
   const source=fs.readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
   assert.match(source,/registrarRotasRoboInova\(app, db\)/);
 });
