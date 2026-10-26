@@ -52,6 +52,34 @@ export function consultarRoboInova(db){
     detalhes:(ult.detalhes||[]).slice(-25),
   }:null};
 }
+/**
+ * Detalhes de estoque/preço guardados no bloco que foi aplicado, sem alterar
+ * o formato de envio do robô Windows. Lotes antigos não têm esta informação.
+ * A listagem só é considerada íntegra se refletir o contador do relatório.
+ */
+export function consultarAlteracoesUltimoRoboInova(db,{pagina=1,porPagina=50}={}){
+  const cfg=db.collection(configCol).get('principal');
+  const job=cfg?.ultimaExecucao?db.collection(jobsCol).get(cfg.ultimaExecucao):null;
+  if(!job||job.status!=='concluido')return {disponivel:false,motivo:'em_processamento',itens:[],total:0};
+  const registros=[];
+  for(let i=0;i<job.blocos;i++){
+    const lote=db.collection(batchesCol).get(job.id+':'+i);
+    // Lotes anteriores à implantação ou dados incompletos não permitem
+    // reconstruir o preço antigo: não apresentar estimativas como fatos.
+    if(!lote?.aplicadoEm||!Array.isArray(lote.alteracoes))
+      return {disponivel:false,motivo:'sem_historico',itens:[],total:job.atualizados||0};
+    registros.push(...lote.alteracoes);
+  }
+  if(registros.length!==(job.atualizados||0))
+    return {disponivel:false,motivo:'divergencia',itens:[],total:job.atualizados||0};
+  registros.sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));
+  const tamanho=Number.isSafeInteger(porPagina)?Math.min(100,Math.max(1,porPagina)):50;
+  const paginas=Math.max(1,Math.ceil(registros.length/tamanho));
+  const atual=Number.isSafeInteger(pagina)?Math.min(Math.max(1,pagina),paginas):1;
+  return {disponivel:true,itens:registros.slice((atual-1)*tamanho,atual*tamanho),
+    total:registros.length,pagina:atual,paginas};
+}
+
 function validarLote(form){
   if(!form||!HASH.test(form.arquivoHash||''))return err('Assinatura do arquivo inválida.');
   const gerado=Date.parse(form.geradoEm||'');
@@ -156,7 +184,7 @@ function criarNovoInativo(db,it,agora){
     criadoEm:agora,atualizadoEm:agora,
   });
 }
-function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set()) {
+function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteracoes=[]) {
   const produtos=db.collection('products');
   const todos=produtos.all();
   if(it.ean && duplicadosEan.has(it.ean)){
@@ -203,8 +231,19 @@ function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set()) {
     Number(p.precoCentavos||0)!==it.precoCentavos;
   if(!alterou){indicadores.semAlteracao++;return null;}
   // Não alterar título/imagem/EAN existente/categorias/promoções/ativação.
+  const estoqueAntes=Number(estoque.quantidade||0);
+  const precoAntesCentavos=Number(p.precoCentavos||0);
   produtos.update(p.id,{estoque:{...estoque,quantidade:it.quantidade},
     precoCentavos:it.precoCentavos,atualizadoEm:agora});
+  // A fotografia ANTES/DEPOIS pertence ao lote e é persistida na mesma
+  // transação da atualização. Uma venda não é inferida a partir do saldo.
+  alteracoes.push({
+    produtoId:String(p.id),nome:String(p.nome||it.nome),
+    codigoInterno:String(p.codigoInterno||it.codigoInterno),
+    ean:String(p.ean||it.ean||''),
+    estoqueAntes,estoqueDepois:it.quantidade,
+    precoAntesCentavos,precoDepoisCentavos:it.precoCentavos,
+  });
   // Auditoria compacta; nunca registrar preço de custo, CPF ou nomes de clientes.
   db.collection('stockMovements').insert({produtoId:p.id,tipo:'ajuste',
     quantidade:it.quantidade,saldoAntes:Number(estoque.quantidade||0),
@@ -237,14 +276,14 @@ export function aplicarBlocoRoboInova(db,{arquivoHash,bloco}={}) {
     }
   }
   const ind={atualizados:0,semAlteracao:0,novosInativos:0,pendentes:0};
-  const detalhes=[];const agora=nowISO();
+  const detalhes=[],alteracoes=[];const agora=nowISO();
   try{
     return transacionar(db,()=>{
       for(const it of lote.items){
-        const item=aplicarProduto(db,it,agora,ind,duplicadosEan);
+        const item=aplicarProduto(db,it,agora,ind,duplicadosEan,alteracoes);
         if(item&&detalhes.length<50)detalhes.push(item);
       }
-      db.collection(batchesCol).update(lote.id,{aplicadoEm:agora});
+      db.collection(batchesCol).update(lote.id,{aplicadoEm:agora,alteracoes});
       const terminou=bloco===job.blocos-1;
       const estado=db.collection(jobsCol).update(job.id,{
         aplicados:job.aplicados+lote.items.length,

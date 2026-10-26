@@ -2,12 +2,12 @@
 import {paginaAdmin} from '../views/admin/layout.js';
 import {escapeHtml as e, csrfToken} from '../lib/security.js';
 import {getAllSettings} from '../lib/settings.js';
-import {formatDateTime} from '../lib/format.js';
+import {formatDateTime,formatBRL} from '../lib/format.js';
 import {can} from '../lib/permissions.js';
 import {logAdmin} from '../lib/audit.js';
 import {
  configurarRoboInova,consultarRoboInova,autenticarRoboInova,
- receberBlocoRoboInova,aplicarBlocoRoboInova,
+ receberBlocoRoboInova,aplicarBlocoRoboInova,consultarAlteracoesUltimoRoboInova,
 } from '../lib/inovafarma-robo-sync.js';
 
 const protegerAdmin=(req,res)=>{
@@ -56,6 +56,45 @@ export function registrarRotasRoboInova(app,db) {
     return titulo+'<p class="texto-pequeno">Localizados no cadastro atual: '+novos.length+
       '. Todos entram inicialmente inativos; a situação abaixo é a atual.</p>'+
       '<ol start="'+((pagina-1)*porPagina+1)+'">'+itens+'</ol>'+navegacao;
+  };
+  // Histórico de modificações pertencente ao relatório; não depende do
+  // estoque atual do produto e não presume que toda queda foi uma venda.
+  const blocoProdutosAtualizados=(ultimo,req)=>{
+    if(ultimo?.status!=='concluido')return '';
+    const titulo='<h3>Produtos atualizados neste relatório ('+
+      e(String(ultimo.atualizados||0))+')</h3>';
+    const pagina=Number(req.query?.get('atualizadosPagina')||1);
+    const relatorio=consultarAlteracoesUltimoRoboInova(db,{pagina,porPagina:50});
+    if(!relatorio.disponivel)return titulo+
+      (ultimo.atualizados?
+        '<p>O total de atualizações foi registrado, mas os valores anteriores não estão disponíveis neste relatório. O detalhamento começa nas importações realizadas após esta atualização do site.</p>':
+        '<p>Nenhum produto teve estoque ou preço alterado.</p>');
+    if(!relatorio.total)return titulo+'<p>Nenhum produto teve estoque ou preço alterado.</p>';
+    const itens=relatorio.itens.map(p=>{
+      const estoque=p.estoqueAntes!==p.estoqueDepois?
+        'Estoque: <strong>'+e(String(p.estoqueAntes))+' → '+e(String(p.estoqueDepois))+
+        ' unidades</strong>':'';
+      const preco=p.precoAntesCentavos!==p.precoDepoisCentavos?
+        'Preço de venda: <strong>'+
+        e(formatBRL(p.precoAntesCentavos/100))+' → '+
+        e(formatBRL(p.precoDepoisCentavos/100))+'</strong>':'';
+      const campos=[estoque,preco].filter(Boolean).join(' · ');
+      return '<li><a href="/admin/produtos/'+encodeURIComponent(String(p.produtoId))+
+        '"><strong>'+e(p.nome||'Produto sem nome')+'</strong></a>'+
+        ' — Código: '+e(String(p.codigoInterno||'não informado'))+
+        (p.ean?' · EAN: '+e(String(p.ean)):'')+
+        '<div>'+campos+'</div></li>';
+    }).join('');
+    const pageBase='/admin/robo-inovafarma?atualizadosPagina=';
+    const anterior=relatorio.pagina>1?
+      '<a href="'+pageBase+(relatorio.pagina-1)+'">Anterior</a> ':'';
+    const proxima=relatorio.pagina<relatorio.paginas?
+      '<a href="'+pageBase+(relatorio.pagina+1)+'">Próxima</a>':'';
+    const navegacao=relatorio.paginas>1?
+      '<p>Página '+relatorio.pagina+' de '+relatorio.paginas+'. '+
+      anterior+proxima+'</p>':'';
+    return titulo+'<p class="texto-pequeno">Detalhes das mudanças de estoque e preço de venda, comparados com os valores que estavam no site antes da importação. Uma redução do saldo não confirma, por si só, uma venda.</p>'+
+      '<ol start="'+((relatorio.pagina-1)*50+1)+'">'+itens+'</ol>'+navegacao;
   };
   const html=(req,{token='',mensagem=''}={})=>{
     const estado=consultarRoboInova(db);
@@ -110,6 +149,7 @@ export function registrarRotasRoboInova(app,db) {
           processamento: ${e(formatDateTime(ultimo.concluidoEm || ultimo.iniciadoEm))}
           <span class="texto-pequeno">(horário de Brasília)</span></p>
           ${blocoProdutosNovos(ultimo,req)}
+          ${blocoProdutosAtualizados(ultimo,req)}
           ${ultimo.detalhes?.length?`<h3>Conferências necessárias</h3><ul>${ultimo.detalhes.map(x=>
             `<li>Código ${e(x.codigoInterno)}: ${e(x.motivo)}</li>`).join('')}</ul>`:''}
           `:'<p>Nenhum relatório sincronizado por este robô.</p>'}
