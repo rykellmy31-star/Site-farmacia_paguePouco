@@ -7,7 +7,7 @@ export function credenciaisEvolution(db, env = {}) {
   // na instalação antiga para não interromper os avisos existentes.
   const baseUrl = String(env.EVOLUTION_API_URL || env.EVOLUTION_BASE_URL ||
     process.env.EVOLUTION_API_URL || process.env.EVOLUTION_BASE_URL || cfg.baseUrl || '')
-    .trim().replace(/\\/+$/, '');
+    .trim().replace(/\/+$/, '');
   const apiKey = String(env.EVOLUTION_API_KEY || process.env.EVOLUTION_API_KEY || '').trim();
   return {baseUrl, apiKey, configurado: Boolean(hostValido(baseUrl) && apiKey)};
 }
