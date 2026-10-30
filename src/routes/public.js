@@ -1,4 +1,5 @@
 import {constaPsicotropicoExportadoInova} from '../lib/psicotropicos-inova-20261029.js';
+import {constaAntimicrobianoExportadoInova} from '../lib/antimicrobianos-inova-20261029.js';
 import { config } from '../config.js';
 /** routes/public.js — Rotas abertas do site (sem login). */
 import { escapeHtml as e } from '../lib/security.js';
@@ -46,7 +47,7 @@ export function registrarRotasPublicas(app, db) {
   app.get('/produto/:slug', (req, res) => {
     const ctx = criarContexto(req, db);
     const produto = db.collection('products').findOne((p) => p.slug === req.params.slug);
-    if (!produto || produto.inovaArquivado?.em || produto.bloqueioControladoInova?.ativo || constaPsicotropicoExportadoInova(produto)) return void res.html(paginaErro(ctx, { codigo: 404, mensagem: 'Produto não encontrado.' }), 404);
+    if (!produto || produto.inovaArquivado?.em || produto.bloqueioControladoInova?.ativo || constaPsicotropicoExportadoInova(produto) || constaAntimicrobianoExportadoInova(produto)) return void res.html(paginaErro(ctx, { codigo: 404, mensagem: 'Produto não encontrado.' }), 404);
     const categoria = db.collection('categories').get(produto.categoriaId) || null;
     res.html(produtoPage(ctx, {
       produto,
