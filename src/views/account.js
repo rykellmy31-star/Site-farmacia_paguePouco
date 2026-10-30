@@ -6,6 +6,7 @@ import { STATUS_OPERACIONAL, STATUS_FINANCEIRO, statusOperacionalExibido } from 
 import { formatDateTime, formatDate, formatCep } from '../lib/format.js';
 import { productUrl, imagemPrincipal } from '../lib/catalog.js';
 import { autorPublicoDoEventoPedido } from '../lib/order-history-public.js';
+import { autorizouWhatsappPedidos } from '../lib/evolution-whatsapp.js';
 
 function moldura(ctx, { titulo, conteudo, ativo = '' }) {
   return paginaPublica(ctx, {
@@ -389,6 +390,24 @@ export function telaDados(ctx, { erros = {} }) {
             <label class="check"><input type="checkbox" name="marketing" value="1" ${u.marketing ? 'checked' : ''}>
               <span class="texto-pequeno">${e(ctx.settings.lgpd?.textoConsentimento || 'Autorizo o envio de ofertas e novidades.')}</span></label>
             <button class="botao" type="submit">Salvar alterações</button>
+          </form>
+        </div>
+      </div>
+      <div class="painel" id="avisos-whatsapp">
+        <header><h3>Avisos de pedidos pelo WhatsApp</h3></header>
+        <div class="corpo">
+          ${ctx.req?.query?.get('whatsapp')==='telefone-invalido'
+            ? '<div class="alerta aviso">Atualize seu telefone com DDD antes de ativar os avisos.</div>' : ''}
+          <p><strong>${autorizouWhatsappPedidos(u) ? 'Ativado ✅' : 'Desativado'}</strong></p>
+          <p class="texto-pequeno texto-suave">Se ativar, a Farmácia Pague Pouco enviará confirmações de
+          recebimento e pagamento de seus pedidos atuais e futuros no WhatsApp cadastrado.
+          Sem ofertas e sem detalhes de medicamentos. Você pode desativar a qualquer momento.
+          Alterar o número de telefone exige uma nova autorização. Esta escolha não modifica ofertas ou marketing.</p>
+          <form method="post" action="/conta/dados/whatsapp-pedidos">
+            <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            ${autorizouWhatsappPedidos(u)
+              ? '<button class="botao secundario" name="acao" value="desativar" type="submit">Desativar avisos no WhatsApp</button>'
+              : '<button class="botao" name="acao" value="ativar" type="submit">Autorizar avisos no WhatsApp</button>'}
           </form>
         </div>
       </div>
