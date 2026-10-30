@@ -154,6 +154,7 @@ export function telaWhatsApp(ctx, { whatsapp, linkExemplo }) {
     ativo: 'whatsapp',
     conteudo: `
     <h1 class="mt-0">WhatsApp de atendimento</h1>
+    <p><a class="botao destaque" href="/admin/evolution-whatsapp">Configurar Evolution API — avisos automáticos de pedidos</a></p>
     <div class="alerta info">
       Este canal é <strong>exclusivo para dúvidas</strong>. O botão usa o link oficial do WhatsApp (wa.me) e
       <strong>não é um checkout</strong>: compras e pagamentos são concluídos somente no site.
