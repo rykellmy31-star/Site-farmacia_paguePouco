@@ -136,6 +136,8 @@ export function registrarRotasAdmin(app, db) {
     const agora = new Date();
     const de = new Date(agora.getTime() - 30 * 86400000).toISOString();
     const m = metricas(db, { de });
+    const idsDisponiveis = new Set(db.collection('products').all()
+      .filter(produtoComEstoqueParaPainel).map(p => String(p.id)));
     res.html(telaDashboard(ctx, {
       metricas: m,
       grafico: vendasPorDia(db, 30),
@@ -143,11 +145,7 @@ export function registrarRotasAdmin(app, db) {
       estoqueBaixo: db.collection('products').all().filter((p) =>
         produtoComEstoqueParaPainel(p) && Number(p.estoque?.quantidade) <= Number(p.estoque?.minimo || 0)
       ).slice(0, 10),
-      topProdutos: produtosMaisVendidos(db, 100).filter(p =>
-        db.collection('products').all().some(produto =>
-          String(produto.id) === String(p.produtoId) && produtoComEstoqueParaPainel(produto)
-        )
-      ).slice(0, 8),
+      topProdutos: produtosMaisVendidos(db, 100).filter(p => idsDisponiveis.has(String(p.produtoId))).slice(0, 8),
       infoPagamento: providerPublicInfo(db),
     }));
   });
