@@ -8,23 +8,9 @@
  * Nomes comerciais sem princípio ativo no CSV podem escapar à triagem.
  * Somente conferência farmacêutica dos produtos/registros determina o enquadramento.
  */
-const TERMOS_INICIAIS = Object.freeze([
-  'alprazolam', 'bromazepam', 'clonazepam', 'diazepam',
-  'fenobarbital', 'lorazepam', 'metilfenidato', 'midazolam',
-  'morfina', 'oxicodona', 'tramadol', 'zolpidem',
-]);
-
-function normalizar(valor) {
-  return String(valor ?? '').normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-export function identificarPossivelControlado(nome, principioAtivo = '') {
-  const texto = ' ' + normalizar(nome + ' ' + principioAtivo) + ' ';
-  if (texto.trim() === '') return [];
-  return TERMOS_INICIAIS.filter(termo => texto.includes(' ' + normalizar(termo) + ' '));
-}
+import {identificarPossivelControlado as identificarTermos,
+  criarAvaliadorControlados} from './bloqueio-controlados-inova.js';
+export const identificarPossivelControlado = identificarTermos;
 
 export function avaliarUltimoRelatorioControlados(db, {pagina = 1, porPagina = 50} = {}) {
   const cfg = db.collection('inovaRoboConfiguracao').get('principal');
@@ -34,6 +20,7 @@ export function avaliarUltimoRelatorioControlados(db, {pagina = 1, porPagina = 5
     return {disponivel: false, motivo: 'aguardando_relatorio_completo', itens: [], total: 0};
   }
   const encontrados = [];
+  const avaliar = criarAvaliadorControlados(db);
   let analisados = 0;
   for (let bloco = 0; bloco < job.blocos; bloco++) {
     const lote = db.collection('inovaRoboBlocos').get(job.id + ':' + bloco);
@@ -42,13 +29,14 @@ export function avaliarUltimoRelatorioControlados(db, {pagina = 1, porPagina = 5
     }
     for (const item of lote.items) {
       analisados++;
-      const substancias = identificarPossivelControlado(item.nome);
-      if (!substancias.length) continue;
+      const match = avaliar(item);
+      if (!match.bloqueado) continue;
+      const substancias = match.termos;
       encontrados.push({
         codigoInterno: String(item.codigoInterno || ''),
         ean: String(item.ean || ''),
         nome: String(item.nome || ''),
-        substancias,
+        substancias, motivo:match.motivo,
       });
     }
   }
@@ -65,6 +53,6 @@ export function avaliarUltimoRelatorioControlados(db, {pagina = 1, porPagina = 5
     disponivel: true, geradoEm: job.geradoEm, analisados,
     total: encontrados.length, pagina: atual, paginas,
     itens: encontrados.slice((atual - 1) * tamanho, atual * tamanho),
-    tipo: 'suspeita_por_nome_sem_classificacao_automatica',
+    tipo: 'bloqueio_por_lista_e_termos_preliminares',
   };
 }
