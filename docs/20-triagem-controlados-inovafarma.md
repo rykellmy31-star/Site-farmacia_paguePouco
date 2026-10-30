@@ -1,20 +1,28 @@
-# Triagem preliminar de controlados — InovaFarma V3/V4
+# Bloqueio automático de controlados — InovaFarma V3/V4
 
-## Funcionamento
-- **V4** continua clicando no InovaFarma e exportando o CSV sem alterações.
-- **V3** continua autenticando, validando e enviando o CSV ao site sem alterações de formato, agendamento ou pareamento.
-- No painel **Robô de Estoque InovaFarma** (Superadmin), após o último lote completo, uma seção nova apresenta os **possíveis** medicamentos controlados detectados pelo nome descrito no CSV. Mostra código, EAN, produto e termo encontrado, com paginação.
-- Não modifica nenhum produto, estoque, preço, status de ativação, pedidos ou regras de checkout. A classificação sanitária atual do site mantém suas restrições.
-- O exemplo **clonazepam** é reconhecido quando a palavra aparece no nome; a lista inicial contém também alguns outros princípios ativos. A triagem **não é um catálogo oficial ou exaustivo**.
+## Escopo
+- **V4** continua exportando o CSV do ERP, sem modificações.
+- **V3** continua recebendo e enviando o relatório com mesmo token e mesma estrutura.
+- O **servidor** verifica a lista de exclusão **antes** de inserir produto novo ou de atualizar um existente. Produtos identificados não entram no catálogo via robô; cadastros pré-existentes correspondentes são inativados, sem exclusão de pedidos/estoques/histórico.
+- O servidor bloqueia reativação de qualquer cadastro sinalizado em `bloqueioControladoInova.ativo` e o checkout continua sujeito à mesma validação.
+- O painel **/admin/robo-inovafarma** permite importar arquivo CSV somente pelo **Superadmin** e aplicar o bloqueio ao catálogo existente.
+- A lista é **aditiva**, não remove bloqueios prévios silenciosamente. Códigos internos e EANs são preferidos e os nomes são comparados exatamente após normalização. Além disso, alguns nomes de princípios ativos são identificados como medida preliminar.
+- O último relatório informa a quantidade barrada e a triagem permite conferir os itens.
 
-## Limites e segurança
-- Nomes comerciais sem princípio ativo explícito no CSV podem não ser identificados. O resultado zero **não significa** ausência de controlados.
-- Identificação por nome é apenas um alerta, **não prova** a tarja, enquadramento regulatório, tipo de receita ou registro do produto. Mesmo coincidências devem ser revisadas pelo farmacêutico.
-- Fonte oficial para conferência: [Anvisa — Listas de substâncias sujeitas a controle especial](https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/controlados/lista-substancias). O Anexo I da Portaria 344/1998 sofre atualizações.
-- A integração completa deve posteriormente cruzar **registro Anvisa/princípio ativo/apresentação** e, quando houver fonte confiável e licenciamento adequado, códigos EAN/GTIN, com exceções por apresentação.
-- A revisão do responsável técnico deve determinar o enquadramento e atualizar o cadastro sanitário antes de qualquer ativação. A triagem não substitui o farmacêutico nem valida receitas.
-- **Não usar** este resultado isoladamente para liberar venda, dispensação remota ou alterar estoque.
-- Não copiar dados de clientes, CPF, prescrições, senhas ou tokens para a triagem.
+## Como importar seu CSV de psicotrópicos
+1. Exporte **somente** a relação de medicamentos psicotrópicos/controlados do InovaFarma.
+2. Acesse **Painel → Robô de Estoque InovaFarma → Bloqueio automático de medicamentos controlados**.
+3. Envie CSV de até 4 MB contendo colunas **Código**, **Cod. Barra/EAN**, e/ou **Produto**. É suficiente pelo menos um identificador por linha.
+4. Os cadastros existentes que corresponderem à lista serão inativados imediatamente; nos relatórios posteriores o robô não cadastrará tais produtos. Não se altera o banco do ERP.
+5. Para rodar novamente a checagem do catálogo, use **Aplicar bloqueios ao catálogo atual**.
 
-## Teste
-`node --test tests/triagem-controlados.test.js`
+## Cuidados essenciais
+- Enviar **só** o CSV de psicotrópicos/controlados. Um CSV de estoque comum nesta seção bloquearia produtos que não deveriam ser bloqueados.
+- A identificação **não é completa** enquanto não houver lista atualizada, inclusive nomes comerciais. Um produto ausente da lista **não** é certificado como livre de restrições.
+- Psicotrópicos são apenas parte dos produtos sujeitos a controle especial. A referência legal vigente é a Portaria 344/1998 e as atualizações publicadas pela Anvisa: https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/controlados/lista-substancias
+- Bloquear preventivamente **não** exige aprovação manual individual; qualquer reclassificação ou desbloqueio deve ser avaliado pelo farmacêutico responsável. O bloqueio não substitui obrigações sanitárias ou controle de receita.
+- Não enviar dados de pacientes, prescrições, CPF ou tokens nesse CSV.
+- A lista inicial foi criada com exemplos de princípios ativos e **não equivale** a uma cópia completa das listas oficiais.
+
+## Testes
+`node --test tests/triagem-controlados.test.js tests/bloqueio-controlados-inova.test.js tests/inovafarma-robo-auto.test.js`
