@@ -5,6 +5,7 @@ import {getAllSettings} from '../lib/settings.js';
 import {formatDateTime,formatBRL} from '../lib/format.js';
 import {can} from '../lib/permissions.js';
 import {avaliarUltimoRelatorioControlados} from '../lib/triagem-controlados.js';
+import {TOTAL_PSI_INOVA_20261029} from '../lib/psicotropicos-inova-20261029.js';
 import {adicionarListaControlados,bloquearControladosExistentes,
   contarListaControlados} from '../lib/bloqueio-controlados-inova.js';
 import {logAdmin} from '../lib/audit.js';
@@ -179,7 +180,10 @@ export function registrarRotasRoboInova(app,db) {
           <p>O robô bloqueia a criação de produtos correspondentes à lista e aos nomes
           iniciais de princípios ativos. Se o produto já existe, fica inativo
           e indisponível para venda online, sem excluir estoque, pedidos ou histórico.</p>
-          <p><strong>${listaTotal} registros</strong> da lista CSV estão cadastrados
+          <p><strong>${TOTAL_PSI_INOVA_20261029} produtos</strong> da relação PSICOTRÓPICO
+          exportada em 29/10/2026 já são filtrados automaticamente,
+          sem enviar a lista de estoque ao site.
+          <strong>${listaTotal} registros adicionais</strong> importados pelo painel.
           (além da lista inicial de princípios ativos). Correspondências por
           código interno, EAN ou nome exato. A lista enviada é aditiva e não
           apaga bloqueios anteriores.</p>

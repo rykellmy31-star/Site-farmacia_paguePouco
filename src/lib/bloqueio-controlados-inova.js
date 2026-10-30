@@ -4,6 +4,7 @@
  * Bloqueios não apagam cadastro, estoque ou histórico de pedidos.
  */
 import crypto from 'node:crypto';
+import {constaPsicotropicoExportadoInova} from './psicotropicos-inova-20261029.js';
 
 const COL = 'inovaControladosListaBloqueio';
 const MAX_LINHAS = 12000;
@@ -58,6 +59,11 @@ export function prepararListaControlados(arquivo) {
   let texto;
   try {texto=new TextDecoder('utf-8',{fatal:true}).decode(arquivo);}
   catch {texto=new TextDecoder('windows-1252').decode(arquivo);}
+  // Nunca aceite uma posição geral de estoque como lista de exclusão.
+  // Relatório padrão InovaFarma: metadados contendo "Classe terapêutica: PSICOTROPICO".
+  const relatorioPosicao=/posi[cç][aã]o de estoque/i.test(texto.slice(0,500));
+  if(relatorioPosicao && !/psicotropico/i.test(normalizarNome(texto.slice(0,1200))))
+    throw new Error('Este relatório não está filtrado pela classe PSICOTRÓPICO no InovaFarma.');
   const linhas=lerLinhas(texto.replace(/^\uFEFF/,''));
   if(linhas.length<2)throw new Error('CSV sem cabeçalho e produtos.');
   let inicio=-1,idx={};
@@ -74,6 +80,9 @@ export function prepararListaControlados(arquivo) {
     const ean=get('ean').replace(/\.0+$/,'');
     const nome=get('nome');
     // Ignorar rodapés sem identificadores, mas rejeitar dados evidentemente inválidos.
+    // Rodapés da exportação (ex.: ESTOQUE: / Fonte: INOVAFARMA)
+    // não representam produtos. Qualquer outra linha irregular falha fechada.
+    if(!ean && !nome && /^(?:ESTOQUE:|Fonte: INOVAFARMA)/i.test(codigoInterno))continue;
     if(!codigoInterno&&!ean&&!nome)continue;
     if(!COD.test(codigoInterno||'') && codigoInterno)throw new Error('Código interno inválido no CSV.');
     if(!EAN.test(ean||'') && ean)throw new Error('EAN inválido no CSV: '+ean.slice(0,30));
@@ -114,6 +123,7 @@ export function criarAvaliadorControlados(db){
     const codigo=String(item.codigoInterno||'');
     const ean=String(item.ean||'');
     const termos=TERMOS_INICIAIS.filter(t=>(' '+nome+' ').includes(' '+t+' '));
+    if(constaPsicotropicoExportadoInova(item))return {bloqueado:true,motivo:'psicotropico_exportacao_inovafarma_20261029',termos};
     if(codigo && codigos.has(codigo))return {bloqueado:true,motivo:'codigo_na_lista_csv',termos};
     if(ean && eans.has(ean))return {bloqueado:true,motivo:'ean_na_lista_csv',termos};
     if(nome && nomes.has(nome))return {bloqueado:true,motivo:'nome_na_lista_csv',termos};

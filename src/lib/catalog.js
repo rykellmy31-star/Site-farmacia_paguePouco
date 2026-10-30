@@ -9,6 +9,7 @@
  * Esses bloqueios valem para vitrine, busca, carrinho e checkout.
  */
 import { slugify } from './security.js';
+import {constaPsicotropicoExportadoInova} from './psicotropicos-inova-20261029.js';
 import { inovaAtiva, estoqueInovaDisponivel } from './inovafarma-stock.js';
 import { precoPromocaoInovaVigente } from './inovafarma-promocoes-precos.js';
 
@@ -56,6 +57,8 @@ export function sanitarioDefault() {
 export function podeAtivarAposAprovacao(produto) {
   if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
   if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
+  if (constaPsicotropicoExportadoInova(produto))
+    return { ok: false, motivo: 'Este produto integra a lista de psicotrópicos do InovaFarma e não entra na loja online.', codigo: 'PSICOTROPICO_INOVA', bloqueioSanitario: true };
   if (produto.bloqueioControladoInova?.ativo)
     return { ok: false, motivo: 'Produto excluído da loja online pela lista de bloqueio InovaFarma.', codigo: 'LISTA_CONTROLADOS', bloqueioSanitario: true };
   const s = { ...sanitarioDefault(), ...(produto.sanitario || {}) };
@@ -202,7 +205,9 @@ export function searchProducts(db, {
   porPagina = 24, precoMin = null, precoMax = null, apenasDisponiveis = true,
   apenasVendaveis = true, promocao = false, termos = null,
 } = {}) {
-  let rows = db.collection('products').all().filter(p => !p.inovaArquivado?.em);
+  let rows = db.collection('products').all().filter(p =>
+    !p.inovaArquivado?.em && !p.bloqueioControladoInova?.ativo &&
+    !constaPsicotropicoExportadoInova(p));
 
   if (apenasVendaveis) rows = rows.filter((p) => podeVender(p).ok || p.ativo);
   if (apenasDisponiveis) rows = rows.filter((p) => !apenasVendaveis || podeVender(p).ok);
