@@ -226,6 +226,14 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
               <a class="texto-pequeno" href="/checkout/endereco">(alterar)</a></p>
           </div>
 
+          ${ctx.settings.evolutionWhatsapp?.ativo && ctx.settings.evolutionWhatsapp?.avisarCliente ? `
+          <div class="cartao">
+            <label class="check" style="display:flex;gap:8px;align-items:flex-start">
+              <input type="checkbox" name="aceitaWhatsAppPedido" value="1">
+              <span>Quero receber pelo WhatsApp uma mensagem sobre este pedido
+              no telefone cadastrado. Opcional e sem ofertas.</span>
+            </label>
+          </div>` : ''}
           <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
             ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>Finalizar pedido</button>
           <p class="texto-pequeno texto-suave mt-2 mb-0">
