@@ -12,6 +12,7 @@ import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '..
 import { lookupCep, UF_LIST } from '../lib/cep.js';
 import { logCustomer } from '../lib/audit.js';
 import { sendMail } from '../lib/mailer.js';
+import { enfileirarEvolution } from '../lib/evolution-whatsapp.js';
 import { config } from '../config.js';
 import { uid } from '../lib/store.js';
 import { vendedoresAtivos } from '../lib/sellers.js';
@@ -274,7 +275,8 @@ export function registrarRotasCheckout(app, db) {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
       freteConfig: ctx.settings.frete, cupomCodigo: cart.cupom?.codigo || null,
-      vendedorId: req.body.vendedorId || null, req,
+      vendedorId: req.body.vendedorId || null,
+      receberWhatsappPedido: req.body.aceitaWhatsAppPedido === '1', req,
     });
 
     if (!resultado.ok) {
@@ -358,6 +360,8 @@ export function registrarRotasCheckout(app, db) {
           : 'Falha de cobrança; verificação necessária.',
       }],
     });
+
+    enfileirarEvolution(db, db.collection('orders').get(pedido.id), 'cliente_recebido');
 
     sendMail(db, {
       to: pedido.cliente?.email || req.user?.email || '',
