@@ -59,6 +59,11 @@ export function prepararListaControlados(arquivo) {
   let texto;
   try {texto=new TextDecoder('utf-8',{fatal:true}).decode(arquivo);}
   catch {texto=new TextDecoder('windows-1252').decode(arquivo);}
+  // Nunca aceite uma posição geral de estoque como lista de exclusão.
+  // Relatório padrão InovaFarma: metadados contendo "Classe terapêutica: PSICOTROPICO".
+  const relatorioPosicao=/posi[cç][aã]o de estoque/i.test(texto.slice(0,500));
+  if(relatorioPosicao && !/psicotropico/i.test(normalizarNome(texto.slice(0,1200))))
+    throw new Error('Este relatório não está filtrado pela classe PSICOTRÓPICO no InovaFarma.');
   const linhas=lerLinhas(texto.replace(/^\uFEFF/,''));
   if(linhas.length<2)throw new Error('CSV sem cabeçalho e produtos.');
   let inicio=-1,idx={};
@@ -75,6 +80,9 @@ export function prepararListaControlados(arquivo) {
     const ean=get('ean').replace(/\.0+$/,'');
     const nome=get('nome');
     // Ignorar rodapés sem identificadores, mas rejeitar dados evidentemente inválidos.
+    // Rodapés da exportação (ex.: ESTOQUE: / Fonte: INOVAFARMA)
+    // não representam produtos. Qualquer outra linha irregular falha fechada.
+    if(!ean && !nome && /^(?:ESTOQUE:|Fonte: INOVAFARMA)/i.test(codigoInterno))continue;
     if(!codigoInterno&&!ean&&!nome)continue;
     if(!COD.test(codigoInterno||'') && codigoInterno)throw new Error('Código interno inválido no CSV.');
     if(!EAN.test(ean||'') && ean)throw new Error('EAN inválido no CSV: '+ean.slice(0,30));
