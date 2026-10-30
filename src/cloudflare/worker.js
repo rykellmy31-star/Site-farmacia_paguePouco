@@ -84,7 +84,8 @@ export class LojaDurableObject extends DurableObject {
       try{
         if(possuiFilaEvolution(this.db))
           await processarFilaEvolution(this.db,{
-            apiKey:this.bindings.EVOLUTION_API_KEY, max:2,
+            apiKey:this.bindings.EVOLUTION_API_KEY,
+            baseUrl:this.bindings.EVOLUTION_API_URL||this.bindings.EVOLUTION_BASE_URL, max:2,
             persistir:()=>this.db.flush()
           });
       }catch{console.warn('[evolution] fila pendente para conferência');}
@@ -143,7 +144,8 @@ export class LojaDurableObject extends DurableObject {
         try{
           if(possuiFilaEvolution(this.db))
             await processarFilaEvolution(this.db,{
-              apiKey:this.bindings.EVOLUTION_API_KEY,max:3,
+              apiKey:this.bindings.EVOLUTION_API_KEY,
+              baseUrl:this.bindings.EVOLUTION_API_URL||this.bindings.EVOLUTION_BASE_URL,max:3,
               persistir:()=>this.db.flush()
             });
         }catch{console.warn('[evolution] erro no processamento da fila');}
