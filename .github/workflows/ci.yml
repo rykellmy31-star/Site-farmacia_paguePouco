@@ -42,6 +42,8 @@ jobs:
         run: node --test tests/bloqueio-controlados-inova.test.js
       - name: Validar estoque positivo e exclusao de antimicrobianos da Visão Geral
         run: node --test tests/visao-geral-antimicrobianos-estoque.test.js
+      - name: Testar Evolution API - notificacoes transacionais seguras
+        run: node --test tests/evolution-whatsapp.test.js
       - name: Menu e pagina dedicada de importacao de estoque
         run: node --test tests/importacao-estoque-menu.test.js
       - name: InovaFarma legacy catalog reconciliation is read only and preserves orders

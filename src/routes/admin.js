@@ -24,6 +24,8 @@ import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
 import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
 import { paginaAdmin } from '../views/admin/layout.js';
+import {telaEvolutionWhatsapp} from '../views/admin/evolution.js';
+import {evolutionConfig,validarEvolutionConfig,resumoEvolution} from '../lib/evolution-whatsapp.js';
 import {
   telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias,
   telaEstoque, telaMidia, telaBanners, telaPromocoes,
@@ -1073,6 +1075,39 @@ export function registrarRotasAdmin(app, db) {
     if (!guard(req, res, 'whatsapp.ver')) return;
     const ctx = ctxAdmin(req, db);
     res.html(telaWhatsApp(ctx, { whatsapp: ctx.settings.whatsapp || {}, linkExemplo: linkWhatsApp(ctx.settings.whatsapp) }));
+  });
+
+  /* ==================== EVOLUTION — AVISOS DE PEDIDOS ==================== */
+  app.get('/admin/evolution-whatsapp',(req,res)=>{
+    if(!guard(req,res,'whatsapp.ver'))return;
+    if(req.adminUser.role!=='super_admin')return void res.status(403).html('Acesso exclusivo do superadministrador.');
+    res.set('Cache-Control','no-store');
+    res.html(telaEvolutionWhatsapp(ctxAdmin(req,db),{
+      cfg:evolutionConfig(db),resumo:resumoEvolution(db)
+    }));
+  });
+  app.post('/admin/evolution-whatsapp',(req,res)=>{
+    if(!guard(req,res,'whatsapp.editar'))return;
+    if(req.adminUser.role!=='super_admin')return void res.status(403).html('Acesso exclusivo do superadministrador.');
+    const resultado=validarEvolutionConfig({
+      ativo:req.body.ativo==='1',
+      baseUrl:cleanText(req.body.baseUrl,230),
+      instancia:cleanText(req.body.instancia,64),
+      numeroRemetente:cleanText(req.body.numeroRemetente,30),
+      numeroResponsavel:cleanText(req.body.numeroResponsavel,30),
+      avisarResponsavel:req.body.avisarResponsavel==='1',
+      avisarCliente:req.body.avisarCliente==='1'
+    });
+    if(!resultado.ok)return void res.status(400).html(paginaAdmin(ctxAdmin(req,db),{
+      titulo:'Configuração não salva',ativo:'whatsapp',
+      conteudo:'<h1>Configuração recusada</h1><p>'+e(resultado.erro)+
+        '</p><a href="/admin/evolution-whatsapp">Corrigir dados</a>'
+    }));
+    patchSetting(db,'evolutionWhatsapp',resultado.config,req.adminUser,req);
+    logAdmin(db,req.adminUser,'configurou_evolution_pedidos','integracao','evolutionWhatsapp',
+      {ativo:resultado.config.ativo,avisarCliente:resultado.config.avisarCliente,
+        avisarResponsavel:resultado.config.avisarResponsavel},req);
+    res.redirect('/admin/evolution-whatsapp?salvo=1');
   });
 
   /* =========================== CONFIGURAÇÕES ============================ */

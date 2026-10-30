@@ -63,6 +63,10 @@ export const DEFAULT_SETTINGS = () => ({
     mensagemIndisponivel: 'Nosso atendimento está fora do horário. Deixe sua mensagem e responderemos em breve!',
     avisoCheckout: 'Este canal é exclusivo para DÚVIDAS. Para comprar, finalize o pedido pelo site.',
   },
+  evolutionWhatsapp: {
+    ativo: false, baseUrl: '', instancia: '', numeroRemetente: '',
+    numeroResponsavel: '', avisarResponsavel: true, avisarCliente: true,
+  },
   frete: defaultFreightConfig(),
   pagamentos: {
     provedor: 'internal',
