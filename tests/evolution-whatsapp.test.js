@@ -71,6 +71,9 @@ test('despacha uma unica vez e registra envio aprovado em HTTPS /message/sendTex
   assert.equal(chamadas[0].gravadoAntes,true);
   assert.match(chamadas[0].url,/^https:\/\/whatsapp\.exemplo\.com\/message\/sendText\/farmacia-pague-pouco$/);
   assert.equal(chamadas[0].options.headers.apikey,'chave-ficticia');
+  // Cloudflare Workers rejeita redirect:'error' antes de enviar a requisicao.
+  // 'manual' evita seguir redirecionamentos e expor a chave a outro dominio.
+  assert.equal(chamadas[0].options.redirect,'manual');
   assert.equal(JSON.parse(chamadas[0].options.body).number,'5573988887777');
   assert.equal(resumoEvolution(db).enviados,1);
   assert.equal(possuiFilaEvolution(db),false);
