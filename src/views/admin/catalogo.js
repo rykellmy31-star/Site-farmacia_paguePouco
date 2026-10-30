@@ -31,8 +31,8 @@ export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoque
       ${cartaoMetrica('Aguardando pagamento', metricas.pedidosPendentes)}
       ${cartaoMetrica('Enviados', metricas.pedidosEnviados, `${metricas.pedidosEntregues} entregues`)}
       ${cartaoMetrica('Cancelados', metricas.pedidosCancelados)}
-      ${cartaoMetrica('Produtos', metricas.produtosTotal, `${metricas.produtosAtivos} ativos`)}
-      ${cartaoMetrica('Estoque baixo', metricas.estoqueBaixo)}
+      ${cartaoMetrica('Produtos com estoque', metricas.produtosComEstoque, 'ativos e disponíveis')}
+      ${cartaoMetrica('Estoque baixo', metricas.estoqueBaixoComEstoque)}
       ${cartaoMetrica('Clientes', metricas.clientesTotal)}
     </div>
 
