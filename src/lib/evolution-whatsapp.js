@@ -50,10 +50,12 @@ const codigoSeguro=x=>String(x||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,45);
 export function enfileirarEvolution(db,pedido,tipo){
   const cfg=evolutionConfig(db);
   if(!cfg.ativo||!cfg.baseUrl||!cfg.instancia)return {ok:false,motivo:'desativado'};
-  if(!pedido?.id||!pedido.codigo||!['cliente_recebido','responsavel_pago'].includes(tipo))
+  if(!pedido?.id||!pedido.codigo||!['cliente_recebido','cliente_pago','responsavel_pago'].includes(tipo))
     return {ok:false,motivo:'pedido_invalido'};
-  if(tipo==='cliente_recebido'&&(!cfg.avisarCliente||pedido.receberWhatsappPedido!==true))
+  if(['cliente_recebido','cliente_pago'].includes(tipo)&&(!cfg.avisarCliente||pedido.receberWhatsappPedido!==true))
     return {ok:false,motivo:'sem_optin'};
+  if(tipo==='cliente_pago'&&pedido.statusFinanceiro!=='aprovado')
+    return {ok:false,motivo:'ainda_nao_pago'};
   if(tipo==='responsavel_pago'&&(!cfg.avisarResponsavel||pedido.statusFinanceiro!=='aprovado'))
     return {ok:false,motivo:'ainda_nao_pago'};
   const numero=tipo==='responsavel_pago'?numeroWhatsapp(cfg.numeroResponsavel):
@@ -65,6 +67,11 @@ export function enfileirarEvolution(db,pedido,tipo){
   const texto=tipo==='responsavel_pago'
     ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+
       '\nO pagamento foi confirmado. Acesse o painel para separar o pedido.'
+    : tipo==='cliente_pago'
+    ? 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! ✅\n'+
+      'O pagamento do seu pedido #'+codigo+' na Farmácia Pague Pouco foi confirmado!\n'+
+      'Nossa equipe vai preparar seu pedido. Acompanhe o andamento pelo site.\n'+
+      'Esta mensagem é automática.'
     : 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! 👋\n'+
       'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+'.\n'+
       'Quando o pagamento for confirmado, nossa equipe continuará o atendimento.\n'+
