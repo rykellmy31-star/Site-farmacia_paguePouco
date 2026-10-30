@@ -2,7 +2,7 @@
 
 ## Fluxo
 - **Responsável pela separação**: aviso somente quando o pedido passa para **aprovado** em cobrança real Mercado Pago. A mensagem contém código do pedido, não produtos/endereço.
-- **Cliente**: recebe `pedido recebido` quando a cobrança é criada com sucesso e, depois, `pagamento confirmado` somente na transição de pendente para aprovado por confirmação do Mercado Pago. As duas mensagens exigem o opt-in voluntário no checkout, desmarcado por padrão.
+- **Cliente**: recebe `pedido recebido` quando a cobrança é criada com sucesso e, depois, `pagamento confirmado` somente na transição de pendente para aprovado pelo Mercado Pago. As mensagens exigem autorização explícita, sem caixa pré-marcada: no primeiro checkout o cliente escolhe o botão `Finalizar e receber avisos no WhatsApp` (ou `Finalizar sem avisos no WhatsApp`), com texto claro de aceitação para pedidos atuais e futuros. A escolha é salva no cadastro por telefone, registrada para auditoria e pode ser revogada a qualquer momento em `Minha conta → Meus dados → Avisos de pedidos pelo WhatsApp`. Nas próximas compras o opt-in válido é reutilizado sem nova pergunta; ao mudar o telefone exige novo aceite.
 - **Sem n8n**, sem alterar InovaFarma V3/V4, sem alterar credenciais Mercado Pago, sem enviar dados de medicamentos no WhatsApp.
 - Só a Evolution API da instância `instancia` envia mensagens, com número de saída conectado pelo próprio operador à instância.
 - Uma fila por evento e pedido evita mensagens repetidas. Como um timeout de rede pode indicar uma mensagem entregue, não há reenvio automático de resultado incerto; o painel exibe `verificar`.
@@ -27,3 +27,10 @@
 
 ## Testes
 `node --test tests/evolution-whatsapp.test.js`
+
+## Proteção do aceite
+- A opção de WhatsApp não é obrigatória para comprar. O botão `Finalizar sem avisos no WhatsApp` finaliza o mesmo checkout normalmente.
+- Somente clique explícito em `Finalizar e receber avisos no WhatsApp` ou autorização voluntária em `Meus dados` ativa a preferência. Não basta fornecer telefone, aceitar Termos ou ter marcado marketing.
+- Aceite salvo no cliente com telefone normalizado e data de aceite; quando o número muda, o consentimento anterior não é reutilizado.
+- O cliente pode revogar em `Meus dados`; pagamentos, pedidos, histórico e outras funcionalidades permanecem.
+- Mensagens anteriores não são geradas retroativamente ao ativar ou desativar a preferência.

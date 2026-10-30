@@ -11,6 +11,23 @@ export function numeroWhatsapp(valor){
   const raw=digitos(valor),n=(raw.length===10||raw.length===11)?'55'+raw:raw;
   return /^55\d{10,11}$/.test(n)?n:'';
 }
+/** Consentimento explicito do cliente, valido somente para o numero atual. */
+export function autorizouWhatsappPedidos(cliente){
+  const telefone=numeroWhatsapp(cliente?.telefone);
+  const aceite=cliente?.consentimentoWhatsappPedidos;
+  return Boolean(telefone&&aceite?.ativo===true&&aceite.numero===telefone);
+}
+/** Nao confunde pagamento, marketing e autorizacao de contato. */
+export function decidirAvisosWhatsappPedido(cliente,configuracao,escolha='',aceiteLegado=false){
+  const disponivel=configuracao?.ativo===true&&configuracao?.avisarCliente===true;
+  const autorizouAgora=disponivel&&(escolha==='autorizar'||aceiteLegado===true);
+  const previamenteAutorizado=autorizouWhatsappPedidos(cliente);
+  return {
+    autorizouAgora,
+    avisarCliente:disponivel&&(autorizouAgora||
+      (escolha!=='sem'&&previamenteAutorizado)),
+  };
+}
 function hostValido(url){
   if(!/^https:\/\//i.test(String(url||'')))return false;
   try{
