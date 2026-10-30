@@ -56,6 +56,8 @@ export function sanitarioDefault() {
 export function podeAtivarAposAprovacao(produto) {
   if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
   if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
+  if (produto.bloqueioControladoInova?.ativo)
+    return { ok: false, motivo: 'Produto excluído da loja online pela lista de bloqueio InovaFarma.', codigo: 'LISTA_CONTROLADOS', bloqueioSanitario: true };
   const s = { ...sanitarioDefault(), ...(produto.sanitario || {}) };
 
   if (s.controlado || s.requerReceita || s.classificacao === 'controlado') {

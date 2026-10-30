@@ -4,6 +4,9 @@ import {escapeHtml as e, csrfToken} from '../lib/security.js';
 import {getAllSettings} from '../lib/settings.js';
 import {formatDateTime,formatBRL} from '../lib/format.js';
 import {can} from '../lib/permissions.js';
+import {avaliarUltimoRelatorioControlados} from '../lib/triagem-controlados.js';
+import {adicionarListaControlados,bloquearControladosExistentes,
+  contarListaControlados} from '../lib/bloqueio-controlados-inova.js';
 import {logAdmin} from '../lib/audit.js';
 import {
  configurarRoboInova,consultarRoboInova,autenticarRoboInova,
@@ -96,9 +99,42 @@ export function registrarRotasRoboInova(app,db) {
     return titulo+'<p class="texto-pequeno">Detalhes das mudanças de estoque e preço de venda, comparados com os valores que estavam no site antes da importação. Uma redução do saldo não confirma, por si só, uma venda.</p>'+
       '<ol start="'+((relatorio.pagina-1)*50+1)+'">'+itens+'</ol>'+navegacao;
   };
+  // Leitura exclusiva dos blocos CSV que o V3 já enviou. Nunca altera produtos.
+  const blocoTriagemControlados=(ultimo,req)=>{
+    if(ultimo?.status!=='concluido')return '';
+    const n=Number(req.query?.get('controladosPagina')||1);
+    const t=avaliarUltimoRelatorioControlados(db,{pagina:n,porPagina:40});
+    if(!t.disponivel)return '<section class="painel"><h2>Triagem de possíveis controlados</h2>'+
+      '<p>Relatório ainda indisponível ou incompleto. Nenhum produto foi classificado.</p></section>';
+    const produtos=db.collection('products').all();
+    const porCodigo=new Map(produtos.map(p=>[String(p.codigoInterno||''),p]));
+    const itens=t.itens.map(x=>{
+      const p=porCodigo.get(x.codigoInterno);
+      const nome=p?'<a href="/admin/produtos/'+encodeURIComponent(String(p.id))+'">'+
+        '<strong>'+e(x.nome)+'</strong></a>':'<strong>'+e(x.nome)+'</strong>';
+      return '<li>'+nome+' — código '+e(x.codigoInterno)+
+        (x.ean?' · EAN '+e(x.ean):'')+
+        ' · motivo: '+e(x.motivo)+(x.substancias.length?' · termo: '+e(x.substancias.join(', ')):'')+'</li>';
+    }).join('');
+    const base='/admin/robo-inovafarma?controladosPagina=';
+    const anterior=t.pagina>1?'<a href="'+base+(t.pagina-1)+'">Anterior</a> ':'';
+    const proxima=t.pagina<t.paginas?'<a href="'+base+(t.pagina+1)+'">Próxima</a>':'';
+    return '<section class="painel"><h2>Triagem de possíveis medicamentos controlados</h2>'+
+      '<p><strong>'+t.total+' possíveis ocorrências</strong> em '+t.analisados+
+      ' itens do último CSV. Esta é uma busca inicial por alguns nomes de substâncias, '+ 
+      'não uma classificação completa da Anvisa. Remédios por nome comercial podem não aparecer.</p>'+
+      '<p class="alerta aviso">A conferência e classificação sanitária devem ser feitas pelo '+ 
+      'farmacêutico responsável, consultando a Portaria 344/1998 atualizada e o registro do produto. '+
+      'Esta triagem não libera venda, não atesta receita e não modifica o cadastro.</p>'+
+      (t.total?'<ol start="'+((t.pagina-1)*40+1)+'">'+itens+'</ol>':
+        '<p>Nenhuma correspondência encontrada na lista inicial; isso não significa ausência de controlados.</p>')+
+      (t.paginas>1?'<p>Página '+t.pagina+' de '+t.paginas+'. '+anterior+proxima+'</p>':'')+
+      '</section>';
+  };
   const html=(req,{token='',mensagem=''}={})=>{
     const estado=consultarRoboInova(db);
     const ultimo=estado.ultimo;
+    const listaTotal=contarListaControlados(db);
     const aviso=!estado.ativo?'Desativado — nenhum computador tem acesso ainda':
       'Pareado — o computador poderá enviar automaticamente os relatórios de estoque.';
     const ctx={db,req,adminUser:req.adminUser,settings:getAllSettings(db),
@@ -138,18 +174,53 @@ export function registrarRotasRoboInova(app,db) {
             <p><button class="botao secundario" type="submit">Revogar acesso do computador</button></p>
           </form>
         </section>
+        <section class="painel">
+          <h2>Bloqueio automático de medicamentos controlados</h2>
+          <p>O robô bloqueia a criação de produtos correspondentes à lista e aos nomes
+          iniciais de princípios ativos. Se o produto já existe, fica inativo
+          e indisponível para venda online, sem excluir estoque, pedidos ou histórico.</p>
+          <p><strong>${listaTotal} registros</strong> da lista CSV estão cadastrados
+          (além da lista inicial de princípios ativos). Correspondências por
+          código interno, EAN ou nome exato. A lista enviada é aditiva e não
+          apaga bloqueios anteriores.</p>
+          <form method="post" action="/admin/robo-inovafarma/controlados/importar"
+            enctype="multipart/form-data">
+            <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            <label>Selecione CSV de psicotrópicos/controlados do InovaFarma
+              <input type="file" name="arquivo" accept=".csv,text/csv" required></label>
+            <p class="texto-pequeno">Até 4 MB. Colunas aceitas:
+              Código, Cod. Barra/EAN e/ou Produto. CSV apenas com produtos
+              controlados; não envie o relatório geral de estoque.
+              Importar bloqueia imediatamente os itens correspondentes existentes.</p>
+            <label><input type="checkbox" name="confirmarControlados" value="1" required>
+              Confirmo que o arquivo contém apenas medicamentos para bloquear na loja online.</label>
+            <p><button class="botao" type="submit">Adicionar lista de bloqueio</button></p>
+          </form>
+          <form method="post" action="/admin/robo-inovafarma/controlados/reaplicar">
+            <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            <label><input type="checkbox" name="confirmarControlados" value="1" required>
+              Confirmo a inativação dos produtos correspondentes no catálogo atual.</label>
+            <p><button class="botao secundario" type="submit">
+              Aplicar bloqueios ao catálogo atual</button></p>
+          </form>
+          <p class="texto-pequeno">A ausência de resultado na lista não prova
+          que o produto seja liberado. A lista deve ser mantida atualizada
+          conforme as normas sanitárias da Anvisa.</p>
+        </section>
         <section class="painel"><h2>Último relatório automático</h2>
           ${ultimo?`<p><strong>Status:</strong> ${e(ultimo.status)};
           <strong>Recebidos:</strong> ${ultimo.recebidos}/${ultimo.total};
           <strong>Atualizados:</strong> ${ultimo.atualizados};
           <strong>Sem alteração:</strong> ${ultimo.semAlteracao};
           <strong>Novos inativos:</strong> ${ultimo.novosInativos};
-          <strong>Pendências:</strong> ${ultimo.pendentes}.</p>
+          <strong>Pendências:</strong> ${ultimo.pendentes};
+          <strong>Bloqueados:</strong> ${ultimo.bloqueados||0}.</p>
           <p>Relatório exportado em: ${e(formatDateTime(ultimo.geradoEm))};
           processamento: ${e(formatDateTime(ultimo.concluidoEm || ultimo.iniciadoEm))}
           <span class="texto-pequeno">(horário de Brasília)</span></p>
           ${blocoProdutosNovos(ultimo,req)}
           ${blocoProdutosAtualizados(ultimo,req)}
+          ${blocoTriagemControlados(ultimo,req)}
           ${ultimo.detalhes?.length?`<h3>Conferências necessárias</h3><ul>${ultimo.detalhes.map(x=>
             `<li>Código ${e(x.codigoInterno)}: ${e(x.motivo)}</li>`).join('')}</ul>`:''}
           `:'<p>Nenhum relatório sincronizado por este robô.</p>'}
@@ -174,6 +245,40 @@ export function registrarRotasRoboInova(app,db) {
     logAdmin(db,req.adminUser,'revogou_robo_csv_inova','integracao','principal',{},req);
     res.set('Cache-Control','no-store');
     res.html(html(req,{mensagem:'Acesso remoto revogado. O robô não poderá enviar arquivos.'}));
+  });
+  app.post('/admin/robo-inovafarma/controlados/importar',
+    {maxBodyBytes:4*1024*1024+128*1024},(req,res)=>{
+    if(!protegerAdmin(req,res))return;
+    res.set('Cache-Control','no-store');
+    if(req.body.confirmarControlados!=='1')
+      return void res.html(html(req,{mensagem:'Confirme que o CSV contém somente medicamentos controlados.'}),400);
+    const arquivo=(req.files||[]).find(f=>f.field==='arquivo');
+    if(!arquivo || !/\.csv$/i.test(String(arquivo.filename||'')) ||
+      !arquivo.data?.length || arquivo.data.length>4*1024*1024){
+      return void res.html(html(req,{mensagem:'Selecione um CSV válido de até 4 MB.'}),400);
+    }
+    try{
+      const importado=adicionarListaControlados(db,arquivo.data);
+      const catalogo=bloquearControladosExistentes(db);
+      logAdmin(db,req.adminUser,'importou_lista_bloqueio_controlados_inova',
+        'integracao','principal',{novos:importado.novos,bloqueados:catalogo.bloqueados},req);
+      return void res.html(html(req,{mensagem:
+        'Lista adicionada: '+importado.novos+' novos, '+importado.repetidos+
+        ' repetidos; '+catalogo.bloqueados+' produtos existentes inativados.'}));
+    }catch(err){
+      return void res.html(html(req,{mensagem:'CSV recusado: '+String(err?.message||'formato inválido')}),400);
+    }
+  });
+  app.post('/admin/robo-inovafarma/controlados/reaplicar',(req,res)=>{
+    if(!protegerAdmin(req,res))return;
+    if(req.body.confirmarControlados!=='1')
+      return void res.html(html(req,{mensagem:'Confirme a inativação do catálogo.'}),400);
+    const resultado=bloquearControladosExistentes(db);
+    logAdmin(db,req.adminUser,'reaplicou_lista_bloqueio_controlados_inova',
+      'integracao','principal',{bloqueados:resultado.bloqueados},req);
+    res.set('Cache-Control','no-store');
+    res.html(html(req,{mensagem:'Bloqueio aplicado: '+resultado.bloqueados+
+      ' produtos existentes inativados; '+resultado.jaBloqueados+' já estavam protegidos.'}));
   });
   const auth=(req,res)=>{
     res.set('Cache-Control','no-store');
