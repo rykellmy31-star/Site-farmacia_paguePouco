@@ -277,7 +277,7 @@ export function registrarRotasCheckout(app, db) {
     const autorizouAgora = avisosDisponiveis && (
       escolhaWhatsapp === 'autorizar' || req.body.aceitaWhatsAppPedido === '1');
     const avisosWhatsapp = avisosDisponiveis &&
-      (autorizouAgora || autorizouWhatsappPedidos(req.user));
+      (autorizouAgora || (escolhaWhatsapp !== 'sem' && autorizouWhatsappPedidos(req.user)));
     const carrinhoOriginal = { itens: [...(cart.itens || [])], cupom: cart.cupom, frete: cart.frete };
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
