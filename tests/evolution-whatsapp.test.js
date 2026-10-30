@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {Collection} from '../src/lib/store.js';
+import {atualizarStatusFinanceiro} from '../src/lib/orders.js';
 import {
   numeroWhatsapp, validarEvolutionConfig,enfileirarEvolution,processarFilaEvolution,
   resumoEvolution,possuiFilaEvolution
@@ -49,11 +51,19 @@ test('cliente só recebe se autorizou; equipe só recebe apos aprovacao; sem vaz
   const db=dbFake();ativar(db);
   assert.equal(enfileirarEvolution(db,pedido({receberWhatsappPedido:false}),'cliente_recebido').motivo,'sem_optin');
   assert.equal(enfileirarEvolution(db,pedido(),'responsavel_pago').motivo,'ainda_nao_pago');
+  assert.equal(enfileirarEvolution(db,pedido(),'cliente_pago').motivo,'ainda_nao_pago');
+  assert.equal(enfileirarEvolution(db,pedido({statusFinanceiro:'aprovado',receberWhatsappPedido:false}),'cliente_pago').motivo,'sem_optin');
   assert.equal(enfileirarEvolution(db,pedido(),'cliente_recebido').enfileirado,true);
   assert.equal(enfileirarEvolution(db,pedido(),'cliente_recebido').duplicado,true);
   assert.equal(enfileirarEvolution(db,pedido({statusFinanceiro:'aprovado'}),'responsavel_pago').enfileirado,true);
+  assert.equal(enfileirarEvolution(db,pedido({statusFinanceiro:'aprovado'}),'cliente_pago').enfileirado,true);
+  assert.equal(enfileirarEvolution(db,pedido({statusFinanceiro:'aprovado'}),'cliente_pago').duplicado,true);
   const fila=db.collection('evolutionWhatsappOutbox').all();
-  assert.equal(fila.length,2);
+  assert.equal(fila.length,3);
+  const pago=fila.find(x=>x.tipo==='cliente_pago');
+  assert.equal(pago.numero,'5573988887777');
+  assert.match(pago.texto,/pagamento.*confirmado/i);
+  assert.match(pago.texto,/1058/);
   assert.ok(fila.every(x=>!x.texto.includes('Produto de saúde sensível')&&!x.texto.includes('Informação privada')));
   assert.equal(fila.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
 });
@@ -95,4 +105,74 @@ test('sem chave ou desativado nenhum request externo e disparado',async()=>{
   const enviar=async()=>{throw Error('nao deve enviar');};
   assert.equal((await processarFilaEvolution(db,{apiKey:'',enviar})).ativo,false);
   assert.equal(resumoEvolution(db).fila,1);
+});
+
+function pedidoRealWhatsapp({optin=true,provedor='mercadopago',avisarCliente=true}={}){
+  const colecoes=new Map();
+  const db={collection(name){
+    if(!colecoes.has(name)) colecoes.set(name,new Collection({_commit(){}},name));
+    return colecoes.get(name);
+  }};
+  db.collection('settings').insert({
+    id:'evolutionWhatsapp',ativo:true,baseUrl:'https://whatsapp.exemplo.com',
+    instancia:'farmacia-pague-pouco',numeroRemetente:'5573999998888',
+    numeroResponsavel:'5573999888777',avisarResponsavel:true,avisarCliente,
+  });
+  db.collection('products').insert({
+    id:'produto',estoque:{quantidade:5,reservado:1},vendas:0,
+  });
+  db.collection('orders').insert({
+    ...pedido({statusFinanceiro:'pendente',receberWhatsappPedido:optin}),
+    statusOperacional:'aguardando_pagamento',pagamentoId:'pagamento',
+    itens:[{produtoId:'produto',nome:'Medicamento confidencial',quantidade:1}],
+    historico:[],totalCentavos:1000,
+  });
+  db.collection('payments').insert({
+    id:'pagamento',pedidoId:'pedido-1',provedor,metodo:'pix',
+    status:'approved',valorCentavos:1000,
+  });
+  db.collection('stockMovements').insert({
+    id:'reserva',pedidoId:'pedido-1',produtoId:'produto',tipo:'reserva',quantidade:1,
+  });
+  return db;
+}
+
+test('aprovacao real do Mercado Pago envia eventos separados ao cliente e responsavel, uma vez',()=>{
+  const db=pedidoRealWhatsapp();
+  const antes=db.collection('evolutionWhatsappOutbox').all();
+  assert.equal(antes.length,0);
+  const confirmado=atualizarStatusFinanceiro(db,'pedido-1','aprovado',{por:'conciliacao'});
+  assert.equal(confirmado.ok,true);
+  assert.equal(confirmado.pedido.statusFinanceiro,'aprovado');
+  const outbox=db.collection('evolutionWhatsappOutbox').all();
+  assert.deepEqual(outbox.map(x=>x.tipo).sort(),['cliente_pago','responsavel_pago']);
+  assert.equal(outbox.find(x=>x.tipo==='cliente_pago').numero,'5573988887777');
+  assert.equal(outbox.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
+  assert.ok(outbox.every(x=>x.status==='fila'));
+  assert.ok(outbox.every(x=>!x.texto.includes('Medicamento confidencial')));
+  assert.equal(atualizarStatusFinanceiro(db,'pedido-1','aprovado').semAlteracao,true);
+  assert.equal(db.collection('evolutionWhatsappOutbox').count(),2);
+  assert.equal(db.collection('products').get('produto').estoque.quantidade,4);
+});
+
+test('sem opt-in ou canal de cliente, nao envia pagamento ao cliente; provedor interno nao gera WhatsApp',()=>{
+  for(const opcoes of [
+    {optin:false,provedor:'mercadopago'},
+    {optin:true,provedor:'mercadopago',avisarCliente:false},
+    {optin:true,provedor:'internal'},
+  ]){
+    const db=pedidoRealWhatsapp(opcoes);
+    assert.equal(atualizarStatusFinanceiro(db,'pedido-1','aprovado').ok,true);
+    const tipos=db.collection('evolutionWhatsappOutbox').all().map(x=>x.tipo);
+    assert.equal(tipos.includes('cliente_pago'),false);
+    assert.equal(tipos.includes('responsavel_pago'),opcoes.provedor==='mercadopago');
+  }
+});
+
+test('nao confirma cliente pago sem status aprovado ou numero valido',()=>{
+  const db=pedidoRealWhatsapp();
+  assert.equal(enfileirarEvolution(db,db.collection('orders').get('pedido-1'),'cliente_pago').motivo,'ainda_nao_pago');
+  db.collection('orders').update('pedido-1',{statusFinanceiro:'aprovado',cliente:{nome:'Maria',telefone:'invalido'}});
+  assert.equal(enfileirarEvolution(db,db.collection('orders').get('pedido-1'),'cliente_pago').motivo,'sem_numero');
+  assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
 });
