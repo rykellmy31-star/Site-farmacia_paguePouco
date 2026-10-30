@@ -4,6 +4,7 @@ import {escapeHtml as e, csrfToken} from '../lib/security.js';
 import {getAllSettings} from '../lib/settings.js';
 import {formatDateTime,formatBRL} from '../lib/format.js';
 import {can} from '../lib/permissions.js';
+import {avaliarUltimoRelatorioControlados} from '../lib/triagem-controlados.js';
 import {logAdmin} from '../lib/audit.js';
 import {
  configurarRoboInova,consultarRoboInova,autenticarRoboInova,
@@ -96,6 +97,38 @@ export function registrarRotasRoboInova(app,db) {
     return titulo+'<p class="texto-pequeno">Detalhes das mudanças de estoque e preço de venda, comparados com os valores que estavam no site antes da importação. Uma redução do saldo não confirma, por si só, uma venda.</p>'+
       '<ol start="'+((relatorio.pagina-1)*50+1)+'">'+itens+'</ol>'+navegacao;
   };
+  // Leitura exclusiva dos blocos CSV que o V3 já enviou. Nunca altera produtos.
+  const blocoTriagemControlados=(ultimo,req)=>{
+    if(ultimo?.status!=='concluido')return '';
+    const n=Number(req.query?.get('controladosPagina')||1);
+    const t=avaliarUltimoRelatorioControlados(db,{pagina:n,porPagina:40});
+    if(!t.disponivel)return '<section class="painel"><h2>Triagem de possíveis controlados</h2>'+
+      '<p>Relatório ainda indisponível ou incompleto. Nenhum produto foi classificado.</p></section>';
+    const produtos=db.collection('products').all();
+    const porCodigo=new Map(produtos.map(p=>[String(p.codigoInterno||''),p]));
+    const itens=t.itens.map(x=>{
+      const p=porCodigo.get(x.codigoInterno);
+      const nome=p?'<a href="/admin/produtos/'+encodeURIComponent(String(p.id))+'">'+
+        '<strong>'+e(x.nome)+'</strong></a>':'<strong>'+e(x.nome)+'</strong>';
+      return '<li>'+nome+' — código '+e(x.codigoInterno)+
+        (x.ean?' · EAN '+e(x.ean):'')+
+        ' · termo encontrado: '+e(x.substancias.join(', '))+'</li>';
+    }).join('');
+    const base='/admin/robo-inovafarma?controladosPagina=';
+    const anterior=t.pagina>1?'<a href="'+base+(t.pagina-1)+'">Anterior</a> ':'';
+    const proxima=t.pagina<t.paginas?'<a href="'+base+(t.pagina+1)+'">Próxima</a>':'';
+    return '<section class="painel"><h2>Triagem de possíveis medicamentos controlados</h2>'+
+      '<p><strong>'+t.total+' possíveis ocorrências</strong> em '+t.analisados+
+      ' itens do último CSV. Esta é uma busca inicial por alguns nomes de substâncias, '+ 
+      'não uma classificação completa da Anvisa. Remédios por nome comercial podem não aparecer.</p>'+
+      '<p class="alerta aviso">A conferência e classificação sanitária devem ser feitas pelo '+ 
+      'farmacêutico responsável, consultando a Portaria 344/1998 atualizada e o registro do produto. '+
+      'Esta triagem não libera venda, não atesta receita e não modifica o cadastro.</p>'+
+      (t.total?'<ol start="'+((t.pagina-1)*40+1)+'">'+itens+'</ol>':
+        '<p>Nenhuma correspondência encontrada na lista inicial; isso não significa ausência de controlados.</p>')+
+      (t.paginas>1?'<p>Página '+t.pagina+' de '+t.paginas+'. '+anterior+proxima+'</p>':'')+
+      '</section>';
+  };
   const html=(req,{token='',mensagem=''}={})=>{
     const estado=consultarRoboInova(db);
     const ultimo=estado.ultimo;
@@ -150,6 +183,7 @@ export function registrarRotasRoboInova(app,db) {
           <span class="texto-pequeno">(horário de Brasília)</span></p>
           ${blocoProdutosNovos(ultimo,req)}
           ${blocoProdutosAtualizados(ultimo,req)}
+          ${blocoTriagemControlados(ultimo,req)}
           ${ultimo.detalhes?.length?`<h3>Conferências necessárias</h3><ul>${ultimo.detalhes.map(x=>
             `<li>Código ${e(x.codigoInterno)}: ${e(x.motivo)}</li>`).join('')}</ul>`:''}
           `:'<p>Nenhum relatório sincronizado por este robô.</p>'}
