@@ -19,7 +19,7 @@ export const normalizarNome = v => String(v ?? '').normalize('NFD')
   .replace(/[^a-z0-9]+/g,' ').trim();
 
 const coluna = v => normalizarNome(v).replace(/ /g,'');
-const COD = /^(?:0|[1-9]\d{0,19})$/;
+const COD = /^\d{1,20}$/;
 const EAN = /^\d{8,14}$/;
 const opcoes = {
   codigoInterno: ['codigo','codigointerno','codigoproduto','codproduto','cod','codprod','codigodoitem'],
