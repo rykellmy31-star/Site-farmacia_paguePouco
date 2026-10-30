@@ -28,7 +28,7 @@ export function decidirAvisosWhatsappPedido(cliente,configuracao,escolha='',acei
       (escolha!=='sem'&&previamenteAutorizado)),
   };
 }
-function hostValido(url){
+export function hostValido(url){
   if(!/^https:\/\//i.test(String(url||'')))return false;
   try{
     const u=new URL(url),h=u.hostname.toLowerCase();
