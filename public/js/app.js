@@ -422,7 +422,13 @@
     };
     radios.forEach((r) => r.addEventListener('change', alternar));
     alternar();
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', (event) => {
+      // Guardar a escolha explicita antes de desabilitar o botao principal:
+      // botoes disabled nao sao incluidos na serializacao HTML do formulario.
+      const escolha = form.querySelector('[name="preferenciaWhatsappPedido"]');
+      if (escolha && event.submitter?.name === 'acaoWhatsappPedido') {
+        escolha.value = event.submitter.value === 'autorizar' ? 'autorizar' : 'sem';
+      }
       const botao = $('#botaoFinalizar');
       if (botao) { botao.disabled = true; botao.textContent = 'Processando...'; }
     });
