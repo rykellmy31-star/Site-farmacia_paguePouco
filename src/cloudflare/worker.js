@@ -5,6 +5,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { config, configureCloudflare } from '../config.js';
 import { avaliarAutomacaoInova } from '../lib/inovafarma-automation.js';
+import {processarFilaEvolution,possuiFilaEvolution} from '../lib/evolution-whatsapp.js';
 import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
 import { CloudStore } from './store.js';
@@ -78,6 +79,15 @@ export class LojaDurableObject extends DurableObject {
         ip: request.headers.get('x-pague-pouco-ip') || 'unknown',
       });
       await this.db.flush(); // Não confirma sucesso antes da persistência.
+      // Filas persistidas por pedido: falha de WhatsApp jamais deve rejeitar
+      // pedido, webhook ou pagamento. No máximo 2 envios por requisição.
+      try{
+        if(possuiFilaEvolution(this.db))
+          await processarFilaEvolution(this.db,{
+            apiKey:this.bindings.EVOLUTION_API_KEY, max:2,
+            persistir:()=>this.db.flush()
+          });
+      }catch{console.warn('[evolution] fila pendente para conferência');}
       await this.programarAlarmeFinanceiro();
       return response;
     }).catch(err => {
@@ -90,7 +100,8 @@ export class LojaDurableObject extends DurableObject {
   // Durable Object Alarms: Pix e estornos não dependem de visitas do cliente.
   async programarAlarmeFinanceiro() {
     if (!temPixPendente(this.db) && !temEstornoPendente(this.db) &&
-        !temCheckoutInterrompido(this.db) && !config.inova?.enabled) return;
+        !temCheckoutInterrompido(this.db) && !config.inova?.enabled &&
+        !possuiFilaEvolution(this.db)) return;
     const atual = await this.ctx.storage.getAlarm();
     if (atual == null) await this.ctx.storage.setAlarm(Date.now() + 5 * 60_000);
   }
@@ -129,6 +140,14 @@ export class LojaDurableObject extends DurableObject {
             console.warn('[alarme financeiro] verificar fluxo:', fluxo),
         });
       } finally {
+        try{
+          if(possuiFilaEvolution(this.db))
+            await processarFilaEvolution(this.db,{
+              apiKey:this.bindings.EVOLUTION_API_KEY,max:3,
+              persistir:()=>this.db.flush()
+            });
+        }catch{console.warn('[evolution] erro no processamento da fila');}
+        await this.programarAlarmeFinanceiro();
         // Monitoramento local periódico apenas após ativação homologada.
         // Não faz requests ao ERP, não gera vendas nem altera saldos.
         if (config.inova?.enabled) {
