@@ -8,16 +8,42 @@
 - Uma fila por evento e pedido evita mensagens repetidas. Como um timeout de rede pode indicar uma mensagem entregue, não há reenvio automático de resultado incerto; o painel exibe `verificar`.
 - Nenhum disparo retroativo de pedidos anteriores à ativação.
 
-## Para concluir a configuração (Cloudflare produção)
-1. No painel da Evolution API v2 já hospedada, crie uma **instância exclusiva** para a farmácia e conecte o número da farmácia via WhatsApp.
-2. Em Cloudflare, abra o Worker existente `site-farmacia-paguepouco` → **Configurações** → **Variáveis e segredos**. Crie um **segredo** chamado `EVOLUTION_API_KEY` com a chave autorizada na Evolution API. Não compartilhe a chave pelo chat nem armazene no repositório ou no campo de URL.
-3. Na loja, faça login como Superadmin e abra **/admin/evolution-whatsapp** ou acesse o botão a partir de **/admin/whatsapp**.
-4. Informe **URL HTTPS pública da Evolution** (sem `/manager`), **nome exato da instância**, **número que envia** (deve ser o mesmo conectado na Evolution) e **número que recebe** (separador de pedidos). Marque avisos internos e/ou ao cliente.
-5. Marque **Ativar notificações automáticas** e salve. Faça um pedido real **de teste controlado**, autorize o opt-in, pague e confira os três avisos no painel/histórico: cliente no recebimento, cliente no pagamento e responsável no pagamento. Não realizar pagamento de teste no ambiente de produção apenas para verificar configuração sem autorização.
-6. O frontend não grava nem exibe o segredo. Uma instância separada do TIGU impede que os números e as mensagens se misturem.
+## Conexão simplificada na Farmácia Pague Pouco
+
+O superadministrador acessa `/admin/evolution-whatsapp` e preenche **somente**
+o nome da instância exclusiva da farmácia e o WhatsApp que recebe pedidos pagos.
+Depois de **Salvar configurações**, clica em **Conectar WhatsApp / Gerar QR Code**
+e lê o QR pelo WhatsApp da farmácia em **Aparelhos conectados**.
+A tela mostra conectado, conectando ou desconectado.
+
+O botão cria automaticamente a instância, caso ainda não exista, usando a integração
+`WHATSAPP-BAILEYS`, ou reutiliza a instância existente sem apagá-la.
+A instância conectada determina o número remetente, sem precisar digitá-lo.
+Nunca compartilhar o mesmo nome de instância com TIGU, Odonto ou outros projetos.
+
+### Configuração única na Cloudflare
+
+No Worker existente `site-farmacia-paguepouco`, em **Configurações → Variáveis
+e segredos**, configurar:
+
+- `EVOLUTION_API_URL` — URL HTTPS da Evolution v2 instalada na VPS, sem
+  `/manager`, sem barra final; preferir segredo/variável de servidor.
+- `EVOLUTION_API_KEY` — segredo da chave autorizada na Evolution API.
+
+Se já existir uma URL antiga salva no banco, ela é mantida como alternativa para
+não interromper o envio; entretanto, a variável de servidor tem prioridade.
+A chave sempre fica no Worker. **Não** colocar URL ou chave no formulário nem
+em JavaScript ou repositório; cada Worker tem seus próprios bindings.
+
+A geração de QR Code e a consulta de estado são restritas à sessão do superadmin,
+a resposta não inclui chave nem credenciais e o POST do QR exige CSRF.
+
+Para conferir, depois de conectar e ativar os avisos, fazer um pedido controlado
+e verificar os eventos no Histórico seguro. Não deve haver envios retroativos
+nem interferência em Mercado Pago, robô InovaFarma ou botão de atendimento.
 
 ## Regras técnicas
-- Envios via `POST {baseUrl}/message/sendText/{instancia}`, `apikey` no cabeçalho e corpo `{number,text}`.
+- Envios via `POST {EVOLUTION_API_URL}/message/sendText/{instancia}`, `apikey` no cabeçalho e corpo `{number,text}`. A URL antiga é fallback para preservar a conexão.
 - O Worker persiste o evento e marca a tentativa antes de chamar a rede; respostas do provedor não são gravadas integralmente nem expostas ao cliente.
 - O processamento do WhatsApp nunca deve abortar a confirmação do pedido ou os webhooks de pagamento.
 - **Segurança:** URL configurável restrita a HTTPS com host público; não são aceitas URLs localhost/IP literal. Em produção, a resolução DNS do endpoint deve apontar para infraestrutura de confiança.
@@ -26,7 +52,7 @@
 - Endpoint da Evolution v2: https://github.com/evolution-foundation/evolution-docs/blob/main/docs/05-Endpoints/00-send-plain-text.md
 
 ## Testes
-`node --test tests/evolution-whatsapp.test.js`
+`node --test tests/evolution-whatsapp.test.js tests/evolution-connection.test.js`
 
 ## Proteção do aceite
 - A opção de WhatsApp não é obrigatória para comprar. O botão `Finalizar sem avisos no WhatsApp` finaliza o mesmo checkout normalmente.
