@@ -5,8 +5,10 @@ import {escapeHtml as e} from '../../lib/security.js';
 export function telaEvolutionWhatsapp(ctx,{cfg,resumo}){
   const campo=(nome,rotulo,dica='')=>campoAdmin({nome,rotulo,valor:cfg[nome]||'',dica});
   const check=(nome,rotulo)=>campoAdmin({nome,rotulo,tipo:'checkbox',valor:cfg[nome]===true});
+  const rotuloEvento={responsavel_pago:'Equipe — pagamento aprovado',
+    cliente_pago:'Cliente — pagamento aprovado',cliente_recebido:'Cliente — pedido recebido'};
   const ultimos=resumo.recentes.map(x=>'<li>Pedido '+e(String(x.pedidoId))+
-    ' — '+(x.tipo==='responsavel_pago'?'Equipe':'Cliente')+' — '+e(x.status)+'</li>').join('');
+    ' — '+e(rotuloEvento[x.tipo]||'Notificação')+' — '+e(x.status)+'</li>').join('');
   const cabecalho='<h1>Evolution API — notificações de pedidos</h1>'+
     '<p>Esta integração é exclusiva para avisos de pedidos. Não altera os robôs, '+
     'o Mercado Pago ou o botão de atendimento.</p>'+
@@ -23,7 +25,7 @@ export function telaEvolutionWhatsapp(ctx,{cfg,resumo}){
     'da farmácia na Cloudflare. Nunca digite a chave neste painel.</div>'});
   const regras=painel({titulo:'Ativação e avisos',corpo:
     check('avisarResponsavel','Enviar aviso ao responsável apenas depois do pagamento aprovado')+
-    check('avisarCliente','Enviar confirmação de recebimento ao cliente que concordou no checkout')+
+    check('avisarCliente','Avisar o cliente no recebimento do pedido e após pagamento aprovado (com autorização no checkout)')+
     check('ativo','Ativar notificações automáticas')+
     '<p class="texto-pequeno">O cliente autoriza no checkout (opção desmarcada por padrão). '+
     'Nenhuma mensagem contém nomes dos medicamentos, CPF ou dados médicos. '+

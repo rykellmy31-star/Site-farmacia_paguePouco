@@ -477,8 +477,12 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   // Não avisar pedidos simulados do provedor interno.
   const pagamentoAviso = pedidoAtual.pagamentoId
     ? db.collection('payments').get(pedidoAtual.pagamentoId) : null;
-  if (status === 'aprovado' && pagamentoAviso?.provedor === 'mercadopago')
+  if (status === 'aprovado' && pagamentoAviso?.provedor === 'mercadopago') {
+    // Um evento por destinatario; cliente somente com opt-in do checkout.
+    // O pagamento ja foi confirmado pelo webhook/conciliacao autenticados.
     enfileirarEvolution(db, pedidoAtual, 'responsavel_pago');
+    enfileirarEvolution(db, pedidoAtual, 'cliente_pago');
+  }
   if (mudouOperacional && ['recusado','expirado','estornado'].includes(status)) {
     enfileirarAvisoPedido(db, pedidoAtual, 'operacional', patch.statusOperacional);
   }
