@@ -106,7 +106,7 @@ export async function processarFilaEvolution(db,{apiKey='',enviar=globalThis.fet
         response=await enviar(cfg.baseUrl+'/message/sendText/'+encodeURIComponent(cfg.instancia),{
           method:'POST',headers:{'Content-Type':'application/json',apikey:String(apiKey)},
           body:JSON.stringify({number:item.numero,text:item.texto}),
-          signal:controller.signal,redirect:'error',
+          signal:controller.signal,redirect:'manual', // Workers nao aceita redirect:error
         });
       }finally{clearTimeout(timer);}
       if(response.ok){col.update(item.id,{status:'enviado',enviadoEm:nowISO(),texto:null});enviados++;}
