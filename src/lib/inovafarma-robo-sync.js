@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import {nowISO} from './store.js';
 import {slugUnicoProduto} from './catalog.js';
 import {inovaAtiva} from './inovafarma-stock.js';
+import {criarAvaliadorControlados,normalizarNome} from './bloqueio-controlados-inova.js';
 
 const LIMITE=200, MIN_PRODUTOS=3000, MAX_PRODUTOS=12000;
 const HASH=/^[a-f0-9]{64}$/;
@@ -49,6 +50,7 @@ export function consultarRoboInova(db){
     total:ult.total,aplicados:ult.aplicados||0,
     atualizados:ult.atualizados||0,semAlteracao:ult.semAlteracao||0,
     novosInativos:ult.novosInativos||0,pendentes:ult.pendentes||0,
+    bloqueados:ult.bloqueados||0,
     detalhes:(ult.detalhes||[]).slice(-25),
   }:null};
 }
@@ -138,7 +140,7 @@ export function receberBlocoRoboInova(db,form) {
         col.insert({id:hash,arquivoHash:hash,geradoEm:form.geradoEm,
           total:form.total,blocos:form.blocos,recebidos:0,aplicados:0,
           status:'recebendo',iniciadoEm:agora,atualizados:0,
-          semAlteracao:0,novosInativos:0,pendentes:0,detalhes:[]});
+          semAlteracao:0,novosInativos:0,pendentes:0,bloqueados:0,detalhes:[]});
         db.collection(configCol).update('principal',{ultimaExecucao:hash});
       }
       db.collection(batchesCol).insert({id,hash,bloco:form.bloco,items:form.itens,
@@ -184,9 +186,30 @@ function criarNovoInativo(db,it,agora){
     criadoEm:agora,atualizadoEm:agora,
   });
 }
-function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteracoes=[]) {
+function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteracoes=[],avaliarControlado=null) {
   const produtos=db.collection('products');
   const todos=produtos.all();
+  // REGRA SANITÁRIA ANTES DE QUALQUER CRIAÇÃO, PREÇO OU SALDO.
+  // Se o CSV ou a lista inicial indicar bloqueio, novos produtos não entram
+  // no banco. Os já cadastrados são inativados sem mexer no estoque ou pedidos.
+  const bloqueio=avaliarControlado?.(it);
+  if(bloqueio?.bloqueado){
+    const nome=normalizarNome(it.nome);
+    const encontrados=todos.filter(p=>!p.inovaArquivado?.em && (
+      String(p.codigoInterno||'')===it.codigoInterno ||
+      (it.ean && String(p.ean||'')===it.ean) ||
+      (nome && normalizarNome(p.nome)===nome)
+    ));
+    for(const p of encontrados){
+      if(p.bloqueioControladoInova?.ativo && !p.ativo)continue;
+      produtos.update(p.id,{
+        ativo:false,destaque:false,atualizadoEm:agora,
+        bloqueioControladoInova:{ativo:true,motivo:bloqueio.motivo,bloqueadoEm:agora},
+      });
+    }
+    indicadores.bloqueados++;
+    return detalhe(it,'medicamento_bloqueado_'+bloqueio.motivo);
+  }
   if(it.ean && duplicadosEan.has(it.ean)){
     indicadores.pendentes++;return detalhe(it,'ean_duplicado_no_relatorio');
   }
@@ -275,12 +298,13 @@ export function aplicarBlocoRoboInova(db,{arquivoHash,bloco}={}) {
       else vistosEan.set(it.ean,it.codigoInterno);
     }
   }
-  const ind={atualizados:0,semAlteracao:0,novosInativos:0,pendentes:0};
+  const ind={atualizados:0,semAlteracao:0,novosInativos:0,pendentes:0,bloqueados:0};
+  const avaliarControlado=criarAvaliadorControlados(db);
   const detalhes=[],alteracoes=[];const agora=nowISO();
   try{
     return transacionar(db,()=>{
       for(const it of lote.items){
-        const item=aplicarProduto(db,it,agora,ind,duplicadosEan,alteracoes);
+        const item=aplicarProduto(db,it,agora,ind,duplicadosEan,alteracoes,avaliarControlado);
         if(item&&detalhes.length<50)detalhes.push(item);
       }
       db.collection(batchesCol).update(lote.id,{aplicadoEm:agora,alteracoes});
@@ -291,13 +315,14 @@ export function aplicarBlocoRoboInova(db,{arquivoHash,bloco}={}) {
         semAlteracao:job.semAlteracao+ind.semAlteracao,
         novosInativos:job.novosInativos+ind.novosInativos,
         pendentes:job.pendentes+ind.pendentes,
+        bloqueados:(job.bloqueados||0)+ind.bloqueados,
         detalhes:[...(job.detalhes||[]),...detalhes].slice(-80),
         status:terminou?'concluido':'aplicando',
         concluidoEm:terminou?agora:null,
       });
       return {ok:true,status:estado.status,aplicados:estado.aplicados,
         total:job.total,pendentes:estado.pendentes,novosInativos:estado.novosInativos,
-        atualizados:estado.atualizados};
+        atualizados:estado.atualizados,bloqueados:estado.bloqueados};
     });
   }catch{
     for(const name of ['products','stockMovements',batchesCol,jobsCol])db.collections?.delete(name);
