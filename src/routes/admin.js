@@ -41,7 +41,7 @@ import {
 import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
 import {
   registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro, concluirDevolucaoEstornada,
-  cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, validarReservaParaAprovacao,
+  cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, produtoComEstoqueParaPainel, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
@@ -136,12 +136,16 @@ export function registrarRotasAdmin(app, db) {
     const agora = new Date();
     const de = new Date(agora.getTime() - 30 * 86400000).toISOString();
     const m = metricas(db, { de });
+    const idsDisponiveis = new Set(db.collection('products').all()
+      .filter(produtoComEstoqueParaPainel).map(p => String(p.id)));
     res.html(telaDashboard(ctx, {
       metricas: m,
       grafico: vendasPorDia(db, 30),
       pedidosRecentes: db.collection('orders').all().sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 8),
-      estoqueBaixo: db.collection('products').all().filter((p) => Number(p.estoque?.quantidade || 0) <= Number(p.estoque?.minimo || 0)).slice(0, 10),
-      topProdutos: produtosMaisVendidos(db, 8),
+      estoqueBaixo: db.collection('products').all().filter((p) =>
+        produtoComEstoqueParaPainel(p) && Number(p.estoque?.quantidade) <= Number(p.estoque?.minimo || 0)
+      ).slice(0, 10),
+      topProdutos: produtosMaisVendidos(db, 100).filter(p => idsDisponiveis.has(String(p.produtoId))).slice(0, 8),
       infoPagamento: providerPublicInfo(db),
     }));
   });

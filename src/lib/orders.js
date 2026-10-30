@@ -13,7 +13,7 @@ import { nowISO } from './store.js';
 import { pedidoOcultoDoCliente } from './order-visibility.js';
 import { inovaAtiva } from './inovafarma-stock.js';
 import { selecionarVendedorPedido } from './sellers.js';
-import { podeVender, precoVigenteCentavos, estoqueDisponivel } from './catalog.js';
+import { podeVender, podeAtivarAposAprovacao, precoVigenteCentavos, estoqueDisponivel } from './catalog.js';
 import { resolverFreteEscolhido } from './freight.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
 import { logSystem } from './audit.js';
@@ -658,6 +658,16 @@ export function pedidosDoCliente(db, clienteId) {
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 
+/** Produtos exibíveis e com estoque físico positivo para a Visão Geral.
+ * Mantém a coleção completa disponível às demais rotinas operacionais e auditoria.
+ */
+export function produtoComEstoqueParaPainel(p) {
+  return !!p && p.ativo === true && !p.inovaArquivado?.em &&
+    Number.isFinite(Number(p.estoque?.quantidade)) &&
+    Number(p.estoque?.quantidade) > 0 &&
+    podeAtivarAposAprovacao(p).ok;
+}
+
 export function metricas(db, { de = null, ate = null } = {}) {
   let pedidos = db.collection('orders').all();
   if (de) pedidos = pedidos.filter((o) => o.criadoEm >= de);
@@ -668,6 +678,8 @@ export function metricas(db, { de = null, ate = null } = {}) {
   // Cadastros arquivados permanecem para auditoria, mas não entram nos
   // indicadores do catálogo comercial atual.
   const produtos = db.collection('products').all().filter(p => !p.inovaArquivado?.em);
+  const produtosComEstoque = produtos.filter(produtoComEstoqueParaPainel);
+  const estoqueBaixoComEstoque = produtosComEstoque.filter(p => Number(p.estoque?.quantidade) <= Number(p.estoque?.minimo || 0));
   const estoqueBaixo = produtos.filter((p) => {
     const e = p.estoque || {};
     return Number(e.quantidade || 0) <= Number(e.minimo || 0);
@@ -682,6 +694,8 @@ export function metricas(db, { de = null, ate = null } = {}) {
     receitaCentavos: receita,
     ticketMedioCentavos: ticket,
     produtosTotal: produtos.length,
+    produtosComEstoque: produtosComEstoque.length,
+    estoqueBaixoComEstoque: estoqueBaixoComEstoque.length,
     produtosAtivos: produtos.filter((p) => p.ativo).length,
     estoqueBaixo: estoqueBaixo.length,
     clientesTotal: db.collection('customers').count(),
