@@ -473,7 +473,12 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   }
   const pedidoAtual = db.collection('orders').get(pedidoId);
   enfileirarAvisoPedido(db, pedidoAtual, 'financeiro', status);
-  if (status === 'aprovado') enfileirarEvolution(db, pedidoAtual, 'responsavel_pago');
+  // Mensagem à equipe apenas em cobrança real do Mercado Pago.
+  // Não avisar pedidos simulados do provedor interno.
+  const pagamentoAviso = pedidoAtual.pagamentoId
+    ? db.collection('payments').get(pedidoAtual.pagamentoId) : null;
+  if (status === 'aprovado' && pagamentoAviso?.provedor === 'mercadopago')
+    enfileirarEvolution(db, pedidoAtual, 'responsavel_pago');
   if (mudouOperacional && ['recusado','expirado','estornado'].includes(status)) {
     enfileirarAvisoPedido(db, pedidoAtual, 'operacional', patch.statusOperacional);
   }
