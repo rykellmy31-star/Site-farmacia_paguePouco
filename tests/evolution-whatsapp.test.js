@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {Collection} from '../src/lib/store.js';
 import {atualizarStatusFinanceiro} from '../src/lib/orders.js';
 import {
   numeroWhatsapp, validarEvolutionConfig,enfileirarEvolution,processarFilaEvolution,
-  resumoEvolution,possuiFilaEvolution
+  resumoEvolution,possuiFilaEvolution,autorizouWhatsappPedidos,decidirAvisosWhatsappPedido
 } from '../src/lib/evolution-whatsapp.js';
 function dbFake(){
   const collections=new Map();
@@ -175,4 +176,49 @@ test('nao confirma cliente pago sem status aprovado ou numero valido',()=>{
   db.collection('orders').update('pedido-1',{statusFinanceiro:'aprovado',cliente:{nome:'Maria',telefone:'invalido'}});
   assert.equal(enfileirarEvolution(db,db.collection('orders').get('pedido-1'),'cliente_pago').motivo,'sem_numero');
   assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
+});
+
+test('aceite WhatsApp uma unica vez vale em novos pedidos sem nova caixa',()=>{
+  const cfg={ativo:true,avisarCliente:true};
+  const cliente={id:'c1',telefone:'(73) 98888-7777'};
+  assert.equal(autorizouWhatsappPedidos(cliente),false);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,cfg,'').avisarCliente,false);
+  const primeiro=decidirAvisosWhatsappPedido(cliente,cfg,'autorizar');
+  assert.equal(primeiro.autorizouAgora,true);
+  assert.equal(primeiro.avisarCliente,true);
+  cliente.consentimentoWhatsappPedidos={ativo:true,numero:'5573988887777',aceitoEm:'2026-10-30T00:00:00Z'};
+  assert.equal(autorizouWhatsappPedidos(cliente),true);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,cfg).avisarCliente,true);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,cfg,'sem').avisarCliente,false);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,{ativo:false,avisarCliente:true}).avisarCliente,false);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,{ativo:true,avisarCliente:false}).avisarCliente,false);
+});
+
+test('telefone diferente, revogacao e opt-in de marketing nao autorizam mensagens',()=>{
+  const cfg={ativo:true,avisarCliente:true};
+  const cliente={telefone:'73988887777',marketing:true};
+  assert.equal(autorizouWhatsappPedidos(cliente),false);
+  cliente.consentimentoWhatsappPedidos={ativo:true,numero:'5573988887777'};
+  cliente.telefone='73999996666';
+  assert.equal(autorizouWhatsappPedidos(cliente),false);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,cfg).avisarCliente,false);
+  cliente.telefone='73988887777';
+  cliente.consentimentoWhatsappPedidos.ativo=false;
+  assert.equal(decidirAvisosWhatsappPedido(cliente,cfg).avisarCliente,false);
+});
+
+test('checkout usa escolha visivel sem checkbox, e perfil permite revogar',()=>{
+  const checkout=readFileSync(new URL('../src/views/checkout.js',import.meta.url),'utf8');
+  const js=readFileSync(new URL('../public/js/app.js',import.meta.url),'utf8');
+  const account=readFileSync(new URL('../src/routes/account.js',import.meta.url),'utf8');
+  const view=readFileSync(new URL('../src/views/account.js',import.meta.url),'utf8');
+  assert.doesNotMatch(checkout,/type="checkbox" name="aceitaWhatsAppPedido"/);
+  assert.match(checkout,/Finalizar e receber avisos no WhatsApp/);
+  assert.match(checkout,/Finalizar sem avisos no WhatsApp/);
+  assert.match(checkout,/autorizouWhatsappPedidos\(ctx\.usuario\)/);
+  assert.match(checkout,/name="acaoWhatsappPedido" value="autorizar"/);
+  assert.match(js,/event\.submitter\?\.name === 'acaoWhatsappPedido'/);
+  assert.match(account,/post\('\/conta\/dados\/whatsapp-pedidos'/);
+  assert.match(account,/revogou_whatsapp_pedidos/);
+  assert.match(view,/Desativar avisos no WhatsApp/);
 });
