@@ -18,6 +18,7 @@ import { resolverFreteEscolhido } from './freight.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
 import { logSystem } from './audit.js';
 import { enfileirarAvisoPedido } from './order-notifications.js';
+import { enfileirarEvolution } from './evolution-whatsapp.js';
 import { installmentOptions } from './payments/index.js';
 
 export const STATUS_FINANCEIRO = {
@@ -134,7 +135,7 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
  * Cria o pedido a partir do carrinho, REVALIDANDO tudo no servidor.
  * @returns {{ok:boolean, erro?:string, pedido?:object, avisos?:string[]}}
  */
-export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cupomCodigo = null, vendedorId = null, req = null }) {
+export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, req = null }) {
   const avisos = [];
   const loja = db.collection('settings').get('loja') || {};
   if (loja.lojaAberta === false) return { ok: false, erro: 'A loja está fechada para novos pedidos.' };
@@ -287,6 +288,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     totalCentavos,
     metodoPagamento, // pix | credit_card | debit_card
     parcelas: parcelasValidadas,
+    receberWhatsappPedido: receberWhatsappPedido===true,
     statusFinanceiro: 'pendente',
     statusOperacional: 'aguardando_pagamento',
     endereco: { ...endereco },
@@ -471,6 +473,7 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
   }
   const pedidoAtual = db.collection('orders').get(pedidoId);
   enfileirarAvisoPedido(db, pedidoAtual, 'financeiro', status);
+  if (status === 'aprovado') enfileirarEvolution(db, pedidoAtual, 'responsavel_pago');
   if (mudouOperacional && ['recusado','expirado','estornado'].includes(status)) {
     enfileirarAvisoPedido(db, pedidoAtual, 'operacional', patch.statusOperacional);
   }
