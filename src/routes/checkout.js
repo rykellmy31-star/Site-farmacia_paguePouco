@@ -12,7 +12,7 @@ import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '..
 import { lookupCep, UF_LIST } from '../lib/cep.js';
 import { logCustomer } from '../lib/audit.js';
 import { sendMail } from '../lib/mailer.js';
-import { enfileirarEvolution, autorizouWhatsappPedidos, numeroWhatsapp } from '../lib/evolution-whatsapp.js';
+import { enfileirarEvolution, autorizouWhatsappPedidos, numeroWhatsapp, decidirAvisosWhatsappPedido } from '../lib/evolution-whatsapp.js';
 import { config } from '../config.js';
 import { uid } from '../lib/store.js';
 import { vendedoresAtivos } from '../lib/sellers.js';
@@ -270,14 +270,10 @@ export function registrarRotasCheckout(app, db) {
     }
 
     const parcelas = Math.max(1, Number(req.body.parcelas) || 1);
-    const avisosDisponiveis = ctx.settings.evolutionWhatsapp?.ativo === true &&
-      ctx.settings.evolutionWhatsapp?.avisarCliente === true;
     // Botao explicito (sem checkbox) ou autorizacao anterior valida para o numero atual.
     const escolhaWhatsapp = String(req.body.acaoWhatsappPedido || req.body.preferenciaWhatsappPedido || '');
-    const autorizouAgora = avisosDisponiveis && (
-      escolhaWhatsapp === 'autorizar' || req.body.aceitaWhatsAppPedido === '1');
-    const avisosWhatsapp = avisosDisponiveis &&
-      (autorizouAgora || (escolhaWhatsapp !== 'sem' && autorizouWhatsappPedidos(req.user)));
+    const { autorizouAgora, avisarCliente:avisosWhatsapp } = decidirAvisosWhatsappPedido(
+      req.user,ctx.settings.evolutionWhatsapp,escolhaWhatsapp,req.body.aceitaWhatsAppPedido === '1');
     const carrinhoOriginal = { itens: [...(cart.itens || [])], cupom: cart.cupom, frete: cart.frete };
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
