@@ -10,6 +10,7 @@
  */
 import { slugify } from './security.js';
 import {constaPsicotropicoExportadoInova} from './psicotropicos-inova-20261029.js';
+import {constaAntimicrobianoExportadoInova} from './antimicrobianos-inova-20261029.js';
 import { inovaAtiva, estoqueInovaDisponivel } from './inovafarma-stock.js';
 import { precoPromocaoInovaVigente } from './inovafarma-promocoes-precos.js';
 
@@ -57,6 +58,8 @@ export function sanitarioDefault() {
 export function podeAtivarAposAprovacao(produto) {
   if (!produto) return { ok: false, motivo: 'Produto inexistente.', codigo: 'NOT_FOUND', bloqueioSanitario: false };
   if (produto.inovaArquivado?.em) return { ok: false, motivo: 'Produto arquivado.', codigo: 'ARQUIVADO', bloqueioSanitario: false };
+  if (constaAntimicrobianoExportadoInova(produto))
+    return { ok: false, motivo: 'Produto não disponível no catálogo online por decisão comercial para os antimicrobianos.', codigo: 'ANTIMICROBIANO_INOVA', bloqueioSanitario: true };
   if (constaPsicotropicoExportadoInova(produto))
     return { ok: false, motivo: 'Este produto integra a lista de psicotrópicos do InovaFarma e não entra na loja online.', codigo: 'PSICOTROPICO_INOVA', bloqueioSanitario: true };
   if (produto.bloqueioControladoInova?.ativo)
@@ -207,7 +210,7 @@ export function searchProducts(db, {
 } = {}) {
   let rows = db.collection('products').all().filter(p =>
     !p.inovaArquivado?.em && !p.bloqueioControladoInova?.ativo &&
-    !constaPsicotropicoExportadoInova(p));
+    !constaPsicotropicoExportadoInova(p) && !constaAntimicrobianoExportadoInova(p));
 
   if (apenasVendaveis) rows = rows.filter((p) => podeVender(p).ok || p.ativo);
   if (apenasDisponiveis) rows = rows.filter((p) => !apenasVendaveis || podeVender(p).ok);
