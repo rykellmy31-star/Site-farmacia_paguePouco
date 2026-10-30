@@ -28,7 +28,7 @@ export function decidirAvisosWhatsappPedido(cliente,configuracao,escolha='',acei
       (escolha!=='sem'&&previamenteAutorizado)),
   };
 }
-function hostValido(url){
+export function hostValido(url){
   if(!/^https:\/\//i.test(String(url||'')))return false;
   try{
     const u=new URL(url),h=u.hostname.toLowerCase();
@@ -55,10 +55,10 @@ export function validarEvolutionConfig(entrada){
   const cfg={ativo:entrada.ativo===true,baseUrl,instancia,numeroRemetente,
     numeroResponsavel,avisarResponsavel:entrada.avisarResponsavel===true,
     avisarCliente:entrada.avisarCliente===true};
-  if(cfg.ativo&&(!cfg.baseUrl||!cfg.instancia||!cfg.numeroRemetente||
+  if(cfg.ativo&&(!cfg.baseUrl||!cfg.instancia||
     (cfg.avisarResponsavel&&!cfg.numeroResponsavel)||
     (!cfg.avisarResponsavel&&!cfg.avisarCliente)))
-    return {ok:false,erro:'Preencha URL, instância, remetente e destinatário necessário.'};
+    return {ok:false,erro:'Configure o endereço da Evolution no servidor, informe a instância e o destinatário dos avisos.'};
   return {ok:true,config:cfg};
 }
 export function evolutionConfig(db){return {...DEFAULT_EVOLUTION,...(getSetting(db,CFG)||{})};}
@@ -66,7 +66,7 @@ const nomeSeguro=nome=>String(nome||'cliente').replace(/[\r\n\t*~_<>\x60]/g,' ')
 const codigoSeguro=x=>String(x||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,45);
 export function enfileirarEvolution(db,pedido,tipo){
   const cfg=evolutionConfig(db);
-  if(!cfg.ativo||!cfg.baseUrl||!cfg.instancia)return {ok:false,motivo:'desativado'};
+  if(!cfg.ativo||!cfg.instancia)return {ok:false,motivo:'desativado'};
   if(!pedido?.id||!pedido.codigo||!['cliente_recebido','cliente_pago','responsavel_pago'].includes(tipo))
     return {ok:false,motivo:'pedido_invalido'};
   if(['cliente_recebido','cliente_pago'].includes(tipo)&&(!cfg.avisarCliente||pedido.receberWhatsappPedido!==true))
@@ -111,11 +111,12 @@ export function possuiFilaEvolution(db){
   return db.collection(COL).all().some(x=>x.status==='fila');
 }
 /** Uma tentativa automática por evento para impedir reenvio após timeout incerto. */
-export async function processarFilaEvolution(db,{apiKey='',enviar=globalThis.fetch,
+export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=globalThis.fetch,
   persistir=async()=>{},max=3}={}){
   const cfg=evolutionConfig(db);
-  if(!cfg.ativo||!cfg.baseUrl||!cfg.instancia||!String(apiKey).trim()||
-      !hostValido(cfg.baseUrl))return {ativo:false,processados:0};
+  const urlBase=String(baseUrl||cfg.baseUrl||'').trim().replace(/\/+$/,'');
+  if(!cfg.ativo||!urlBase||!cfg.instancia||!String(apiKey).trim()||
+      !hostValido(urlBase))return {ativo:false,processados:0};
   const col=db.collection(COL);
   const fila=col.all().filter(i=>i.status==='fila').slice(0,Math.max(1,Math.min(max,5)));
   let enviados=0,verificar=0;
@@ -127,7 +128,7 @@ export async function processarFilaEvolution(db,{apiKey='',enviar=globalThis.fet
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
       let response;
       try{
-        response=await enviar(cfg.baseUrl+'/message/sendText/'+encodeURIComponent(cfg.instancia),{
+        response=await enviar(urlBase+'/message/sendText/'+encodeURIComponent(cfg.instancia),{
           method:'POST',headers:{'Content-Type':'application/json',apikey:String(apiKey)},
           body:JSON.stringify({number:item.numero,text:item.texto}),
           signal:controller.signal,redirect:'manual', // Workers nao aceita redirect:error

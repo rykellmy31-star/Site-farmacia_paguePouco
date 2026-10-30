@@ -26,6 +26,7 @@ import { createSession, destroySession, hashPassword, verifyPassword, randomToke
 import { paginaAdmin } from '../views/admin/layout.js';
 import {telaEvolutionWhatsapp} from '../views/admin/evolution.js';
 import {evolutionConfig,validarEvolutionConfig,resumoEvolution} from '../lib/evolution-whatsapp.js';
+import {credenciaisEvolution,estadoEvolution,conectarEvolution} from '../lib/evolution-connection.js';
 import {
   telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias,
   telaEstoque, telaMidia, telaBanners, telaPromocoes,
@@ -1083,26 +1084,50 @@ export function registrarRotasAdmin(app, db) {
     if(req.adminUser.role!=='super_admin')return void res.status(403).html('Acesso exclusivo do superadministrador.');
     res.set('Cache-Control','no-store');
     res.html(telaEvolutionWhatsapp(ctxAdmin(req,db),{
-      cfg:evolutionConfig(db),resumo:resumoEvolution(db)
+      cfg:evolutionConfig(db),resumo:resumoEvolution(db),
+      servidorConfigurado:credenciaisEvolution(db,req.ctx?.env).configurado,
     }));
+  });
+  // Apenas o superadministrador pode gerar QR Code ou consultar o estado.
+  // A chave e a URL da Evolution nunca são entregues ao navegador.
+  app.get('/admin/api/evolution-whatsapp/status',async(req,res)=>{
+    if(!guardApi(req,res,'whatsapp.ver'))return;
+    if(req.adminUser.role!=='super_admin')return void res.json({ok:false,erro:'Acesso negado.'},403);
+    res.set('Cache-Control','no-store');
+    const resultado=await estadoEvolution(db,req.ctx?.env);
+    res.json(resultado,resultado.ok?200:503);
+  });
+  app.post('/admin/api/evolution-whatsapp/qr',async(req,res)=>{
+    if(!guardApi(req,res,'whatsapp.editar'))return;
+    if(req.adminUser.role!=='super_admin')return void res.json({ok:false,erro:'Acesso negado.'},403);
+    res.set('Cache-Control','no-store');
+    const resultado=await conectarEvolution(db,req.ctx?.env);
+    if(resultado.ok)logAdmin(db,req.adminUser,'solicitou_qrcode_evolution','integracao',
+      'evolutionWhatsapp',{instancia:evolutionConfig(db).instancia},req);
+    res.json(resultado,resultado.ok?200:503);
   });
   app.post('/admin/evolution-whatsapp',(req,res)=>{
     if(!guard(req,res,'whatsapp.editar'))return;
     if(req.adminUser.role!=='super_admin')return void res.status(403).html('Acesso exclusivo do superadministrador.');
+    // Nunca aceita URL, chave nem remetente fornecidos pelo formulário.
+    const atual=evolutionConfig(db),infra=credenciaisEvolution(db,req.ctx?.env);
     const resultado=validarEvolutionConfig({
       ativo:req.body.ativo==='1',
-      baseUrl:cleanText(req.body.baseUrl,230),
+      baseUrl:infra.baseUrl||atual.baseUrl,
       instancia:cleanText(req.body.instancia,64),
-      numeroRemetente:cleanText(req.body.numeroRemetente,30),
+      numeroRemetente:'',
       numeroResponsavel:cleanText(req.body.numeroResponsavel,30),
       avisarResponsavel:req.body.avisarResponsavel==='1',
       avisarCliente:req.body.avisarCliente==='1'
     });
-    if(!resultado.ok)return void res.status(400).html(paginaAdmin(ctxAdmin(req,db),{
-      titulo:'Configuração não salva',ativo:'whatsapp',
-      conteudo:'<h1>Configuração recusada</h1><p>'+e(resultado.erro)+
-        '</p><a href="/admin/evolution-whatsapp">Corrigir dados</a>'
-    }));
+    if(!resultado.ok || (resultado.config.ativo&&!infra.configurado)){
+      const erro=resultado.ok?'A Evolution API ainda não está configurada no servidor Cloudflare.':resultado.erro;
+      return void res.status(400).html(paginaAdmin(ctxAdmin(req,db),{
+        titulo:'Configuração não salva',ativo:'whatsapp',
+        conteudo:'<h1>Configuração recusada</h1><p>'+e(erro)+
+          '</p><a href="/admin/evolution-whatsapp">Corrigir dados</a>'
+      }));
+    }
     patchSetting(db,'evolutionWhatsapp',resultado.config,req.adminUser,req);
     logAdmin(db,req.adminUser,'configurou_evolution_pedidos','integracao','evolutionWhatsapp',
       {ativo:resultado.config.ativo,avisarCliente:resultado.config.avisarCliente,
