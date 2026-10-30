@@ -4,6 +4,7 @@
  * Bloqueios não apagam cadastro, estoque ou histórico de pedidos.
  */
 import crypto from 'node:crypto';
+import {constaPsicotropicoExportadoInova} from './psicotropicos-inova-20261029.js';
 
 const COL = 'inovaControladosListaBloqueio';
 const MAX_LINHAS = 12000;
@@ -114,6 +115,7 @@ export function criarAvaliadorControlados(db){
     const codigo=String(item.codigoInterno||'');
     const ean=String(item.ean||'');
     const termos=TERMOS_INICIAIS.filter(t=>(' '+nome+' ').includes(' '+t+' '));
+    if(constaPsicotropicoExportadoInova(item))return {bloqueado:true,motivo:'psicotropico_exportacao_inovafarma_20261029',termos};
     if(codigo && codigos.has(codigo))return {bloqueado:true,motivo:'codigo_na_lista_csv',termos};
     if(ean && eans.has(ean))return {bloqueado:true,motivo:'ean_na_lista_csv',termos};
     if(nome && nomes.has(nome))return {bloqueado:true,motivo:'nome_na_lista_csv',termos};
