@@ -10,6 +10,7 @@ function bd() {
       const mapa = dados.get(nome);
       return {
         get: id => mapa.get(id) || null,
+      all: () => [...mapa.values()],
         insert: doc => mapa.set(doc.id, doc),
       };
     },
