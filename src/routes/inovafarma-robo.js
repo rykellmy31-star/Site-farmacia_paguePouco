@@ -192,10 +192,14 @@ export function registrarRotasRoboInova(app,db) {
               Código, Cod. Barra/EAN e/ou Produto. CSV apenas com produtos
               controlados; não envie o relatório geral de estoque.
               Importar bloqueia imediatamente os itens correspondentes existentes.</p>
-            <button class="botao" type="submit">Adicionar lista de bloqueio</button>
+            <label><input type="checkbox" name="confirmarControlados" value="1" required>
+              Confirmo que o arquivo contém apenas medicamentos para bloquear na loja online.</label>
+            <p><button class="botao" type="submit">Adicionar lista de bloqueio</button></p>
           </form>
           <form method="post" action="/admin/robo-inovafarma/controlados/reaplicar">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+            <label><input type="checkbox" name="confirmarControlados" value="1" required>
+              Confirmo a inativação dos produtos correspondentes no catálogo atual.</label>
             <p><button class="botao secundario" type="submit">
               Aplicar bloqueios ao catálogo atual</button></p>
           </form>
@@ -246,6 +250,8 @@ export function registrarRotasRoboInova(app,db) {
     {maxBodyBytes:4*1024*1024+128*1024},(req,res)=>{
     if(!protegerAdmin(req,res))return;
     res.set('Cache-Control','no-store');
+    if(req.body.confirmarControlados!=='1')
+      return void res.html(html(req,{mensagem:'Confirme que o CSV contém somente medicamentos controlados.'}),400);
     const arquivo=(req.files||[]).find(f=>f.field==='arquivo');
     if(!arquivo || !/\.csv$/i.test(String(arquivo.filename||'')) ||
       !arquivo.data?.length || arquivo.data.length>4*1024*1024){
@@ -265,6 +271,8 @@ export function registrarRotasRoboInova(app,db) {
   });
   app.post('/admin/robo-inovafarma/controlados/reaplicar',(req,res)=>{
     if(!protegerAdmin(req,res))return;
+    if(req.body.confirmarControlados!=='1')
+      return void res.html(html(req,{mensagem:'Confirme a inativação do catálogo.'}),400);
     const resultado=bloquearControladosExistentes(db);
     logAdmin(db,req.adminUser,'reaplicou_lista_bloqueio_controlados_inova',
       'integracao','principal',{bloqueados:resultado.bloqueados},req);
