@@ -6,6 +6,7 @@ import {formatDateTime,formatBRL} from '../lib/format.js';
 import {can} from '../lib/permissions.js';
 import {avaliarUltimoRelatorioControlados} from '../lib/triagem-controlados.js';
 import {TOTAL_PSI_INOVA_20261029} from '../lib/psicotropicos-inova-20261029.js';
+import {TOTAL_ANTIMICRO_INOVA_20261029} from '../lib/antimicrobianos-inova-20261029.js';
 import {adicionarListaControlados,bloquearControladosExistentes,
   contarListaControlados} from '../lib/bloqueio-controlados-inova.js';
 import {logAdmin} from '../lib/audit.js';
@@ -180,6 +181,9 @@ export function registrarRotasRoboInova(app,db) {
           <p>O robô bloqueia a criação de produtos correspondentes à lista e aos nomes
           iniciais de princípios ativos. Se o produto já existe, fica inativo
           e indisponível para venda online, sem excluir estoque, pedidos ou histórico.</p>
+          <p><strong>${TOTAL_ANTIMICRO_INOVA_20261029} produtos</strong> da relação
+          ANTIMICROBIANO exportada em 29/10/2026 também são excluídos do catálogo online.
+          Os dois robôs Windows permanecem inalterados.</p>
           <p><strong>${TOTAL_PSI_INOVA_20261029} produtos</strong> da relação PSICOTRÓPICO
           exportada em 29/10/2026 já são filtrados automaticamente,
           sem enviar a lista de estoque ao site.
