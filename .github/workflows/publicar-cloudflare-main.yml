@@ -49,6 +49,8 @@ jobs:
 
       - name: Testar bloqueio de controlados antes de publicar
         run: node --test tests/triagem-controlados.test.js tests/bloqueio-controlados-inova.test.js
+      - name: Validar estoque positivo e exclusao de antimicrobianos da Visão Geral
+        run: node --test tests/visao-geral-antimicrobianos-estoque.test.js
 
       - name: Proteger limpeza do catálogo, descontos e importações
         run: |
