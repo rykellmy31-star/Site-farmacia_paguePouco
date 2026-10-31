@@ -80,22 +80,22 @@ test('nomes e quantidades aparecem entre parenteses nas tres mensagens quando au
   }
   const avisos=db.collection('evolutionWhatsappOutbox').all();
   for(const aviso of avisos){
-    assert.match(aviso.texto,/#1058 \\(2x Dipirona 500mg, Shampoo infantil\\)/);
+    assert.match(aviso.texto,/#1058 \(2x Dipirona 500mg, Shampoo infantil\)/);
     assert.doesNotMatch(aviso.texto,/Informação privada/);
   }
   assert.match(avisos.find(x=>x.tipo==='cliente_recebido').texto,
-    /Quando o pagamento for confirmado pelo site \\(até 10 minutos\\), seu pedido será enviado para separação!/);
+    /Quando o pagamento for confirmado pelo site \(até 10 minutos\), seu pedido será enviado para separação!/);
 });
 test('nomes sao filtrados contra formatacao, linhas extras e pedidos antigos',()=>{
   const db=dbFake();ativar(db);
   const p=pedido({enviarItensWhatsappPedido:true,itens:[
-    {nome:'Produto\\n*inedito* <teste>',quantidade:1},
+    {nome:'Produto\n*inedito* <teste>',quantidade:1},
     {nome:'',quantidade:1},
   ]});
   assert.equal(enfileirarEvolution(db,p,'cliente_recebido').enfileirado,true);
   const texto=db.collection('evolutionWhatsappOutbox').all()[0].texto;
-  assert.match(texto,/#1058 \\(Produto  inedito  teste\\)/);
-  assert.doesNotMatch(texto,/\\n\\*inedito/);
+  assert.match(texto,/#1058 \(Produto inedito teste\)/);
+  assert.doesNotMatch(texto,/\n\*inedito/);
   const dbLegado=dbFake();ativar(dbLegado);
   enfileirarEvolution(dbLegado,pedido(),'cliente_recebido');
   assert.doesNotMatch(dbLegado.collection('evolutionWhatsappOutbox').all()[0].texto,
