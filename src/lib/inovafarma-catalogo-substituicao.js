@@ -352,7 +352,8 @@ function montarProduto(linha,idLote,agora,slugs) {
     inovaPromocoes:[],
     peso:0,dimensoes:{largura:0,altura:0,comprimento:0},
     ativo:false,destaque:false,
-    sanitario:{classificacao:'nao_aplicavel',requerReceita:true,
+    // Importação sem informação clínica: pendente de revisão, não receita confirmada.
+    sanitario:{classificacao:'nao_aplicavel',requerReceita:false,
       registroMS:'',aprovadoFarmaceutico:false,controlado:false},
     estoque:{quantidade:linha.quantidade,reservado:0,quarentena:0,minimo:5},
     vendas:0,relacionados:[],
