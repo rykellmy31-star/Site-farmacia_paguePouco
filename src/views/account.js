@@ -6,7 +6,7 @@ import { STATUS_OPERACIONAL, STATUS_FINANCEIRO, statusOperacionalExibido } from 
 import { formatDateTime, formatDate, formatCep } from '../lib/format.js';
 import { productUrl, imagemPrincipal } from '../lib/catalog.js';
 import { autorPublicoDoEventoPedido } from '../lib/order-history-public.js';
-import { autorizouWhatsappPedidos } from '../lib/evolution-whatsapp.js';
+import { autorizouWhatsappPedidos, autorizouWhatsappProdutos } from '../lib/evolution-whatsapp.js';
 
 function moldura(ctx, { titulo, conteudo, ativo = '' }) {
   return paginaPublica(ctx, {
@@ -399,14 +399,20 @@ export function telaDados(ctx, { erros = {} }) {
           ${ctx.req?.query?.get('whatsapp')==='telefone-invalido'
             ? '<div class="alerta aviso">Atualize seu telefone com DDD antes de ativar os avisos.</div>' : ''}
           <p><strong>${autorizouWhatsappPedidos(u) ? 'Ativado ✅' : 'Desativado'}</strong></p>
-          <p class="texto-pequeno texto-suave">Se ativar, a Farmácia Pague Pouco enviará confirmações de
-          recebimento e pagamento de seus pedidos atuais e futuros no WhatsApp cadastrado.
-          Sem ofertas e sem detalhes de medicamentos. Você pode desativar a qualquer momento.
-          Alterar o número de telefone exige uma nova autorização. Esta escolha não modifica ofertas ou marketing.</p>
+          <p class="texto-pequeno texto-suave">A Farmácia Pague Pouco pode enviar confirmações de recebimento e pagamento
+          de pedidos atuais e futuros ao WhatsApp cadastrado, incluindo nomes dos produtos (inclusive medicamentos).
+          Os nomes podem revelar informações de saúde. Sem ofertas. Você pode desativar a qualquer momento;
+          mudar o número de telefone exige nova autorização. A escolha não altera ofertas ou marketing.</p>
+          ${autorizouWhatsappPedidos(u) && !autorizouWhatsappProdutos(u)
+            ? '<p class="texto-pequeno">Sua autorização anterior permanece ativa sem nomes dos produtos. Para incluir os nomes, atualize a autorização abaixo.</p>'
+            : ''}
           <form method="post" action="/conta/dados/whatsapp-pedidos">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
             ${autorizouWhatsappPedidos(u)
-              ? '<button class="botao secundario" name="acao" value="desativar" type="submit">Desativar avisos no WhatsApp</button>'
+              ? `<button class="botao secundario" name="acao" value="desativar" type="submit">Desativar avisos no WhatsApp</button>
+                  ${!autorizouWhatsappProdutos(u)
+                    ? '<button class="botao mt-2" name="acao" value="atualizar" type="submit">Autorizar envio dos nomes dos produtos</button>'
+                    : ''}` 
               : '<button class="botao" name="acao" value="ativar" type="submit">Autorizar avisos no WhatsApp</button>'}
           </form>
         </div>
