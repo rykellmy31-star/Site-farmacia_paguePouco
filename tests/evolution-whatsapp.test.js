@@ -5,7 +5,7 @@ import {Collection} from '../src/lib/store.js';
 import {atualizarStatusFinanceiro} from '../src/lib/orders.js';
 import {
   numeroWhatsapp, validarEvolutionConfig,enfileirarEvolution,processarFilaEvolution,
-  resumoEvolution,possuiFilaEvolution,autorizouWhatsappPedidos,decidirAvisosWhatsappPedido
+  resumoEvolution,possuiFilaEvolution,autorizouWhatsappPedidos,autorizouWhatsappProdutos,decidirAvisosWhatsappPedido
 } from '../src/lib/evolution-whatsapp.js';
 function dbFake(){
   const collections=new Map();
@@ -67,6 +67,39 @@ test('cliente só recebe se autorizou; equipe só recebe apos aprovacao; sem vaz
   assert.match(pago.texto,/1058/);
   assert.ok(fila.every(x=>!x.texto.includes('Produto de saúde sensível')&&!x.texto.includes('Informação privada')));
   assert.equal(fila.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
+});
+test('nomes e quantidades aparecem entre parenteses nas tres mensagens quando autorizados',()=>{
+  const db=dbFake();ativar(db);
+  const p=pedido({enviarItensWhatsappPedido:true,itens:[
+    {nome:'Dipirona 500mg',quantidade:2},
+    {nome:'Shampoo infantil',quantidade:1},
+  ]});
+  for(const tipo of ['cliente_recebido','cliente_pago','responsavel_pago']){
+    const atual=tipo==='cliente_recebido'?p:{...p,statusFinanceiro:'aprovado'};
+    assert.equal(enfileirarEvolution(db,atual,tipo).enfileirado,true);
+  }
+  const avisos=db.collection('evolutionWhatsappOutbox').all();
+  for(const aviso of avisos){
+    assert.match(aviso.texto,/#1058 \\(2x Dipirona 500mg, Shampoo infantil\\)/);
+    assert.doesNotMatch(aviso.texto,/Informação privada/);
+  }
+  assert.match(avisos.find(x=>x.tipo==='cliente_recebido').texto,
+    /Quando o pagamento for confirmado pelo site \\(até 10 minutos\\), seu pedido será enviado para separação!/);
+});
+test('nomes sao filtrados contra formatacao, linhas extras e pedidos antigos',()=>{
+  const db=dbFake();ativar(db);
+  const p=pedido({enviarItensWhatsappPedido:true,itens:[
+    {nome:'Produto\\n*inedito* <teste>',quantidade:1},
+    {nome:'',quantidade:1},
+  ]});
+  assert.equal(enfileirarEvolution(db,p,'cliente_recebido').enfileirado,true);
+  const texto=db.collection('evolutionWhatsappOutbox').all()[0].texto;
+  assert.match(texto,/#1058 \\(Produto  inedito  teste\\)/);
+  assert.doesNotMatch(texto,/\\n\\*inedito/);
+  const dbLegado=dbFake();ativar(dbLegado);
+  enfileirarEvolution(dbLegado,pedido(),'cliente_recebido');
+  assert.doesNotMatch(dbLegado.collection('evolutionWhatsappOutbox').all()[0].texto,
+    /Produto de saúde sensível/);
 });
 test('despacha uma unica vez e registra envio aprovado em HTTPS /message/sendText/',async()=>{
   const db=dbFake();ativar(db);
@@ -150,12 +183,20 @@ test('aprovacao real do Mercado Pago envia eventos separados ao cliente e respon
   assert.equal(outbox.find(x=>x.tipo==='cliente_pago').numero,'5573988887777');
   assert.equal(outbox.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
   assert.ok(outbox.every(x=>x.status==='fila'));
-  assert.ok(outbox.every(x=>!x.texto.includes('Medicamento confidencial')));
+  assert.ok(outbox.every(x=>!x.texto.includes('Medicamento confidencial'))); // legado sem autorização v2
   assert.equal(atualizarStatusFinanceiro(db,'pedido-1','aprovado').semAlteracao,true);
   assert.equal(db.collection('evolutionWhatsappOutbox').count(),2);
   assert.equal(db.collection('products').get('produto').estoque.quantidade,4);
 });
 
+test('aprovacao do Mercado Pago envia itens de pedido autorizado v2 ao cliente e responsavel',()=>{
+  const db=pedidoRealWhatsapp();
+  db.collection('orders').update('pedido-1',{enviarItensWhatsappPedido:true});
+  assert.equal(atualizarStatusFinanceiro(db,'pedido-1','aprovado').ok,true);
+  const outbox=db.collection('evolutionWhatsappOutbox').all();
+  assert.equal(outbox.length,2);
+  assert.ok(outbox.every(x=>x.texto.includes('#1058 (Medicamento confidencial)')));
+});
 test('sem opt-in ou canal de cliente, nao envia pagamento ao cliente; provedor interno nao gera WhatsApp',()=>{
   for(const opcoes of [
     {optin:false,provedor:'mercadopago'},
@@ -178,6 +219,17 @@ test('nao confirma cliente pago sem status aprovado ou numero valido',()=>{
   assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
 });
 
+test('autorizacao anterior nao permite divulgar medicamentos; v2 permite',()=>{
+  const cliente={telefone:'73988887777',
+    consentimentoWhatsappPedidos:{ativo:true,numero:'5573988887777',versao:1}};
+  assert.equal(autorizouWhatsappPedidos(cliente),true);
+  assert.equal(autorizouWhatsappProdutos(cliente),false);
+  assert.equal(decidirAvisosWhatsappPedido(cliente,{ativo:true,avisarCliente:true},'autorizar_detalhes').autorizouAgora,true);
+  cliente.consentimentoWhatsappPedidos.versao=2;
+  assert.equal(autorizouWhatsappProdutos(cliente),true);
+  cliente.consentimentoWhatsappPedidos.ativo=false;
+  assert.equal(autorizouWhatsappProdutos(cliente),false);
+});
 test('aceite WhatsApp uma unica vez vale em novos pedidos sem nova caixa',()=>{
   const cfg={ativo:true,avisarCliente:true};
   const cliente={id:'c1',telefone:'(73) 98888-7777'};
@@ -217,6 +269,7 @@ test('checkout usa escolha visivel sem checkbox, e perfil permite revogar',()=>{
   assert.match(checkout,/Finalizar sem avisos no WhatsApp/);
   assert.match(checkout,/autorizouWhatsappPedidos\(ctx\.usuario\)/);
   assert.match(checkout,/name="acaoWhatsappPedido" value="autorizar"/);
+  assert.match(checkout,/name="acaoWhatsappPedido" value="autorizar_detalhes"/);
   assert.match(js,/event\.submitter\?\.name === 'acaoWhatsappPedido'/);
   assert.match(account,/post\('\/conta\/dados\/whatsapp-pedidos'/);
   assert.match(account,/revogou_whatsapp_pedidos/);
