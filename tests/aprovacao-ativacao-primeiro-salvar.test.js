@@ -92,6 +92,107 @@ test('importado sem avaliação permanece bloqueado, mesmo com caixa de receita 
   assert.equal(podeVender(depois).ok,true);
 });
 
+test('produto importado já aprovado conclui revisão e ativa no mesmo salvamento',()=>{
+  const aprovadoEm='2026-10-31T17:08:00.000Z';
+  const {db,produto,executar,body}=preparar({
+    sanitario:{classificacao:'nao_aplicavel',requerReceita:false,controlado:false,
+      aprovadoFarmaceutico:true,aprovadoPor:'Super Administrador',aprovadoEm},
+  });
+  db.collection('products').update(produto.id,{
+    inovaCatalogo:{origem:'substituicao_total_csv',revisaoSanitariaPendente:true},
+  });
+  const bloqueado=executar('/admin/api/produtos/:id/ativar');
+  assert.equal(bloqueado.code,409);
+  assert.match(bloqueado.body.erro,/não revisada/);
+  const resultado=executar('/admin/api/produtos/:id',
+    body({ativo:'1',confirmouRevisaoSanitaria:'1',classificacao:'cosmético'}));
+  assert.equal(resultado.code,200,JSON.stringify(resultado.body));
+  assert.equal(resultado.body.aprovacaoAplicada,false);
+  assert.equal(resultado.body.revisaoConcluida,true);
+  assert.equal(resultado.body.ativacaoAutomatica,true);
+  const salvo=db.collection('products').get(produto.id);
+  assert.equal(salvo.ativo,true);
+  assert.equal(salvo.inovaCatalogo.revisaoSanitariaPendente,false);
+  assert.equal(salvo.inovaCatalogo.revisadoPor,'u1');
+  assert.equal(salvo.sanitario.aprovadoPor,'Super Administrador');
+  assert.equal(salvo.sanitario.aprovadoEm,aprovadoEm);
+  assert.equal(podeVender(salvo).ok,true);
+  assert.equal(db.collection('auditLogs').all().filter(
+    x=>x.acao==='concluiu_revisao_sanitaria_inova').length,1);
+  assert.equal(executar('/admin/api/produtos/:id/ativar').body.ativo,false);
+});
+
+test('produto importado já aprovado não reabre venda sem confirmação explícita',()=>{
+  const {db,produto,executar,body}=preparar({
+    sanitario:{classificacao:'nao_aplicavel',requerReceita:false,
+      controlado:false,aprovadoFarmaceutico:true},
+  });
+  db.collection('products').update(produto.id,{
+    inovaCatalogo:{origem:'substituicao_total_csv',revisaoSanitariaPendente:true},
+  });
+  const r=executar('/admin/api/produtos/:id',body({ativo:'1'}));
+  assert.equal(r.code,200);
+  assert.equal(db.collection('products').get(produto.id).ativo,false);
+  assert.equal(db.collection('products').get(produto.id).inovaCatalogo.revisaoSanitariaPendente,true);
+  const negado=executar('/admin/api/produtos/:id',body({
+    ativo:'1',confirmouRevisaoSanitaria:'1',classificacao:'cosmético',
+  }),'atendente');
+  assert.equal(negado.code,403);
+  assert.equal(db.collection('products').get(produto.id).ativo,false);
+});
+
+test('revisão de importado aprovado não libera medicamento com receita ou sem registro',()=>{
+  for(const overrides of [
+    {requerReceita:'1',classificacao:'isento_prescricao',registroMS:'12345'},
+    {controlado:'1',classificacao:'controlado',registroMS:'12345'},
+    {classificacao:'isento_prescricao',registroMS:''},
+  ]){
+    const {db,produto,executar,body}=preparar({
+      sanitario:{classificacao:'nao_aplicavel',requerReceita:false,
+        controlado:false,aprovadoFarmaceutico:true},
+    });
+    db.collection('products').update(produto.id,{
+      inovaCatalogo:{revisaoSanitariaPendente:true,origem:'substituicao_total_csv'},
+    });
+    const res=executar('/admin/api/produtos/:id',body({
+      ativo:'1',confirmouRevisaoSanitaria:'1',...overrides,
+    }));
+    const salvo=db.collection('products').get(produto.id);
+    assert.equal(salvo?.ativo,false,JSON.stringify(overrides));
+    assert.equal(podeVender(salvo).ok,false);
+    if(overrides.requerReceita||overrides.controlado){
+      assert.equal(res.code,409);
+      assert.equal(salvo.inovaCatalogo.revisaoSanitariaPendente,true);
+    }else{
+      assert.equal(res.code,200);
+      assert.equal(res.body.revisaoConcluida,true);
+      assert.equal(res.body.ativacaoAutomatica,false);
+      assert.equal(res.body.motivoAtivacao.includes('registro'),true);
+    }
+  }
+});
+
+test('lista leva produto importado pendente para Revisar e ativar em vez de gerar erro',()=>{
+  const {db,produto}=preparar({
+    sanitario:{classificacao:'nao_aplicavel',aprovadoFarmaceutico:true},
+  });
+  db.collection('products').update(produto.id,{
+    inovaCatalogo:{revisaoSanitariaPendente:true},
+  });
+  const ctx={db,adminUser:{role:'super_admin',nome:'Super'},
+    settings:{empresa:{nomeFantasia:'Farmácia Pague Pouco'},tema:{}},
+    req:{pathname:'/admin/produtos',query:new URLSearchParams()},
+    csrf:'teste',podeAprovar:true};
+  const html=telaProdutos(ctx,{produtos:[db.collection('products').get(produto.id)],
+    total:1,pagina:1,porPagina:25,busca:'',categorias:[],
+    filtros:{categoria:'',status:''}});
+  assert.match(html,/Revisar e ativar/);
+  assert.doesNotMatch(html,/data-alternar-produto="p1"/);
+  const editor=telaProdutoForm(ctx,{produto:db.collection('products').get(produto.id),
+    categorias:[],marcas:[],todasMidia:[]});
+  assert.match(editor,/Este produto já está aprovado: não é necessário aprovar novamente/);
+});
+
 test('Exige receita (como na foto): salva aprovação mas NÃO ativa venda online',()=>{
   const {db,produto,executar,body}=preparar();
   const r=executar('/admin/api/produtos/:id',body({aprovarAoSalvar:'1',requerReceita:'1'}));
