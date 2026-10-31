@@ -17,7 +17,7 @@ import { vincularCarrinhoAoCliente } from '../lib/cart.js';
 import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
-import { autorizouWhatsappPedidos, numeroWhatsapp } from '../lib/evolution-whatsapp.js';
+import { autorizouWhatsappPedidos, autorizouWhatsappProdutos, numeroWhatsapp } from '../lib/evolution-whatsapp.js';
 import { config } from '../config.js';
 import { UF_LIST } from '../lib/cep.js';
 
@@ -342,22 +342,22 @@ export function registrarRotasConta(app, db) {
   app.post('/conta/dados/whatsapp-pedidos', (req, res) => {
     if (!exigirLogin(req, res)) return;
     const acao = String(req.body.acao || '');
-    if (!['ativar','desativar'].includes(acao))
+    if (!['ativar','desativar','atualizar'].includes(acao))
       return void res.text('Escolha de notificacao invalida.', 400);
     const numero = numeroWhatsapp(req.user.telefone);
-    if (acao === 'ativar' && !numero)
+    if (acao !== 'desativar' && !numero)
       return void res.redirect('/conta/dados?whatsapp=telefone-invalido#avisos-whatsapp');
-    if (acao === 'ativar' && autorizouWhatsappPedidos(req.user))
+    if (acao !== 'desativar' && autorizouWhatsappProdutos(req.user))
       return void res.redirect('/conta/dados?whatsapp=ativo#avisos-whatsapp');
     const anterior = req.user.consentimentoWhatsappPedidos || {};
     db.collection('customers').update(req.user.id, {
-      consentimentoWhatsappPedidos: acao === 'ativar'
-        ? {ativo:true,numero,aceitoEm:new Date().toISOString(),origem:'minha-conta',versao:1}
+      consentimentoWhatsappPedidos: acao !== 'desativar'
+        ? {ativo:true,numero,aceitoEm:new Date().toISOString(),origem:'minha-conta',versao:2}
         : {...anterior,ativo:false,revogadoEm:new Date().toISOString()},
     });
-    logCustomer(db,req.user.id,acao==='ativar'?'autorizou_whatsapp_pedidos':'revogou_whatsapp_pedidos',
+    logCustomer(db,req.user.id,acao==='desativar'?'revogou_whatsapp_pedidos':'autorizou_whatsapp_pedidos',
       'cliente',req.user.id,{origem:'minha-conta'},req);
-    res.redirect('/conta/dados?whatsapp='+ (acao==='ativar'?'ativo':'desativado')+'#avisos-whatsapp');
+    res.redirect('/conta/dados?whatsapp='+ (acao==='desativar'?'desativado':'ativo')+'#avisos-whatsapp');
   });
 
   app.post('/conta/senha', (req, res) => {
