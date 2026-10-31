@@ -266,6 +266,6 @@ test('Painel prepara aprovação sem reload e sem perder fotos, informa comporta
   assert.match(js,/Aprovação preparada — salve o produto/);
   assert.match(js,/resposta\.ativacaoAutomatica/);
   const routes=readFileSync(new URL('../src/routes/admin.js',import.meta.url),'utf8');
-  assert.match(routes,/aprovarAoSalvar && !can\(req\.adminUser, 'produtos\.aprovar'\)/);
+  assert.match(routes,/\(aprovarAoSalvar \|\| finalizarRevisao\) && !can\(req\.adminUser, 'produtos\.aprovar'\)/);
   assert.match(routes,/podeAtivarAposAprovacao\(\{ \.\.\.produto, \.\.\.dados \}\)/);
 });
