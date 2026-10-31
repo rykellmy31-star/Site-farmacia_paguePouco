@@ -1,4 +1,4 @@
-/** Evolution v2: mensagens transacionais sem dados sobre os itens, CPF ou saúde. */
+/** Evolution v2: avisos transacionais; nomes de itens só com autorização v2 do cliente. */
 import {getSetting} from './settings.js';
 import {nowISO} from './store.js';
 const COL='evolutionWhatsappOutbox', CFG='evolutionWhatsapp';
@@ -17,10 +17,14 @@ export function autorizouWhatsappPedidos(cliente){
   const aceite=cliente?.consentimentoWhatsappPedidos;
   return Boolean(telefone&&aceite?.ativo===true&&aceite.numero===telefone);
 }
+/** Autorizacao para incluir nomes de produtos, inclusive medicamentos, no WhatsApp. */
+export function autorizouWhatsappProdutos(cliente){
+  return autorizouWhatsappPedidos(cliente)&&Number(cliente?.consentimentoWhatsappPedidos?.versao)>=2;
+}
 /** Nao confunde pagamento, marketing e autorizacao de contato. */
 export function decidirAvisosWhatsappPedido(cliente,configuracao,escolha='',aceiteLegado=false){
   const disponivel=configuracao?.ativo===true&&configuracao?.avisarCliente===true;
-  const autorizouAgora=disponivel&&(escolha==='autorizar'||aceiteLegado===true);
+  const autorizouAgora=disponivel&&(escolha==='autorizar'||escolha==='autorizar_detalhes'||aceiteLegado===true);
   const previamenteAutorizado=autorizouWhatsappPedidos(cliente);
   return {
     autorizouAgora,
@@ -64,6 +68,27 @@ export function validarEvolutionConfig(entrada){
 export function evolutionConfig(db){return {...DEFAULT_EVOLUTION,...(getSetting(db,CFG)||{})};}
 const nomeSeguro=nome=>String(nome||'cliente').replace(/[\r\n\t*~_<>\x60]/g,' ').trim().slice(0,50)||'cliente';
 const codigoSeguro=x=>String(x||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,45);
+const nomeProdutoSeguro=nome=>String(nome||'').replace(/[\x00-\x1f\x7f*~_<>`]/g,' ')
+  .replace(/\s+/g,' ').trim().slice(0,140);
+/** Usa o nome gravado no pedido, sem consultar um catálogo que pode ter mudado. */
+function resumoItensWhatsapp(pedido){
+  if(pedido?.enviarItensWhatsappPedido!==true||!Array.isArray(pedido.itens))return '';
+  const nomes=pedido.itens.map(item=>{
+    const nome=nomeProdutoSeguro(item?.nome);
+    if(!nome)return '';
+    const qtd=Number(item?.quantidade);
+    return Number.isSafeInteger(qtd)&&qtd>1?String(qtd)+'x '+nome:nome;
+  }).filter(Boolean);
+  if(!nomes.length)return '';
+  let lista='';
+  for(let i=0;i<nomes.length;i++){
+    const proximo=(lista?', ':'')+nomes[i];
+    if(lista.length+proximo.length>2800)
+      return ' ('+lista+'; mais '+(nomes.length-i)+' item(ns) no site)';
+    lista+=proximo;
+  }
+  return ' ('+lista+')';
+}
 export function enfileirarEvolution(db,pedido,tipo){
   const cfg=evolutionConfig(db);
   if(!cfg.ativo||!cfg.instancia)return {ok:false,motivo:'desativado'};
@@ -81,17 +106,18 @@ export function enfileirarEvolution(db,pedido,tipo){
   const id='evo:'+String(pedido.id)+':'+tipo,col=db.collection(COL);
   if(col.get(id))return {ok:true,duplicado:true};
   const codigo=codigoSeguro(pedido.codigo);
+  const itens=resumoItensWhatsapp(pedido);
   const texto=tipo==='responsavel_pago'
-    ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+
+    ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+itens+
       '\nO pagamento foi confirmado. Acesse o painel para separar o pedido.'
     : tipo==='cliente_pago'
     ? 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! ✅\n'+
-      'O pagamento do seu pedido #'+codigo+' na Farmácia Pague Pouco foi confirmado!\n'+
+      'O pagamento do seu pedido #'+codigo+itens+' na Farmácia Pague Pouco foi confirmado!\n'+
       'Nossa equipe vai preparar seu pedido. Acompanhe o andamento pelo site.\n'+
       'Esta mensagem é automática.'
     : 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! 👋\n'+
-      'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+'.\n'+
-      'Quando o pagamento for confirmado, nossa equipe continuará o atendimento.\n'+
+      'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+itens+'.\n'+
+      'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!\n'+
       'Acompanhe seu pedido pelo site. Esta mensagem é automática.';
   col.insert({id,pedidoId:pedido.id,tipo,numero,texto,status:'fila',
     criadoEm:nowISO(),tentativas:0});
