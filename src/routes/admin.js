@@ -1341,14 +1341,19 @@ function registrarApi(app, db) {
       return void res.json({ok:false,erro:'Restaure o cadastro arquivado antes de editá-lo.'},409);
     const aprovarAoSalvar = String(req.body.aprovarAoSalvar || '') === '1';
     const revisaoInovaPendente = produto.inovaCatalogo?.revisaoSanitariaPendente===true;
-    // O botão apenas marca a intenção no formulário. A aprovação real e
-    // a ativação só acontecem após Salvar, com permissão no SERVIDOR.
-    if (aprovarAoSalvar && !can(req.adminUser, 'produtos.aprovar'))
-      return void res.json({ok:false,erro:'Sem permissão para aprovar cadastro sanitário.'},403);
-    if (aprovarAoSalvar && produto.sanitario?.aprovadoFarmaceutico)
-      return void res.json({ok:false,erro:'Este cadastro já foi aprovado. Recarregue antes de alterar a aprovação.'},409);
-    if (aprovarAoSalvar && revisaoInovaPendente && String(req.body.confirmouRevisaoSanitaria || '')!=='1')
-      return void res.json({ok:false,erro:'Confirme a classificação sanitária e que o produto não exige receita antes da aprovação.'},409);
+    const confirmouRevisao = String(req.body.confirmouRevisaoSanitaria || '') === '1';
+    const aprovadoAntes = produto.sanitario?.aprovadoFarmaceutico === true;
+    // A aprovação antiga já existe em alguns produtos importados. Ao salvar a
+    // confirmação de revisão sanitária, finalizar essa pendência sem exigir
+    // revogar/reaprovar e sem reduzir a segurança do catálogo.
+    const finalizarRevisao = revisaoInovaPendente && confirmouRevisao &&
+      (aprovarAoSalvar || aprovadoAntes);
+    if ((aprovarAoSalvar || finalizarRevisao) && !can(req.adminUser, 'produtos.aprovar'))
+      return void res.json({ok:false,erro:'Sem permissão para revisar ou aprovar cadastro sanitário.'},403);
+    if (aprovarAoSalvar && aprovadoAntes)
+      return void res.json({ok:false,erro:'Este cadastro já foi aprovado. Confirme a revisão sanitária e salve as alterações.'},409);
+    if (aprovarAoSalvar && revisaoInovaPendente && !confirmouRevisao)
+      return void res.json({ok:false,erro:'Confira a classificação sanitária e marque a confirmação antes de salvar.'},409);
     const dados = lerProdutoDoForm(req.body);
     dados.slug = produto.slug;
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
@@ -1373,10 +1378,14 @@ function registrarApi(app, db) {
     estoque.quantidade = Number.isFinite(novaQtd) ? novaQtd : Number(estoque.quantidade || 0);
     estoque.minimo = Number(req.body.estoqueMinimo) || Number(estoque.minimo || 0);
     dados.estoque = estoque;
-    // Marcação automática nunca é prova de prescrição. A revisão só termina
-    // com confirmação explícita de usuário autorizado, jamais por importação.
+    // Prescrição/controle especial não pode ser declarado isento. Os bloqueios
+    // adicionais de antimicrobianos, psicotrópicos e listas permanecem ativos.
+    if (finalizarRevisao &&
+        (dados.sanitario.requerReceita || dados.sanitario.controlado ||
+         dados.sanitario.classificacao === 'controlado'))
+      return void res.json({ok:false,erro:'Produto sujeito a receita ou controle especial não pode ser confirmado como isento para venda online.'},409);
     if (revisaoInovaPendente) {
-      if (aprovarAoSalvar)
+      if (finalizarRevisao)
         dados.inovaCatalogo={...produto.inovaCatalogo,
           revisaoSanitariaPendente:false,revisadoEm:new Date().toISOString(),
           revisadoPor:req.adminUser.id};
@@ -1391,10 +1400,13 @@ function registrarApi(app, db) {
       dados.sanitario.aprovadoFarmaceutico = true;
       dados.sanitario.aprovadoPor = `${req.adminUser.nome}${req.adminUser.crf ? ` — CRF ${req.adminUser.crf}` : ''}`;
       dados.sanitario.aprovadoEm = new Date().toISOString();
-      // Verificar todo o cadastro FINAL, não o produto antes das edições.
+    }
+    if (aprovarAoSalvar || (finalizarRevisao && aprovadoAntes)) {
+      // Verificar o produto já com a revisão concluída. Para cadastros
+      // anteriormente aprovados, respeitar a escolha de ativação do formulário.
       const aptidao = podeAtivarAposAprovacao({ ...produto, ...dados });
-      dados.ativo = aptidao.ok;
-      ativacaoAutomatica = aptidao.ok;
+      dados.ativo = aprovarAoSalvar ? aptidao.ok : dados.ativo && aptidao.ok;
+      ativacaoAutomatica = dados.ativo && !produto.ativo;
       motivoAtivacao = aptidao.ok ? '' : aptidao.motivo;
     }
     db.collection('products').update(produto.id, dados);
@@ -1403,12 +1415,17 @@ function registrarApi(app, db) {
         nome: dados.nome, ativacaoAutomatica, motivoAtivacao,
       }, req);
     }
+    if (finalizarRevisao) {
+      logAdmin(db, req.adminUser, 'concluiu_revisao_sanitaria_inova', 'produto', produto.id, {
+        nome:dados.nome,ativacaoAutomatica,motivoAtivacao,
+      },req);
+    }
     if (ativacaoAutomatica) {
       logAdmin(db, req.adminUser, 'ativou_produto_apos_aprovacao', 'produto', produto.id, {nome:dados.nome},req);
     }
     logAdmin(db, req.adminUser, 'editou_produto', 'produto', produto.id, { nome: dados.nome }, req);
     res.json({ ok: true, id: produto.id, aprovacaoAplicada: aprovarAoSalvar,
-      ativacaoAutomatica, motivoAtivacao });
+      revisaoConcluida: finalizarRevisao, ativacaoAutomatica, motivoAtivacao });
   });
 
   app.post('/admin/api/produtos/:id/ativar', (req, res) => {
