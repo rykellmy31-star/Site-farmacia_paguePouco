@@ -66,6 +66,13 @@ export function podeAtivarAposAprovacao(produto) {
     return { ok: false, motivo: 'Produto excluído da loja online pela lista de bloqueio InovaFarma.', codigo: 'LISTA_CONTROLADOS', bloqueioSanitario: true };
   const s = { ...sanitarioDefault(), ...(produto.sanitario || {}) };
 
+  // A importação não informa prescrição; o item permanece bloqueado até
+  // revisão sanitária humana explícita, mesmo com caixa de receita desmarcada.
+  if (produto.inovaCatalogo?.revisaoSanitariaPendente===true) {
+    return {ok:false,motivo:'Classificação sanitária do produto importado ainda não revisada.',
+      codigo:'REVISAO_SANITARIA_INOVA',bloqueioSanitario:true};
+  }
+
   if (s.controlado || s.requerReceita || s.classificacao === 'controlado') {
     return {
       ok: false,
