@@ -1340,12 +1340,15 @@ function registrarApi(app, db) {
     if (produto.inovaArquivado?.em)
       return void res.json({ok:false,erro:'Restaure o cadastro arquivado antes de editá-lo.'},409);
     const aprovarAoSalvar = String(req.body.aprovarAoSalvar || '') === '1';
+    const revisaoInovaPendente = produto.inovaCatalogo?.revisaoSanitariaPendente===true;
     // O botão apenas marca a intenção no formulário. A aprovação real e
     // a ativação só acontecem após Salvar, com permissão no SERVIDOR.
     if (aprovarAoSalvar && !can(req.adminUser, 'produtos.aprovar'))
       return void res.json({ok:false,erro:'Sem permissão para aprovar cadastro sanitário.'},403);
     if (aprovarAoSalvar && produto.sanitario?.aprovadoFarmaceutico)
       return void res.json({ok:false,erro:'Este cadastro já foi aprovado. Recarregue antes de alterar a aprovação.'},409);
+    if (aprovarAoSalvar && revisaoInovaPendente && String(req.body.confirmouRevisaoSanitaria || '')!=='1')
+      return void res.json({ok:false,erro:'Confirme a classificação sanitária e que o produto não exige receita antes da aprovação.'},409);
     const dados = lerProdutoDoForm(req.body);
     dados.slug = produto.slug;
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
@@ -1370,6 +1373,15 @@ function registrarApi(app, db) {
     estoque.quantidade = Number.isFinite(novaQtd) ? novaQtd : Number(estoque.quantidade || 0);
     estoque.minimo = Number(req.body.estoqueMinimo) || Number(estoque.minimo || 0);
     dados.estoque = estoque;
+    // Marcação automática nunca é prova de prescrição. A revisão só termina
+    // com confirmação explícita de usuário autorizado, jamais por importação.
+    if (revisaoInovaPendente) {
+      if (aprovarAoSalvar)
+        dados.inovaCatalogo={...produto.inovaCatalogo,
+          revisaoSanitariaPendente:false,revisadoEm:new Date().toISOString(),
+          revisadoPor:req.adminUser.id};
+      else dados.ativo=false;
+    }
     // Preserva o estado de aprovação, salvo na PRIMEIRA aprovação explícita
     // efetuada por usuário autorizado no mesmo envio das fotos/dados.
     dados.sanitario = { ...(produto.sanitario || {}), ...dados.sanitario, aprovadoFarmaceutico: produto.sanitario?.aprovadoFarmaceutico || false, aprovadoPor: produto.sanitario?.aprovadoPor || '', aprovadoEm: produto.sanitario?.aprovadoEm || null };
@@ -1405,6 +1417,11 @@ function registrarApi(app, db) {
     if (!p) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
     if (p.inovaArquivado?.em)
       return void res.json({ok:false,erro:'Restaure o produto arquivado antes de ativá-lo.'},409);
+    if(!p.ativo){
+      const aptidao=podeAtivarAposAprovacao(p);
+      if(!aptidao.ok)
+        return void res.json({ok:false,erro:aptidao.motivo,codigo:aptidao.codigo},409);
+    }
     db.collection('products').update(p.id, { ativo: !p.ativo });
     logAdmin(db, req.adminUser, p.ativo ? 'desativou_produto' : 'ativou_produto', 'produto', p.id, { nome: p.nome }, req);
     res.json({ ok: true, ativo: !p.ativo });

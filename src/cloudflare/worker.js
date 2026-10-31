@@ -5,6 +5,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { config, configureCloudflare } from '../config.js';
 import { avaliarAutomacaoInova } from '../lib/inovafarma-automation.js';
+import { corrigirReceitaAutomaticaInova } from '../lib/inovafarma-receita-automatica.js';
 import {processarFilaEvolution,possuiFilaEvolution} from '../lib/evolution-whatsapp.js';
 import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
@@ -42,6 +43,8 @@ export class LojaDurableObject extends DurableObject {
           meta.insert({ id: 'catalog-seeded-v1', value: true });
         });
       }
+      // Uma única correção do placeholder do Inova, sem alterar itens revisados.
+      corrigirReceitaAutomaticaInova(this.db);
       await this.db.flush();
     });
   }

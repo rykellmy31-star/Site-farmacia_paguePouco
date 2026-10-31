@@ -62,6 +62,36 @@ test('Primeira aprovação + salvar: aplica imagem, sanitário e ativo numa úni
   assert.equal(db.collection('auditLogs').all().filter(x=>x.acao==='ativou_produto_apos_aprovacao').length,1);
 });
 
+test('importado sem avaliação permanece bloqueado, mesmo com caixa de receita vazia',()=>{
+  const {db,produto,executar,body}=preparar({
+    sanitario:{classificacao:'nao_aplicavel',requerReceita:false,
+      aprovadoFarmaceutico:false,controlado:false},
+  });
+  db.collection('products').update(produto.id,{
+    inovaCatalogo:{origem:'substituicao_total_csv',revisaoSanitariaPendente:true},
+  });
+  const atual=db.collection('products').get(produto.id);
+  assert.equal(podeAtivarAposAprovacao(atual).codigo,'REVISAO_SANITARIA_INOVA');
+  const tentativaAtivar=executar('/admin/api/produtos/:id/ativar');
+  assert.equal(tentativaAtivar.code,409);
+  assert.equal(db.collection('products').get(produto.id).ativo,false);
+  const semRevisao=executar('/admin/api/produtos/:id',body({aprovarAoSalvar:'1'}));
+  assert.equal(semRevisao.code,409);
+  assert.equal(db.collection('products').get(produto.id).sanitario.aprovadoFarmaceutico,false);
+  const salvarSemAprovar=executar('/admin/api/produtos/:id',body({ativo:'1'}));
+  assert.equal(salvarSemAprovar.code,200);
+  assert.equal(db.collection('products').get(produto.id).ativo,false);
+  const liberado=executar('/admin/api/produtos/:id',
+    body({aprovarAoSalvar:'1',confirmouRevisaoSanitaria:'1',
+      classificacao:'cosmético'}));
+  assert.equal(liberado.code,200,JSON.stringify(liberado.body));
+  assert.equal(liberado.body.ativacaoAutomatica,true);
+  const depois=db.collection('products').get(produto.id);
+  assert.equal(depois.inovaCatalogo.revisaoSanitariaPendente,false);
+  assert.equal(depois.sanitario.aprovadoFarmaceutico,true);
+  assert.equal(podeVender(depois).ok,true);
+});
+
 test('Exige receita (como na foto): salva aprovação mas NÃO ativa venda online',()=>{
   const {db,produto,executar,body}=preparar();
   const r=executar('/admin/api/produtos/:id',body({aprovarAoSalvar:'1',requerReceita:'1'}));

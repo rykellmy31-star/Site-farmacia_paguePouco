@@ -164,6 +164,8 @@ test('reset integral produz somente IDs novos, arquiva antigos e preserva pedido
   assert.equal(col.all().every(x=>!x.imagens.length),true);
   assert.equal(col.all().every(x=>x.precoPromocionalCentavos===0),true);
   assert.equal(col.all().every(x=>x.sanitario.aprovadoFarmaceutico===false),true);
+  assert.equal(col.all().every(x=>x.sanitario.requerReceita===false),true);
+  assert.equal(col.all().every(x=>x.inovaCatalogo.revisaoSanitariaPendente===true),true);
   const primeiro=col.all().find(p=>p.codigoInterno==='800001');
   assert.notEqual(primeiro?.id,'antigo_001');
   assert.equal(primeiro.precoCentavos,2050);

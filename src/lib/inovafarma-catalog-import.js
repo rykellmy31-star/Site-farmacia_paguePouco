@@ -148,8 +148,9 @@ export function revisarCandidatoInova(db, ean, acao) {
     precoCentavos: candidato.precoCentavos ?? 0,precoPromocionalCentavos:0,
     peso:0,dimensoes:{largura:0,altura:0,comprimento:0},
     ativo:false,destaque:false,
-    // Bloqueia a venda até revisão sanitária humana, inclusive para medicamento.
-    sanitario:{ classificacao:'nao_aplicavel',requerReceita:true,
+    // Receita ainda desconhecida. Não marcar "exige receita" sem evidência.
+    // A revisão sanitária pendente + produto inativo bloqueiam a venda.
+    sanitario:{ classificacao:'nao_aplicavel',requerReceita:false,
       registroMS:'',aprovadoFarmaceutico:false,controlado:false },
     estoque:{quantidade:0,reservado:0,minimo:5},vendas:0,relacionados:[],
     inovaCatalogo:{ean:candidato.ean,importadoEm:agora,revisaoSanitariaPendente:true},

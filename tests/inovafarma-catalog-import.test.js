@@ -86,7 +86,9 @@ test('superadmin importar: cria produto inicialmente inativo, zerado e com revis
   assert.equal(p.precoCentavos,1299);
   assert.equal(p.codigoInterno,'00125');
   assert.equal(p.ean,ean);
-  assert.equal(p.sanitario.requerReceita,true);
+  assert.equal(p.sanitario.requerReceita,false);
+  assert.equal(p.inovaCatalogo.revisaoSanitariaPendente,true);
+  assert.equal(podeVender({...p,ativo:true}).codigo,'REVISAO_SANITARIA_INOVA');
   assert.equal(p.sanitario.aprovadoFarmaceutico,false);
   assert.equal(podeVender(p).ok,false);
   assert.equal(revisarCandidatoInova(db,ean,'importar').ok,false);
