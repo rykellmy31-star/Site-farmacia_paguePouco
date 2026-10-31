@@ -316,7 +316,13 @@
             ? 'Cadastro aprovado, salvo e produto ativado automaticamente.'
             : 'Cadastro aprovado e salvo, mas o produto ficou inativo: ' +
               (resposta.motivoAtivacao || 'verifique as restrições para venda online.'))
-          : 'Produto salvo com sucesso.';
+          : resposta.revisaoConcluida
+            ? (resposta.ativacaoAutomatica
+              ? 'Revisão concluída e produto ativado.'
+              : 'Revisão concluída. ' + (resposta.motivoAtivacao
+                ? 'Produto não ativado: ' + resposta.motivoAtivacao
+                : 'Produto permaneceu inativo conforme o formulário.'))
+            : 'Produto salvo com sucesso.';
         notificar(mensagem);
         // Ao criar, abre o cadastro recém-criado; ao editar, reabre o mesmo.
         const destino = resposta.url || '/admin/produtos/' + encodeURIComponent(resposta.id);
