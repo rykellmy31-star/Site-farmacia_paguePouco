@@ -5,7 +5,7 @@ import { campoForm, listaErros, alertaHtml, migalhas } from './partials.js';
 import { htmlItensCarrinho, htmlResumoCarrinho } from './cart.js';
 import { formatCep, formatDateTime } from '../lib/format.js';
 import { productUrl } from '../lib/catalog.js';
-import { autorizouWhatsappPedidos } from '../lib/evolution-whatsapp.js';
+import { autorizouWhatsappPedidos, autorizouWhatsappProdutos } from '../lib/evolution-whatsapp.js';
 
 const PASSOS = [
   { id: 'cesta', label: '1. Cesta' },
@@ -228,20 +228,35 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
           </div>
 
           ${ctx.settings.evolutionWhatsapp?.ativo && ctx.settings.evolutionWhatsapp?.avisarCliente
-            ? autorizouWhatsappPedidos(ctx.usuario)
+            ? autorizouWhatsappProdutos(ctx.usuario)
               ? `<div class="cartao">
                   <p class="mb-0"><strong>✅ Avisos de pedidos por WhatsApp ativados</strong><br>
-                  Você receberá atualizações de recebimento e pagamento no telefone cadastrado,
+                  Você receberá atualizações de recebimento e pagamento com os nomes dos produtos no telefone cadastrado,
                   sem precisar autorizar novamente. <a href="/conta/dados#avisos-whatsapp">Gerenciar avisos</a>.</p>
                 </div>
                 <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
                   ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>Finalizar pedido</button>`
+              : autorizouWhatsappPedidos(ctx.usuario)
+                ? `<div class="cartao">
+                    <strong>📱 Avisos por WhatsApp já ativados</strong>
+                    <p class="texto-pequeno texto-suave mb-0">A autorização anterior não incluía os nomes dos produtos.
+                    Para receber também os nomes dos produtos (inclusive medicamentos) nas mensagens de recebimento e pagamento,
+                    escolha o botão abaixo. Caso contrário, seus avisos continuarão sem os nomes.</p>
+                  </div>
+                  <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
+                    name="acaoWhatsappPedido" value="autorizar_detalhes"
+                    ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>
+                    Finalizar e incluir produtos no WhatsApp</button>
+                  <button class="botao secundario grande bloquinho mt-2" type="submit"
+                    ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>
+                    Finalizar sem nomes dos produtos</button>`
               : `<div class="cartao">
                   <strong>📱 Quer receber avisos de seus pedidos no WhatsApp?</strong>
                   <p class="texto-pequeno texto-suave mb-0">
                   Ao escolher "Finalizar e receber avisos", você autoriza a <strong>Farmácia Pague Pouco</strong>
                   a enviar confirmações de pedidos e pagamentos pelo WhatsApp no telefone cadastrado,
-                  neste pedido e nos próximos. Sem ofertas, sem detalhes de medicamentos.
+                  neste pedido e nos próximos, incluindo os nomes dos produtos (inclusive medicamentos).
+                  Sem ofertas; o nome dos itens pode revelar informações de saúde.
                   A escolha é opcional e pode ser desativada em Meus dados.</p>
                 </div>
                 <input type="hidden" name="preferenciaWhatsappPedido" value="sem">

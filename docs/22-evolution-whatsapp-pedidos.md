@@ -1,12 +1,19 @@
 # Evolution API v2 — WhatsApp de pedidos (Farmácia Pague Pouco)
 
 ## Fluxo
-- **Responsável pela separação**: aviso somente quando o pedido passa para **aprovado** em cobrança real Mercado Pago. A mensagem contém código do pedido, não produtos/endereço.
+- **Responsável pela separação**: aviso somente quando o pedido passa para **aprovado** em cobrança real Mercado Pago. A mensagem contém o código do pedido e, em pedidos com autorização v2, nomes e quantidades dos produtos salvos no pedido. Não inclui endereço/CPF.
 - **Cliente**: recebe `pedido recebido` quando a cobrança é criada com sucesso e, depois, `pagamento confirmado` somente na transição de pendente para aprovado pelo Mercado Pago. As mensagens exigem autorização explícita, sem caixa pré-marcada: no primeiro checkout o cliente escolhe o botão `Finalizar e receber avisos no WhatsApp` (ou `Finalizar sem avisos no WhatsApp`), com texto claro de aceitação para pedidos atuais e futuros. A escolha é salva no cadastro por telefone, registrada para auditoria e pode ser revogada a qualquer momento em `Minha conta → Meus dados → Avisos de pedidos pelo WhatsApp`. Nas próximas compras o opt-in válido é reutilizado sem nova pergunta; ao mudar o telefone exige novo aceite.
-- **Sem n8n**, sem alterar InovaFarma V3/V4, sem alterar credenciais Mercado Pago, sem enviar dados de medicamentos no WhatsApp.
+- **Sem n8n**, sem alterar InovaFarma V3/V4 ou credenciais Mercado Pago. Nomes de produtos, inclusive medicamentos, só são enviados com autorização v2; código e status seguem disponíveis nos avisos autorizados anteriores.
 - Só a Evolution API da instância `instancia` envia mensagens, com número de saída conectado pelo próprio operador à instância.
 - Uma fila por evento e pedido evita mensagens repetidas. Como um timeout de rede pode indicar uma mensagem entregue, não há reenvio automático de resultado incerto; o painel exibe `verificar`.
 - Nenhum disparo retroativo de pedidos anteriores à ativação.
+
+## Produtos nas mensagens
+- Quando autorizados, os produtos do **snapshot do pedido** são incluídos logo após o código entre parênteses: `#PP2026000019 (2x Dipirona 500mg, Shampoo)`. A lista não é consultada em tempo real no catálogo e remove caracteres de controle/formatação.
+- O evento `cliente_recebido` agora avisa: "Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!". Este prazo é o texto informativo da loja, não uma confirmação antecipada de pagamento.
+- O evento `cliente_pago` mantém a confirmação somente após aprovação real; `responsavel_pago` recebe a mesma lista de itens quando autorizada.
+- Consentimentos **versão 1** prometiam não divulgar nomes de medicamentos: continuam enviando código e status sem nomes. Após autorização explícita atualizada pelo checkout ou em `Meus dados`, salva-se `versao:2`, permitindo a lista em novos pedidos. O atendimento e o fluxo de pagamento continuam funcionando mesmo sem essa autorização.
+- Não armazenar dados clínicos no log do provedor; a fila apaga o corpo após a tentativa de envio.
 
 ## Conexão simplificada na Farmácia Pague Pouco
 

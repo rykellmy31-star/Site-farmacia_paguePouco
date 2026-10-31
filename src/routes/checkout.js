@@ -12,7 +12,7 @@ import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '..
 import { lookupCep, UF_LIST } from '../lib/cep.js';
 import { logCustomer } from '../lib/audit.js';
 import { sendMail } from '../lib/mailer.js';
-import { enfileirarEvolution, autorizouWhatsappPedidos, numeroWhatsapp, decidirAvisosWhatsappPedido } from '../lib/evolution-whatsapp.js';
+import { enfileirarEvolution, autorizouWhatsappPedidos, autorizouWhatsappProdutos, numeroWhatsapp, decidirAvisosWhatsappPedido } from '../lib/evolution-whatsapp.js';
 import { config } from '../config.js';
 import { uid } from '../lib/store.js';
 import { vendedoresAtivos } from '../lib/sellers.js';
@@ -274,13 +274,17 @@ export function registrarRotasCheckout(app, db) {
     const escolhaWhatsapp = String(req.body.acaoWhatsappPedido || req.body.preferenciaWhatsappPedido || '');
     const { autorizouAgora, avisarCliente:avisosWhatsapp } = decidirAvisosWhatsappPedido(
       req.user,ctx.settings.evolutionWhatsapp,escolhaWhatsapp,req.body.aceitaWhatsAppPedido === '1');
+    // O aceite antigo autorizava somente status, sem nomes de medicamentos.
+    const permiteItensWhatsapp=avisosWhatsapp&&
+      (escolhaWhatsapp==='autorizar'||escolhaWhatsapp==='autorizar_detalhes'||
+        autorizouWhatsappProdutos(req.user));
     const carrinhoOriginal = { itens: [...(cart.itens || [])], cupom: cart.cupom, frete: cart.frete };
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
       freteConfig: ctx.settings.frete, cupomCodigo: cart.cupom?.codigo || null,
       vendedorId: req.body.vendedorId || null,
-      receberWhatsappPedido: avisosWhatsapp, req,
+      receberWhatsappPedido: avisosWhatsapp, enviarItensWhatsappPedido: permiteItensWhatsapp, req,
     });
 
     if (!resultado.ok) {
@@ -297,13 +301,13 @@ export function registrarRotasCheckout(app, db) {
     const pedido = resultado.pedido;
     // Aceite registrado uma unica vez; nao altera preferencias de marketing.
     // E valido apenas para o mesmo numero e pode ser revogado em Meus dados.
-    if (autorizouAgora && req.user && !autorizouWhatsappPedidos(req.user)) {
+    if (autorizouAgora && req.user && !autorizouWhatsappProdutos(req.user)) {
       const numero = numeroWhatsapp(req.user.telefone);
       if (numero) {
         db.collection('customers').update(req.user.id, {
           consentimentoWhatsappPedidos: {
             ativo: true, numero, aceitoEm: new Date().toISOString(),
-            origem: 'checkout-escolha-explicita', versao: 1,
+            origem: 'checkout-escolha-explicita', versao: 2,
           },
         });
         logCustomer(db, req.user.id, 'autorizou_whatsapp_pedidos', 'cliente', req.user.id,
