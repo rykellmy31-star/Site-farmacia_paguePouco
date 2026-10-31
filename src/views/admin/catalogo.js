@@ -169,7 +169,9 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
                     '<input type="hidden" name="_csrf" value="' + e(ctx.csrf) + '">' +
                     '<button class="botao pequeno secundario" type="submit">Restaurar (inativo)</button></form>'
                   : '<span class="texto-pequeno">Arquivado</span>')
-                : `<button class="botao pequeno ${p.ativo ? '' : 'secundario'}" data-alternar-produto="${e(p.id)}">${p.ativo ? 'Desativar' : 'Ativar'}</button>
+                : `${!p.ativo && p.inovaCatalogo?.revisaoSanitariaPendente===true
+                      ? `<a class="botao pequeno secundario" href="/admin/produtos/${e(p.id)}">Revisar e ativar</a>`
+                      : `<button class="botao pequeno ${p.ativo ? '' : 'secundario'}" data-alternar-produto="${e(p.id)}">${p.ativo ? 'Desativar' : 'Ativar'}</button>`}
                    <button class="botao pequeno perigo" data-excluir-produto="${e(p.id)}" data-nome="${e(p.nome)}">Excluir</button>`}
             </td>
           </tr>`;
@@ -290,8 +292,12 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
             ${campoAdmin({ nome: 'controlado', rotulo: 'Medicamento controlado (bloqueia a venda online)', tipo: 'checkbox', valor: !!s.controlado })}
             ${p.inovaCatalogo?.revisaoSanitariaPendente===true ? `<div class="alerta aviso">
               <strong>Produto importado — classificação sanitária não confirmada.</strong>
-              A importação não confirma se exige receita. Mesmo com a opção desmarcada, o produto
-              permanece fora da venda até revisão por responsável autorizado.
+              A importação não confirma se exige receita. Para concluir a revisão, confira a
+              classificação, marque a confirmação e clique em Salvar alterações.
+              ${s.aprovadoFarmaceutico
+                ? 'Este produto já está aprovado: não é necessário aprovar novamente. Mantenha "Produto ativo" marcado para ativá-lo ao salvar.'
+                : 'Se ainda não foi aprovado, clique em Aprovar cadastro antes de salvar.'}
+              Produtos com receita, controle especial ou outras restrições continuam bloqueados.
               ${ctx.podeAprovar ? `<label class="check mt-1">
                 <input type="checkbox" name="confirmouRevisaoSanitaria" value="1">
                 <span>Conferi a classificação e confirmo que este produto não exige receita médica nem controle especial.</span>
