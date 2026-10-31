@@ -288,6 +288,15 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
             <hr style="border:0;border-top:1px solid var(--borda);margin:14px 0">
             ${campoAdmin({ nome: 'requerReceita', rotulo: 'Exige receita médica (bloqueia a venda online)', tipo: 'checkbox', valor: !!s.requerReceita })}
             ${campoAdmin({ nome: 'controlado', rotulo: 'Medicamento controlado (bloqueia a venda online)', tipo: 'checkbox', valor: !!s.controlado })}
+            ${p.inovaCatalogo?.revisaoSanitariaPendente===true ? `<div class="alerta aviso">
+              <strong>Produto importado — classificação sanitária não confirmada.</strong>
+              A importação não confirma se exige receita. Mesmo com a opção desmarcada, o produto
+              permanece fora da venda até revisão por responsável autorizado.
+              ${ctx.podeAprovar ? `<label class="check mt-1">
+                <input type="checkbox" name="confirmouRevisaoSanitaria" value="1">
+                <span>Conferi a classificação e confirmo que este produto não exige receita médica nem controle especial.</span>
+              </label>` : ''}
+            </div>` : ''}
             <div class="alerta ${ctx.podeAprovar ? 'info' : 'aviso'} mb-0">
               <strong>Aprovação do farmacêutico responsável:</strong>
               ${s.aprovadoFarmaceutico
