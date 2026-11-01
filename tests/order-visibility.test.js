@@ -132,6 +132,6 @@ test('painel de loja reflete pedidos visíveis ao ocultar e restaurar, sem apaga
   assert.equal(restaurarPedidoAoCliente(db,pedido.id).ok,true);
   assert.equal(metricas(db,{apenasVisiveis:true}).pedidosCancelados,1);
   const rotas=sourceRoute;
-  assert.match(rotas,/metricas\(db, \{ de, apenasVisiveis: true \}\)/);
+  assert.match(rotas,/metricas\(db, \{ apenasVisiveis: true \}\)/);
   assert.match(rotas,/pedidosRecentes: db\.collection\('orders'\)\.all\(\)\.filter\(p => !pedidoOcultoDoCliente\(p\)\)/);
 });
