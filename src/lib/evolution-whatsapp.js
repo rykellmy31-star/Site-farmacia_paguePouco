@@ -108,7 +108,7 @@ function resumoItensWhatsapp(pedido,{paraResponsavel=false}={}){
     linhas.push(linha);
     tamanho+=linha.length+1;
   }
-  return '\\n\\n'+linhas.join('\\n')+'\\n\\n';
+  return '\n\n'+linhas.join('\n')+'\n\n';
 }
 export function enfileirarEvolution(db,pedido,tipo){
   const cfg=evolutionConfig(db);
