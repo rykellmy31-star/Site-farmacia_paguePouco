@@ -21,6 +21,19 @@ export function autorizouWhatsappPedidos(cliente){
 export function autorizouWhatsappProdutos(cliente){
   return autorizouWhatsappPedidos(cliente)&&Number(cliente?.consentimentoWhatsappPedidos?.versao)>=2;
 }
+/** Ao atualizar a autorização, aplica os detalhes a pedidos pendentes desse
+ * cliente e desse mesmo telefone. A mensagem recebida anteriormente não é
+ * reenviada; a confirmação de pagamento pode incluir os itens salvos.
+ */
+export function atualizarAutorizacaoItensPedidosPendentes(db,cliente){
+  if(!cliente?.id||!autorizouWhatsappProdutos(cliente))return 0;
+  const telefone=numeroWhatsapp(cliente.telefone);
+  return db.collection('orders').updateMany(p=>
+    p.clienteId===cliente.id && p.receberWhatsappPedido===true &&
+    p.enviarItensWhatsappPedido!==true && p.statusFinanceiro==='pendente' &&
+    numeroWhatsapp(p.cliente?.telefone)===telefone,
+    ()=>({enviarItensWhatsappPedido:true}));
+}
 /** Nao confunde pagamento, marketing e autorizacao de contato. */
 export function decidirAvisosWhatsappPedido(cliente,configuracao,escolha='',aceiteLegado=false){
   const disponivel=configuracao?.ativo===true&&configuracao?.avisarCliente===true;
@@ -71,8 +84,11 @@ const codigoSeguro=x=>String(x||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,45);
 const nomeProdutoSeguro=nome=>String(nome||'').replace(/[\x00-\x1f\x7f*~_<>`]/g,' ')
   .replace(/\s+/g,' ').trim().slice(0,140);
 /** Usa o nome gravado no pedido, sem consultar um catálogo que pode ter mudado. */
-function resumoItensWhatsapp(pedido){
-  if(pedido?.enviarItensWhatsappPedido!==true||!Array.isArray(pedido.itens))return '';
+function resumoItensWhatsapp(pedido,{paraResponsavel=false}={}){
+  // A equipe de separação recebe os itens do pedido pago em seu número
+  // operacional; o cliente continua exigindo autorização específica v2.
+  if((!paraResponsavel&&pedido?.enviarItensWhatsappPedido!==true)||
+      !Array.isArray(pedido.itens))return '';
   const nomes=pedido.itens.map(item=>{
     const nome=nomeProdutoSeguro(item?.nome);
     if(!nome)return '';
@@ -106,7 +122,7 @@ export function enfileirarEvolution(db,pedido,tipo){
   const id='evo:'+String(pedido.id)+':'+tipo,col=db.collection(COL);
   if(col.get(id))return {ok:true,duplicado:true};
   const codigo=codigoSeguro(pedido.codigo);
-  const itens=resumoItensWhatsapp(pedido);
+  const itens=resumoItensWhatsapp(pedido,{paraResponsavel:tipo==='responsavel_pago'});
   const texto=tipo==='responsavel_pago'
     ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+itens+
       '\nO pagamento foi confirmado. Acesse o painel para separar o pedido.'
