@@ -146,7 +146,7 @@ test('mensagem de recebimento reproduz o modelo com tres produtos em negrito',()
     '',
     'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!',
     'Acompanhe seu pedido pelo site. Esta mensagem é automática.',
-  ].join('\\n'));
+  ].join('\n'));
   assert.equal(enfileirarEvolution(db,p,'cliente_recebido').duplicado,true);
 });
 test('pagamento confirmado usa lista em negrito sem alterar status e consentimento',()=>{
@@ -159,7 +159,7 @@ test('pagamento confirmado usa lista em negrito sem alterar status e consentimen
   assert.equal(enfileirarEvolution(db,p,'cliente_pago').enfileirado,true);
   assert.equal(enfileirarEvolution(db,p,'responsavel_pago').enfileirado,true);
   for(const item of db.collection('evolutionWhatsappOutbox').all()){
-    assert.match(item.texto,/\\n\\n\\*•ABS INTIMUS DAYS INDIC TR 80UN\\*\\n\\*•2x DIPIRONA 1G 10CP\\*\\n\\n/);
+    assert.match(item.texto,/\n\n\*•ABS INTIMUS DAYS INDIC TR 80UN\*\n\*•2x DIPIRONA 1G 10CP\*\n\n/);
   }
   const legadoDb=dbFake();ativar(legadoDb);
   assert.equal(enfileirarEvolution(legadoDb,{...p,enviarItensWhatsappPedido:false},'cliente_pago').enfileirado,true);
