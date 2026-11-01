@@ -77,7 +77,7 @@ test('responsável recebe itens para separação, cliente sem nova autorização
   assert.equal(enfileirarEvolution(db,{...legado,statusFinanceiro:'aprovado'},'responsavel_pago').enfileirado,true);
   const avisos=db.collection('evolutionWhatsappOutbox').all();
   assert.doesNotMatch(avisos.find(x=>x.tipo==='cliente_recebido').texto,/Shampoo 250ml/);
-  assert.match(avisos.find(x=>x.tipo==='responsavel_pago').texto,/#1058 \(2x Shampoo 250ml\)/);
+  assert.match(avisos.find(x=>x.tipo==='responsavel_pago').texto,/#1058 :\n\n\*•2x Shampoo 250ml\*\n\n/);
 });
 test('nova autorização explícita atualiza apenas pedidos pendentes do mesmo telefone',()=>{
   const colecoes=new Map();
@@ -104,7 +104,7 @@ test('nova autorização explícita atualiza apenas pedidos pendentes do mesmo t
   const recusado={...cliente,consentimentoWhatsappPedidos:{ativo:true,numero:'5573988887777',versao:1}};
   assert.equal(atualizarAutorizacaoItensPedidosPendentes(db,recusado),0);
 });
-test('nomes e quantidades aparecem entre parenteses nas tres mensagens quando autorizados',()=>{
+test('nomes e quantidades aparecem em linhas com bolinha e negrito nas tres mensagens quando autorizados',()=>{
   const db=dbFake();ativar(db);
   const p=pedido({enviarItensWhatsappPedido:true,itens:[
     {nome:'Dipirona 500mg',quantidade:2},
@@ -116,11 +116,54 @@ test('nomes e quantidades aparecem entre parenteses nas tres mensagens quando au
   }
   const avisos=db.collection('evolutionWhatsappOutbox').all();
   for(const aviso of avisos){
-    assert.match(aviso.texto,/#1058 \(2x Dipirona 500mg, Shampoo infantil\)/);
+    assert.match(aviso.texto,/\*•2x Dipirona 500mg\*\n\*•Shampoo infantil\*/);
     assert.doesNotMatch(aviso.texto,/Informação privada/);
   }
   assert.match(avisos.find(x=>x.tipo==='cliente_recebido').texto,
     /Quando o pagamento for confirmado pelo site \(até 10 minutos\), seu pedido será enviado para separação!/);
+});
+test('mensagem de recebimento reproduz o modelo com tres produtos em negrito',()=>{
+  const db=dbFake();ativar(db);
+  const p=pedido({
+    codigo:'PP2026000021',
+    cliente:{nome:'Carlos Rykellmy Santos Correia',telefone:'73988887777'},
+    enviarItensWhatsappPedido:true,
+    itens:[
+      {nome:'ABS INTIMUS DAYS INDIC TR 80UN',quantidade:1},
+      {nome:'APTAMIL PREMIUM 2 800G',quantidade:1},
+      {nome:'DIPIRONA 1G 10CP',quantidade:2},
+    ],
+  });
+  assert.equal(enfileirarEvolution(db,p,'cliente_recebido').enfileirado,true);
+  const texto=db.collection('evolutionWhatsappOutbox').all()[0].texto;
+  assert.equal(texto,[
+    'Olá, Carlos Rykellmy Santos Correia! 👋',
+    'A Farmácia Pague Pouco recebeu seu pedido #PP2026000021 :',
+    '',
+    '*•ABS INTIMUS DAYS INDIC TR 80UN*',
+    '*•APTAMIL PREMIUM 2 800G*',
+    '*•2x DIPIRONA 1G 10CP*',
+    '',
+    'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!',
+    'Acompanhe seu pedido pelo site. Esta mensagem é automática.',
+  ].join('\\n'));
+  assert.equal(enfileirarEvolution(db,p,'cliente_recebido').duplicado,true);
+});
+test('pagamento confirmado usa lista em negrito sem alterar status e consentimento',()=>{
+  const db=dbFake();ativar(db);
+  const p=pedido({codigo:'PP2026000021',statusFinanceiro:'aprovado',
+    enviarItensWhatsappPedido:true,itens:[
+      {nome:'ABS INTIMUS DAYS INDIC TR 80UN',quantidade:1},
+      {nome:'DIPIRONA 1G 10CP',quantidade:2},
+    ]});
+  assert.equal(enfileirarEvolution(db,p,'cliente_pago').enfileirado,true);
+  assert.equal(enfileirarEvolution(db,p,'responsavel_pago').enfileirado,true);
+  for(const item of db.collection('evolutionWhatsappOutbox').all()){
+    assert.match(item.texto,/\\n\\n\\*•ABS INTIMUS DAYS INDIC TR 80UN\\*\\n\\*•2x DIPIRONA 1G 10CP\\*\\n\\n/);
+  }
+  const legadoDb=dbFake();ativar(legadoDb);
+  assert.equal(enfileirarEvolution(legadoDb,{...p,enviarItensWhatsappPedido:false},'cliente_pago').enfileirado,true);
+  assert.doesNotMatch(legadoDb.collection('evolutionWhatsappOutbox').all()[0].texto,/DIPIRONA 1G/);
 });
 test('nomes sao filtrados contra formatacao, linhas extras e pedidos antigos',()=>{
   const db=dbFake();ativar(db);
@@ -130,7 +173,7 @@ test('nomes sao filtrados contra formatacao, linhas extras e pedidos antigos',()
   ]});
   assert.equal(enfileirarEvolution(db,p,'cliente_recebido').enfileirado,true);
   const texto=db.collection('evolutionWhatsappOutbox').all()[0].texto;
-  assert.match(texto,/#1058 \(Produto inedito teste\)/);
+  assert.match(texto,/#1058 :\n\n\*•Produto inedito teste\*\n\n/);
   assert.doesNotMatch(texto,/\n\*inedito/);
   const dbLegado=dbFake();ativar(dbLegado);
   enfileirarEvolution(dbLegado,pedido(),'cliente_recebido');
@@ -232,7 +275,7 @@ test('aprovacao do Mercado Pago envia itens de pedido autorizado v2 ao cliente e
   assert.equal(atualizarStatusFinanceiro(db,'pedido-1','aprovado').ok,true);
   const outbox=db.collection('evolutionWhatsappOutbox').all();
   assert.equal(outbox.length,2);
-  assert.ok(outbox.every(x=>x.texto.includes('#1058 (Medicamento confidencial)')));
+  assert.ok(outbox.every(x=>x.texto.includes('*•Medicamento confidencial*')));
 });
 test('sem opt-in ou canal de cliente, nao envia pagamento ao cliente; provedor interno nao gera WhatsApp',()=>{
   for(const opcoes of [
