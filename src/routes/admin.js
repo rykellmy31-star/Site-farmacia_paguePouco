@@ -137,8 +137,9 @@ export function registrarRotasAdmin(app, db) {
       }));
     }
     const agora = new Date();
-    const de = new Date(agora.getTime() - 30 * 86400000).toISOString();
-    const m = metricas(db, { de, apenasVisiveis: true });
+    // Cartões devem refletir TODOS os pedidos visíveis na lista (sem
+    // limitar a 30 dias). Apenas o gráfico abaixo é limitado a 30 dias.
+    const m = metricas(db, { apenasVisiveis: true });
     const idsDisponiveis = new Set(db.collection('products').all()
       .filter(produtoComEstoqueParaPainel).map(p => String(p.id)));
     res.html(telaDashboard(ctx, {
