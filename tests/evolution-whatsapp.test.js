@@ -5,7 +5,7 @@ import {Collection} from '../src/lib/store.js';
 import {atualizarStatusFinanceiro} from '../src/lib/orders.js';
 import {
   numeroWhatsapp, validarEvolutionConfig,enfileirarEvolution,processarFilaEvolution,
-  resumoEvolution,possuiFilaEvolution,autorizouWhatsappPedidos,autorizouWhatsappProdutos,decidirAvisosWhatsappPedido
+  resumoEvolution,possuiFilaEvolution,autorizouWhatsappPedidos,autorizouWhatsappProdutos,atualizarAutorizacaoItensPedidosPendentes,decidirAvisosWhatsappPedido
 } from '../src/lib/evolution-whatsapp.js';
 function dbFake(){
   const collections=new Map();
@@ -67,6 +67,40 @@ test('cliente só recebe se autorizou; equipe só recebe apos aprovacao; sem vaz
   assert.match(pago.texto,/1058/);
   assert.ok(fila.every(x=>!x.texto.includes('Produto de saúde sensível')&&!x.texto.includes('Informação privada')));
   assert.equal(fila.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
+});
+test('responsável recebe itens para separação, cliente sem nova autorização recebe só código',()=>{
+  const db=dbFake();ativar(db);
+  const legado=pedido({enviarItensWhatsappPedido:false,itens:[{nome:'Shampoo 250ml',quantidade:2}]});
+  assert.equal(enfileirarEvolution(db,legado,'cliente_recebido').enfileirado,true);
+  assert.equal(enfileirarEvolution(db,{...legado,statusFinanceiro:'aprovado'},'responsavel_pago').enfileirado,true);
+  const avisos=db.collection('evolutionWhatsappOutbox').all();
+  assert.doesNotMatch(avisos.find(x=>x.tipo==='cliente_recebido').texto,/Shampoo 250ml/);
+  assert.match(avisos.find(x=>x.tipo==='responsavel_pago').texto,/#1058 \\(2x Shampoo 250ml\\)/);
+});
+test('nova autorização explícita atualiza apenas pedidos pendentes do mesmo telefone',()=>{
+  const colecoes=new Map();
+  const db={collection(name){
+    if(!colecoes.has(name))colecoes.set(name,new Collection({_commit(){}},name));
+    return colecoes.get(name);
+  }};
+  ativar(db);
+  const cliente={id:'u1',telefone:'73988887777',
+    consentimentoWhatsappPedidos:{ativo:true,numero:'5573988887777',versao:2}};
+  const pendente=pedido({clienteId:'u1',enviarItensWhatsappPedido:false});
+  db.collection('orders').insert(pendente);
+  db.collection('orders').insert({...pedido(),id:'diferente',clienteId:'u2',enviarItensWhatsappPedido:false});
+  db.collection('orders').insert({...pedido(),id:'outro-numero',clienteId:'u1',
+    cliente:{nome:'Maria',telefone:'71999999999'},enviarItensWhatsappPedido:false});
+  db.collection('orders').insert({...pedido(),id:'aprovado',clienteId:'u1',
+    statusFinanceiro:'aprovado',enviarItensWhatsappPedido:false});
+  assert.equal(atualizarAutorizacaoItensPedidosPendentes(db,cliente),1);
+  assert.equal(db.collection('orders').get(pendente.id).enviarItensWhatsappPedido,true);
+  for(const id of ['diferente','outro-numero','aprovado'])
+    assert.equal(db.collection('orders').get(id).enviarItensWhatsappPedido,false);
+  assert.equal(enfileirarEvolution(db,db.collection('orders').get(pendente.id),'cliente_recebido').enfileirado,true);
+  assert.match(db.collection('evolutionWhatsappOutbox').all()[0].texto,/Produto de saúde sensível/);
+  const recusado={...cliente,consentimentoWhatsappPedidos:{ativo:true,numero:'5573988887777',versao:1}};
+  assert.equal(atualizarAutorizacaoItensPedidosPendentes(db,recusado),0);
 });
 test('nomes e quantidades aparecem entre parenteses nas tres mensagens quando autorizados',()=>{
   const db=dbFake();ativar(db);
