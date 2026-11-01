@@ -65,7 +65,9 @@ test('cliente só recebe se autorizou; equipe só recebe apos aprovacao; sem vaz
   assert.equal(pago.numero,'5573988887777');
   assert.match(pago.texto,/pagamento.*confirmado/i);
   assert.match(pago.texto,/1058/);
-  assert.ok(fila.every(x=>!x.texto.includes('Produto de saúde sensível')&&!x.texto.includes('Informação privada')));
+  assert.ok(fila.filter(x=>x.tipo!=='responsavel_pago').every(x=>!x.texto.includes('Produto de saúde sensível')));
+  assert.ok(fila.every(x=>!x.texto.includes('Informação privada')));
+  assert.match(fila.find(x=>x.tipo==='responsavel_pago').texto,/Produto de saúde sensível/);
   assert.equal(fila.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
 });
 test('responsável recebe itens para separação, cliente sem nova autorização recebe só código',()=>{
@@ -75,7 +77,7 @@ test('responsável recebe itens para separação, cliente sem nova autorização
   assert.equal(enfileirarEvolution(db,{...legado,statusFinanceiro:'aprovado'},'responsavel_pago').enfileirado,true);
   const avisos=db.collection('evolutionWhatsappOutbox').all();
   assert.doesNotMatch(avisos.find(x=>x.tipo==='cliente_recebido').texto,/Shampoo 250ml/);
-  assert.match(avisos.find(x=>x.tipo==='responsavel_pago').texto,/#1058 \\(2x Shampoo 250ml\\)/);
+  assert.match(avisos.find(x=>x.tipo==='responsavel_pago').texto,/#1058 \(2x Shampoo 250ml\)/);
 });
 test('nova autorização explícita atualiza apenas pedidos pendentes do mesmo telefone',()=>{
   const colecoes=new Map();
@@ -217,7 +219,8 @@ test('aprovacao real do Mercado Pago envia eventos separados ao cliente e respon
   assert.equal(outbox.find(x=>x.tipo==='cliente_pago').numero,'5573988887777');
   assert.equal(outbox.find(x=>x.tipo==='responsavel_pago').numero,'5573999888777');
   assert.ok(outbox.every(x=>x.status==='fila'));
-  assert.ok(outbox.every(x=>!x.texto.includes('Medicamento confidencial'))); // legado sem autorização v2
+  assert.ok(outbox.filter(x=>x.tipo==='cliente_pago').every(x=>!x.texto.includes('Medicamento confidencial'))); // legado sem autorização v2 para cliente
+  assert.match(outbox.find(x=>x.tipo==='responsavel_pago').texto,/Medicamento confidencial/);
   assert.equal(atualizarStatusFinanceiro(db,'pedido-1','aprovado').semAlteracao,true);
   assert.equal(db.collection('evolutionWhatsappOutbox').count(),2);
   assert.equal(db.collection('products').get('produto').estoque.quantidade,4);
