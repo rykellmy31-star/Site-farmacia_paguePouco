@@ -398,7 +398,11 @@ export function telaDados(ctx, { erros = {} }) {
         <div class="corpo">
           ${ctx.req?.query?.get('whatsapp')==='telefone-invalido'
             ? '<div class="alerta aviso">Atualize seu telefone com DDD antes de ativar os avisos.</div>' : ''}
-          <p><strong>${autorizouWhatsappPedidos(u) ? 'Ativado ✅' : 'Desativado'}</strong></p>
+          <p><strong>${autorizouWhatsappProdutos(u)
+            ? 'Ativado ✅ — com os nomes dos produtos'
+            : autorizouWhatsappPedidos(u)
+              ? 'Ativado — somente número e status, sem nomes dos produtos'
+              : 'Desativado'}</strong></p>
           <p class="texto-pequeno texto-suave">A Farmácia Pague Pouco pode enviar confirmações de recebimento e pagamento
           de pedidos atuais e futuros ao WhatsApp cadastrado, incluindo nomes dos produtos (inclusive medicamentos).
           Os nomes podem revelar informações de saúde. Sem ofertas. Você pode desativar a qualquer momento;
