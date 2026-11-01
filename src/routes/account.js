@@ -17,7 +17,7 @@ import { vincularCarrinhoAoCliente } from '../lib/cart.js';
 import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
-import { autorizouWhatsappPedidos, autorizouWhatsappProdutos, numeroWhatsapp } from '../lib/evolution-whatsapp.js';
+import { autorizouWhatsappPedidos, autorizouWhatsappProdutos, atualizarAutorizacaoItensPedidosPendentes, numeroWhatsapp } from '../lib/evolution-whatsapp.js';
 import { config } from '../config.js';
 import { UF_LIST } from '../lib/cep.js';
 
@@ -355,6 +355,12 @@ export function registrarRotasConta(app, db) {
         ? {ativo:true,numero,aceitoEm:new Date().toISOString(),origem:'minha-conta',versao:2}
         : {...anterior,ativo:false,revogadoEm:new Date().toISOString()},
     });
+    // Clientes que atualizam para a versão com nomes também autorizam
+    // detalhes dos seus pedidos ainda pendentes no mesmo telefone.
+    if(acao!=='desativar'){
+      const atualizado=db.collection('customers').get(req.user.id);
+      atualizarAutorizacaoItensPedidosPendentes(db,atualizado);
+    }
     logCustomer(db,req.user.id,acao==='desativar'?'revogou_whatsapp_pedidos':'autorizou_whatsapp_pedidos',
       'cliente',req.user.id,{origem:'minha-conta'},req);
     res.redirect('/conta/dados?whatsapp='+ (acao==='desativar'?'desativado':'ativo')+'#avisos-whatsapp');
