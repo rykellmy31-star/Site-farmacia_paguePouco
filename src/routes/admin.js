@@ -137,18 +137,21 @@ export function registrarRotasAdmin(app, db) {
       }));
     }
     const agora = new Date();
-    const de = new Date(agora.getTime() - 30 * 86400000).toISOString();
-    const m = metricas(db, { de });
+    // Cartões devem refletir TODOS os pedidos visíveis na lista (sem
+    // limitar a 30 dias). Apenas o gráfico abaixo é limitado a 30 dias.
+    const m = metricas(db, { apenasVisiveis: true });
     const idsDisponiveis = new Set(db.collection('products').all()
       .filter(produtoComEstoqueParaPainel).map(p => String(p.id)));
     res.html(telaDashboard(ctx, {
       metricas: m,
-      grafico: vendasPorDia(db, 30),
-      pedidosRecentes: db.collection('orders').all().sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 8),
+      grafico: vendasPorDia(db, 30, agora, { apenasVisiveis: true }),
+      pedidosRecentes: db.collection('orders').all().filter(p => !pedidoOcultoDoCliente(p))
+        .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 8),
       estoqueBaixo: db.collection('products').all().filter((p) =>
         produtoComEstoqueParaPainel(p) && Number(p.estoque?.quantidade) <= Number(p.estoque?.minimo || 0)
       ).slice(0, 10),
-      topProdutos: produtosMaisVendidos(db, 100).filter(p => idsDisponiveis.has(String(p.produtoId))).slice(0, 8),
+      topProdutos: produtosMaisVendidos(db, 100, { apenasVisiveis: true })
+        .filter(p => idsDisponiveis.has(String(p.produtoId))).slice(0, 8),
       infoPagamento: providerPublicInfo(db),
     }));
   });

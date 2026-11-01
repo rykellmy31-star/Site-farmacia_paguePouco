@@ -681,8 +681,11 @@ export function produtoComEstoqueParaPainel(p) {
     podeAtivarAposAprovacao(p).ok;
 }
 
-export function metricas(db, { de = null, ate = null } = {}) {
+export function metricas(db, { de = null, ate = null, apenasVisiveis = false } = {}) {
+  // A Visão Geral acompanha a lista de pedidos visíveis. Arquivos ocultos
+  // permanecem íntegros para auditoria e relatórios financeiros.
   let pedidos = db.collection('orders').all();
+  if (apenasVisiveis) pedidos = pedidos.filter(o => !pedidoOcultoDoCliente(o));
   if (de) pedidos = pedidos.filter((o) => o.criadoEm >= de);
   if (ate) pedidos = pedidos.filter((o) => o.criadoEm <= ate);
   const pagos = pedidos.filter((o) => o.statusFinanceiro === 'aprovado');
@@ -715,13 +718,14 @@ export function metricas(db, { de = null, ate = null } = {}) {
   };
 }
 
-export function vendasPorDia(db, dias = 30, fim = new Date()) {
+export function vendasPorDia(db, dias = 30, fim = new Date(), { apenasVisiveis = false } = {}) {
   const out = [];
   const hoje = new Date(fim);
   for (let i = dias - 1; i >= 0; i--) {
     const d = new Date(hoje.getTime() - i * 86400000);
     const key = d.toISOString().slice(0, 10);
-    const pedidos = db.collection('orders').all().filter((o) => String(o.criadoEm).slice(0, 10) === key);
+    const pedidos = db.collection('orders').all().filter((o) =>
+      String(o.criadoEm).slice(0, 10) === key && (!apenasVisiveis || !pedidoOcultoDoCliente(o)));
     const pagos = pedidos.filter((o) => o.statusFinanceiro === 'aprovado');
     out.push({
       data: key,
@@ -733,9 +737,10 @@ export function vendasPorDia(db, dias = 30, fim = new Date()) {
   return out;
 }
 
-export function produtosMaisVendidos(db, limite = 10, { de = null, ate = null } = {}) {
+export function produtosMaisVendidos(db, limite = 10, { de = null, ate = null, apenasVisiveis = false } = {}) {
   const mapa = new Map();
   for (const o of db.collection('orders').all()) {
+    if (apenasVisiveis && pedidoOcultoDoCliente(o)) continue;
     if (o.statusFinanceiro !== 'aprovado') continue;
     const dia = String(o.criadoEm || '').slice(0, 10);
     if ((de && dia < de) || (ate && dia > ate)) continue;

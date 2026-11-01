@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
-import { metricas, pedidosDoCliente } from '../src/lib/orders.js';
+import { metricas, pedidosDoCliente, vendasPorDia } from '../src/lib/orders.js';
 import { podeOcultarPedido, pedidoOcultoDoCliente, ocultarPedidoDoCliente,
   restaurarPedidoAoCliente } from '../src/lib/order-visibility.js';
 import { can } from '../src/lib/permissions.js';
@@ -99,4 +99,39 @@ test('lixeira aparece ao lado de Abrir apenas para superadmin, com CSRF e confir
     filtros:{...props.filtros,visibilidade:'ocultos'},totalOcultos:1});
   assert.match(oculto,/action="\/admin\/pedidos\/pedido1\/restaurar"/);
   assert.doesNotMatch(oculto,/pedidos\/pedido1\/ocultar/);
+});
+
+test('painel de loja reflete pedidos visíveis ao ocultar e restaurar, sem apagar o histórico',()=>{
+  const {db,pedido}=setup();
+  db.collection('orders').insert({
+    id:'pedido2',codigo:'PPTESTE2',clienteId:'cliente1',
+    criadoEm:'2026-10-21T18:00:00.000Z',
+    statusFinanceiro:'pendente',statusOperacional:'aguardando_pagamento',totalCentavos:2600,
+    itens:[],
+  });
+  db.collection('orders').insert({
+    id:'pedido3',codigo:'PPTESTE3',clienteId:'cliente2',
+    criadoEm:'2026-10-21T19:00:00.000Z',
+    statusFinanceiro:'expirado',statusOperacional:'cancelado',totalCentavos:1300,
+    itens:[],
+  });
+  const inicio=metricas(db,{apenasVisiveis:true});
+  assert.equal(inicio.pedidosTotal,3);
+  assert.equal(inicio.pedidosCancelados,2);
+  assert.equal(inicio.pedidosPendentes,1);
+  assert.equal(ocultarPedidoDoCliente(db,pedido.id).ok,true);
+  assert.equal(ocultarPedidoDoCliente(db,'pedido3').ok,true);
+  const tela=metricas(db,{apenasVisiveis:true});
+  assert.equal(tela.pedidosTotal,1);
+  assert.equal(tela.pedidosCancelados,0);
+  assert.equal(tela.pedidosPendentes,1);
+  assert.equal(metricas(db).pedidosTotal,3,'auditoria inclui arquivos ocultos');
+  const dia=vendasPorDia(db,1,new Date('2026-10-21T20:00:00.000Z'),{apenasVisiveis:true});
+  assert.equal(dia[0].pedidos,1);
+  assert.equal(vendasPorDia(db,1,new Date('2026-10-21T20:00:00.000Z'))[0].pedidos,3);
+  assert.equal(restaurarPedidoAoCliente(db,pedido.id).ok,true);
+  assert.equal(metricas(db,{apenasVisiveis:true}).pedidosCancelados,1);
+  const rotas=sourceRoute;
+  assert.match(rotas,/metricas\(db, \{ apenasVisiveis: true \}\)/);
+  assert.match(rotas,/pedidosRecentes: db\.collection\('orders'\)\.all\(\)\.filter\(p => !pedidoOcultoDoCliente\(p\)\)/);
 });
