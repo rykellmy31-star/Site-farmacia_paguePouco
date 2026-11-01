@@ -93,17 +93,22 @@ function resumoItensWhatsapp(pedido,{paraResponsavel=false}={}){
     const nome=nomeProdutoSeguro(item?.nome);
     if(!nome)return '';
     const qtd=Number(item?.quantidade);
-    return Number.isSafeInteger(qtd)&&qtd>1?String(qtd)+'x '+nome:nome;
+    const descricao=Number.isSafeInteger(qtd)&&qtd>1?String(qtd)+'x '+nome:nome;
+    // O WhatsApp exibe o asterisco como negrito. Cada produto ocupa sua linha.
+    return '*•'+descricao+'*';
   }).filter(Boolean);
   if(!nomes.length)return '';
-  let lista='';
+  const linhas=[];let tamanho=0;
   for(let i=0;i<nomes.length;i++){
-    const proximo=(lista?', ':'')+nomes[i];
-    if(lista.length+proximo.length>2800)
-      return ' ('+lista+'; mais '+(nomes.length-i)+' item(ns) no site)';
-    lista+=proximo;
+    const linha=nomes[i];
+    if(tamanho+linha.length>2800){
+      linhas.push('*•Mais '+(nomes.length-i)+' item(ns): consulte o site*');
+      break;
+    }
+    linhas.push(linha);
+    tamanho+=linha.length+1;
   }
-  return ' ('+lista+')';
+  return '\n\n'+linhas.join('\n')+'\n\n';
 }
 export function enfileirarEvolution(db,pedido,tipo){
   const cfg=evolutionConfig(db);
@@ -124,15 +129,18 @@ export function enfileirarEvolution(db,pedido,tipo){
   const codigo=codigoSeguro(pedido.codigo);
   const itens=resumoItensWhatsapp(pedido,{paraResponsavel:tipo==='responsavel_pago'});
   const texto=tipo==='responsavel_pago'
-    ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+itens+
-      '\nO pagamento foi confirmado. Acesse o painel para separar o pedido.'
+    ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+
+      (itens ? ' :'+itens : '\n')+
+      'O pagamento foi confirmado. Acesse o painel para separar o pedido.'
     : tipo==='cliente_pago'
     ? 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! ✅\n'+
-      'O pagamento do seu pedido #'+codigo+itens+' na Farmácia Pague Pouco foi confirmado!\n'+
+      'O pagamento do seu pedido #'+codigo+' na Farmácia Pague Pouco foi confirmado!'+
+      (itens || '\n')+
       'Nossa equipe vai preparar seu pedido. Acompanhe o andamento pelo site.\n'+
       'Esta mensagem é automática.'
     : 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! 👋\n'+
-      'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+itens+'.\n'+
+      'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+
+      (itens ? ' :'+itens : '.\n')+
       'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!\n'+
       'Acompanhe seu pedido pelo site. Esta mensagem é automática.';
   col.insert({id,pedidoId:pedido.id,tipo,numero,texto,status:'fila',
