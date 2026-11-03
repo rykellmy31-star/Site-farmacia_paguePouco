@@ -357,7 +357,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
   const referencia=somente==='dimensoes'?null:referenciaEsmalte(nomeProduto,marcaProduto);
-  const fabricanteRef=somente==='dimensoes'?null:consultaFabricante(nomeProduto,fabricanteProduto||marcaProduto);
+  const fabricanteRef=somente==='dimensoes'?null:consultaFabricante(nomeProduto,fabricanteProduto);
   // GTIN14 pode ser de caixa: identidade da apresentação muda com nome/marca.
   const contextoGTIN14=/^[1-8]\d{13}$/.test(ean)
     ?(String(nomeProduto||'')+'|'+String(marcaProduto||'')).toUpperCase().slice(0,160)
