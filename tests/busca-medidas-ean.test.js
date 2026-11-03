@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {normalizarEAN,eanValido,buscarMedidasPorEAN,aplicarMedidasAusentes} from '../src/lib/busca-medidas-ean.js';
+import {normalizarEAN,eanValido,buscarMedidasPorEAN,buscarMedidasNoCatalogo,aplicarMedidasAusentes} from '../src/lib/busca-medidas-ean.js';
 const ean='7891000100103';
 function fetchFake(resp,observado=[]){
   return async (url,opts)=>{observado.push({url,opts});return {ok:true,json:async()=>resp};};
@@ -94,4 +94,62 @@ test('integração exige permissão admin e não altera pagamento, preço nem re
   assert.match(js,/buscar-medidas-ean/);
   assert.match(tela,/id="botaoBuscarMedidasEAN"/);
   assert.match(js,/campo\('ean'\)\?\.addEventListener\('change'/);
+});
+
+test('busca local do mesmo EAN reutiliza peso e dimensões anteriormente revisados',()=>{
+  const p={id:'outro',ean,peso:0.45,dimensoes:{largura:8,altura:5,comprimento:16},
+    logisticaFonte:{revisaoPendente:false}};
+  const db={collection:()=>({all:()=>[p]})};
+  const r=buscarMedidasNoCatalogo(db,ean,'atual');
+  assert.equal(r.encontrado,true);
+  assert.equal(r.origem,'Cadastro já revisado da farmácia');
+  assert.deepEqual(r.dimensoes,p.dimensoes);
+  assert.equal(buscarMedidasNoCatalogo(db,ean,'outro'),null);
+  assert.equal(buscarMedidasNoCatalogo(db,'7894900011517','atual'),null);
+});
+test('dados de EAN iguais porém ainda não conferidos não são reaproveitados',()=>{
+  const db={collection:()=>({all:()=>[{
+    id:'outro',ean,peso:0.45,dimensoes:{largura:8,altura:5,comprimento:16},
+    logisticaFonte:{revisaoPendente:true},
+  }]})};
+  assert.equal(buscarMedidasNoCatalogo(db,ean,'novo'),null);
+});
+test('consulta parcial pode completar dimensões em outra base pública sem adivinhar valores',async()=>{
+  const urls=[];
+  const fetcher=async(url)=>{
+    urls.push(url);
+    if(url.includes('upcitemdb'))return {ok:true,json:async()=>({
+      items:[{ean,title:'Produto teste',weight:'450 g'}]})};
+    return {ok:true,json:async()=>({product:{
+      code:ean,product_name:'Produto teste',packaging_dimensions:'16 x 8 x 5 cm'}})};
+  };
+  const r=await buscarMedidasPorEAN(ean,{fetcher});
+  assert.equal(r.encontrado,true);
+  assert.equal(r.peso,0.45);
+  assert.deepEqual(r.dimensoes,{comprimento:16,largura:8,altura:5});
+  assert.ok(r.consultadas.includes('UPCitemDB'));
+  assert.ok(r.consultadas.includes('Open Food Facts'));
+  assert.equal(urls.length,2);
+});
+test('EAN identificado sem peso logístico retorna diagnóstico claro das fontes consultadas',async()=>{
+  const fetcher=async(url)=>url.includes('upcitemdb')?
+    {ok:true,json:async()=>({items:[{ean,title:'Produto brasileiro',weight:'',dimension:''}]})}:
+    {ok:false};
+  const r=await buscarMedidasPorEAN(ean,{fetcher});
+  assert.equal(r.encontrado,false);
+  assert.equal(r.produtoEncontrado,true);
+  assert.match(r.mensagem,/Produto identificado/);
+  assert.equal(r.consultadas.length,4);
+});
+test('botão repete busca mesmo com resultado anterior e oferece pesquisa assistida na web',()=>{
+  const base=new URL('../',import.meta.url);
+  const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
+  const rotas=readFileSync(new URL('src/routes/admin.js',base),'utf8');
+  const tela=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
+  assert.match(js,/consultarMedidasEAN\(\{forcar:true\}\)/);
+  assert.match(js,/r\.consultadas\.join\(', '\)/);
+  assert.match(js,/google\.com\/search\?q=/);
+  assert.match(tela,/id="linkPesquisaEAN"/);
+  assert.match(rotas,/buscarMedidasNoCatalogo\(db,ean/);
+  assert.match(rotas,/buscarMedidasPorEAN\(ean,\{forcar:req\.body\?\.forcar===true\}\)/);
 });
