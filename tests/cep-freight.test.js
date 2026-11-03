@@ -210,3 +210,24 @@ test('checkout usa ID real do CEP e limpa localidade antiga antes de cotar frete
   assert.match(rotas,/if \(cepIdentificado\.cidade\) endereco\.cidade=cepIdentificado\.cidade/);
 });
 
+
+
+test('novo CEP limpa numero e complemento do endereco anterior sem apagar nome e telefone',()=>{
+  const source=readFileSync(new URL('../public/js/app.js',import.meta.url),'utf8');
+  const inicio=source.indexOf('const limparLocalidade = () => {');
+  const fim=source.indexOf('\n    };',inicio);
+  assert.ok(inicio>0 && fim>inicio);
+  const limpeza=source.slice(inicio,fim);
+  for(const campo of ['campoUF','campoCidade','campoRua','campoNumero','campoComplemento','campoBairro']){
+    assert.match(limpeza,new RegExp('if\\('+campo+'\\) '+campo+"\\.value=''"));
+  }
+  assert.doesNotMatch(limpeza,/campoNome|campoTelefone/);
+  assert.match(source,/const campoNumero = form\.querySelector\('\[name="numero"\]'\)/);
+  assert.match(source,/const campoComplemento = form\.querySelector\('\[name="complemento"\]'\)/);
+  assert.match(source,/if\(cep!==ultimoCep\)\{[\s\S]*?limparLocalidade\(\)/);
+  // O seletor antigo retornava só um elemento e disparava TypeError no .forEach,
+  // impedindo a limpeza quando o cliente marcava "Usar outro endereço".
+  assert.match(source,/\$\$\('input, select, textarea',campos\)\.forEach/);
+  assert.doesNotMatch(source,/(?<!\$)\$\('input, select, textarea',campos\)\.forEach/);
+  assert.match(source,/for\(const nome of \['cep','logradouro','numero','complemento','bairro','cidade','uf'\]\)/);
+});
