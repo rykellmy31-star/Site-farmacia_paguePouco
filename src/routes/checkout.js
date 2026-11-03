@@ -89,13 +89,19 @@ export function registrarRotasCheckout(app, db) {
     ctx.cart = cart;
     if (!cart.itens.length) return void res.html(telaCheckoutVazio(ctx));
     const totais = calcularTotais(db, cart, {});
-    const salvaguarda = cart.frete?.endereco;
+    const enderecos=req.user?.enderecos || [];
+    const salvo=enderecos.find(en=>en.padrao)||enderecos[0]||null;
+    // Ao abrir o checkout com um endereço salvo, já mostra cotação atual.
+    const calculo=salvo ? calcularFrete({
+      config:ctx.settings.frete,cepFarmacia:ctx.settings.empresa?.endereco?.cep,
+      cep:salvo.cep,uf:salvo.uf,cidade:salvo.cidade,
+      items:cart.itens,subtotalCents:totais.subtotalCentavos,
+      cupomFreteGratis:!!cart.cupom?.freteGratis,
+    }) : null;
     res.html(telaEndereco(ctx, {
-      totais,
-      enderecos: req.user?.enderecos || [],
-      calculo: cart.frete?.opcoes ? cart.frete.opcoes : null,
-      freteSelecionado: cart.frete?.opcaoId || '',
-      erroFrete: req.query.get('erroFrete') || '',
+      totais, enderecos, calculo:calculo?.disponivel?calculo:null,
+      freteSelecionado:salvo?.cep===cart.frete?.endereco?.cep?cart.frete?.opcaoId||'':'',
+      erroFrete:req.query.get('erroFrete') || (salvo&&!calculo?.disponivel?calculo?.motivo:''),
     }));
   });
 
@@ -142,7 +148,7 @@ export function registrarRotasCheckout(app, db) {
 
     // frete sempre recalculado no servidor
     const calc = calcularFrete({
-      config: ctx.settings.frete,
+      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep: endereco.cep, uf: endereco.uf, cidade: endereco.cidade,
       items: cart.itens, subtotalCents: totais.subtotalCentavos,
       cupomFreteGratis: !!cart.cupom?.freteGratis,
@@ -187,7 +193,7 @@ export function registrarRotasCheckout(app, db) {
     const uf = String(req.body.uf || '').toUpperCase();
     const totais = calcularTotais(db, cart, {});
     const calc = calcularFrete({
-      config: ctx.settings.frete, cep, uf, cidade,
+      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep, cep, uf, cidade,
       items: cart.itens || [], subtotalCents: totais.subtotalCentavos,
       cupomFreteGratis: !!cart.cupom?.freteGratis,
     });
@@ -205,7 +211,7 @@ export function registrarRotasCheckout(app, db) {
 
     // revalida o frete no servidor (preços/estoque podem ter mudado)
     const revalidado = resolverFreteEscolhido({
-      config: ctx.settings.frete,
+      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep: cart.frete.endereco.cep, uf: cart.frete.endereco.uf, cidade: cart.frete.endereco.cidade,
       items: cart.itens, subtotalCents: calcularTotais(db, cart, {}).subtotalCentavos,
       opcaoId: cart.frete.opcaoId, cupomFreteGratis: !!cart.cupom?.freteGratis,
@@ -282,7 +288,8 @@ export function registrarRotasCheckout(app, db) {
     const resultado = await criarPedido(db, {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
-      freteConfig: ctx.settings.frete, cupomCodigo: cart.cupom?.codigo || null,
+      freteConfig: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
+      cupomCodigo: cart.cupom?.codigo || null,
       vendedorId: req.body.vendedorId || null,
       receberWhatsappPedido: avisosWhatsapp, enviarItensWhatsappPedido: permiteItensWhatsapp, req,
     });
