@@ -258,10 +258,11 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               ${campoAdmin({ nome: 'estoqueMinimo', rotulo: 'Estoque mínimo (alerta)', tipo: 'number', min: '0', valor: p.estoque?.minimo ?? 5 })}
             </div>
             <div class="alerta info" id="painelBuscaEAN">
-              <strong>📦 Dimensões automáticas pelo EAN</strong>
-              <p class="texto-pequeno mt-1">Ao cadastrar ou ativar, o sistema procura peso e medidas em bases públicas.
-              A pesquisa também pode ser feita agora; campos preenchidos por você não serão substituídos.</p>
-              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">🔎 Buscar peso e dimensões pelo EAN</button>
+              <strong>📦 Foto e dimensões automáticas pelo EAN</strong>
+              <p class="texto-pequeno mt-1">Ao cadastrar ou ativar, o sistema busca foto da embalagem pelo código de barras
+              em catálogos com reutilização permitida e verifica peso e dimensões. Imagens e medidas já preenchidas
+              não serão substituídas. Google é opcional, sujeito a credenciais oficiais e licença da imagem.</p>
+              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">🔎 Buscar foto, peso e dimensões pelo EAN</button>
               <a id="linkPesquisaEAN" class="botao pequeno secundario mt-1" target="_blank"
                 rel="noopener noreferrer" style="display:none">🌐 Procurar medidas deste EAN na web</a>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaEAN" role="status">
