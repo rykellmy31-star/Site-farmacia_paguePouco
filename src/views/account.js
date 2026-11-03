@@ -221,9 +221,18 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
           <div class="linha" style="gap:10px;flex-wrap:wrap">
             <div><span class="rotulo">Pagamento</span>${etiquetaStatus(pedido.statusFinanceiro)}</div>
             <div><span class="rotulo">Entrega</span>${etiquetaStatus(statusOperacionalExibido(pedido))}</div>
-            <div><span class="rotulo">Forma</span>${e(String(pedido.metodoPagamento || '').replace('credit_card', 'Cartão de crédito').replace('debit_card', 'Cartão de débito').replace('pix', 'Pix'))}</div>
+            <div><span class="rotulo">Forma</span>${e(String(pedido.metodoPagamento || '').replace('credit_card', 'Cartão de crédito').replace('debit_card', 'Cartão de débito').replace('pix', 'Pix').replace('cash', 'Dinheiro'))}</div>
             ${pedido.vendedor?.nome ? `<div><span class="rotulo">Vendedor</span><strong>${e(pedido.vendedor.nome)}</strong></div>` : ''}
           </div>
+          ${pedido.pagamentoPresencial ? `<div class="alerta info mt-2">
+            <strong>🏪 Pagamento na entrega ou retirada</strong>
+            <p>Nenhuma cobrança será feita pelo site. ${pedido.statusFinanceiro==='aprovado'
+              ? 'A farmácia confirmou o recebimento do pagamento.'
+              : 'Seu pagamento será realizado presencialmente.'}</p>
+            ${pedido.pagamentoPresencial.precisaTroco ? `<p>Troco para:
+              <strong>${money(pedido.pagamentoPresencial.trocoParaCentavos)}</strong> —
+              troco estimado: ${money(pedido.pagamentoPresencial.trocoCentavos)}</p>` : ''}
+          </div>` : ''}
           ${pagamento?.provedor === 'mercadopago' && pedido.statusFinanceiro === 'pendente' ? `<p class="consulta-pix-info" role="status" data-pix-status-auto="true">
             Se você já pagou, <a class="botao pequeno secundario" href="/conta/pedidos/${e(pedido.codigo)}">Atualizar situação do Pix</a>
             <span class="texto-pequeno texto-suave">O banco é consultado de forma segura, no máximo uma vez por minuto. Não gera outra cobrança.</span>
