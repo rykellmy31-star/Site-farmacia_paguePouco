@@ -9,6 +9,28 @@
   const $ = (s, c) => (c || document).querySelector(s);
   const $$ = (s, c) => Array.from((c || document).querySelectorAll(s));
 
+  // Recebimento presencial no fechamento do pedido: exigir bandeira somente
+  // para cartão, permitir parcelas somente em crédito e 1x em débito.
+  const formRecebido=$('#formRecebimentoPresencial');
+  if(formRecebido){
+    const metodo=formRecebido.querySelector('#metodoRecebido');
+    const detalhes=formRecebido.querySelector('#detalhesCartaoPresencial');
+    const bandeira=formRecebido.querySelector('#bandeira');
+    const parcelas=formRecebido.querySelector('#parcelasRecebidas');
+    const atualizar=()=>{
+      const cartao=['credit_card','debit_card'].includes(metodo.value);
+      if(detalhes)detalhes.hidden=!cartao;
+      if(bandeira){bandeira.disabled=!cartao;bandeira.required=cartao;}
+      if(parcelas){
+        parcelas.disabled=!cartao;
+        if(metodo.value!=='credit_card')parcelas.value='1';
+        Array.from(parcelas.options).forEach(o=>{o.disabled=metodo.value==='debit_card'&&o.value!=='1';});
+      }
+    };
+    metodo.addEventListener('change',atualizar);
+    atualizar();
+  }
+
   function notificar(msg, tipo) {
     const el = $('#notificacaoAdmin');
     if (!el) return;
