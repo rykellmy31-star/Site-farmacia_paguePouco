@@ -242,7 +242,7 @@ test('painel continua tentando depois de fotos com menos de 600 pixels sem abrir
   const html=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
   const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
   assert.match(js,/for\(let indice=0;indice<fontes\.length;indice\+\+\)/);
-  assert.match(js,/await enviarPNG\(ean,indice\)/);
+  assert.match(js,/await enviarPNG\(ean,indice,contexto\)/);
   assert.match(js,/erros\.push\(fonte/);
   assert.doesNotMatch(js,/google\.com\/search\?tbm=isch/);
   assert.doesNotMatch(html,/id="linkGoogleImagensEAN"/);
