@@ -93,6 +93,11 @@ export const config = {
       pixKey: process.env.MP_PIX_KEY || '',
     },
   },
+  googleEan: {
+    // Opcional: apenas contas existentes da Custom Search JSON API.
+    key: process.env.GOOGLE_CSE_API_KEY || '',
+    cx: process.env.GOOGLE_CSE_CX || '',
+  },
   melhorEnvio: {
     // APENAS cotação: nenhuma permissão de compra/geração de etiquetas.
     token: process.env.MELHOR_ENVIO_TOKEN || '',
@@ -150,6 +155,10 @@ export function configureCloudflare(env, origin, persistentSecret) {
     accessToken: env.MP_ACCESS_TOKEN || '', publicKey: env.MP_PUBLIC_KEY || '',
     webhookSecret: env.MP_WEBHOOK_SECRET || '', pixKey: env.MP_PIX_KEY || '',
     sandbox: bool(env.MP_SANDBOX, true),
+  };
+  config.googleEan = {
+    key: env.GOOGLE_CSE_API_KEY || '',
+    cx: env.GOOGLE_CSE_CX || '',
   };
   config.melhorEnvio = {
     token: env.MELHOR_ENVIO_TOKEN || '',
