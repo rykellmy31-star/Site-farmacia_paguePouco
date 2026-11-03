@@ -80,10 +80,16 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
             <h3>Usar um endereço salvo</h3>
             <div class="lista-ordenavel">
               ${enderecos.map((en) => `<label class="opcao-frete" style="align-items:flex-start">
-                <input type="radio" name="enderecoSalvo" value="${e(en.id)}" form="formEndereco" ${en.padrao ? 'checked' : ''}>
+                <input type="radio" name="enderecoSalvo" value="${e(en.id)}" form="formEndereco"
+                  data-cep="${e(en.cep || '')}" data-uf="${e(en.uf || '')}" data-cidade="${e(en.cidade || '')}"
+                  ${(padrao.id===en.id) ? 'checked' : ''}>
                 <span><strong>${e(en.apelido || 'Endereço')}</strong>${en.padrao ? ' <span class="etiqueta verde">Principal</span>' : ''}<br>
                 ${e(en.logradouro)}, ${e(en.numero)} — ${e(en.bairro)}<br>${e(en.cidade)}/${e(en.uf)} — ${formatCep(en.cep)}</span>
               </label>`).join('')}
+              <label class="opcao-frete" style="align-items:flex-start">
+                <input type="radio" name="enderecoSalvo" value="novo" form="formEndereco">
+                <span><strong>Usar outro endereço</strong><br>Informe um novo CEP para calcular automaticamente a entrega.</span>
+              </label>
             </div>
           </div>` : ''}
 
@@ -109,7 +115,7 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
                 ${campoForm({ nome: 'complemento', rotulo: 'Complemento', valor: padrao.complemento || '' })}
                 ${campoForm({ nome: 'bairro', rotulo: 'Bairro', valor: padrao.bairro || '', obrigatorio: true })}
               </div>
-              <button class="botao secundario" type="button" id="botaoCalcularFrete">Calcular frete</button>
+              <p class="texto-pequeno texto-suave mb-0">O frete será calculado automaticamente pelo CEP. Não precisa clicar em calcular.</p>
             </div>
 
             <div id="opcoesFrete" class="mt-2">
@@ -128,8 +134,8 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
                 Valor conforme a tabela de fretes fixos configurada pela farmácia.</p>` : ''}
             </div>
 
-            <button class="botao destaque bloquinho mt-2" type="submit" ${calculo ? '' : 'data-sem-frete="1"'}>Ir para o pagamento</button>
-            ${!calculo ? '<p class="texto-pequeno texto-suave mb-0">Informe o CEP e clique em "Calcular frete" para ver as opções.</p>' : ''}
+            <button class="botao destaque bloquinho mt-2" type="submit" id="botaoIrPagamento" ${calculo?.opcoes?.length ? '' : 'disabled'}>Ir para o pagamento</button>
+            ${!calculo ? '<p class="texto-pequeno texto-suave mb-0" id="avisoFreteAutomatico">Informe ou selecione um CEP para ver a entrega automaticamente.</p>' : ''}
           </form>
         </div>
         <aside>
