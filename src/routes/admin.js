@@ -65,6 +65,8 @@ import { validarNovoCupom } from '../lib/coupon-validation.js';
 import { pedidoOcultoDoCliente, ocultarPedidoDoCliente, restaurarPedidoAoCliente } from '../lib/order-visibility.js';
 import { listarVendasPagasParaAviso } from '../lib/avisos-vendas.js';
 import { validarRecebimentoPresencial } from '../lib/recebimento-presencial.js';
+import { relatorioOperacionalVendas, dataDaLoja, periodoValido } from '../lib/relatorio-operacional-vendas.js';
+import { telaRelatorioOperacional } from '../views/admin/relatorio-vendas-operacional.js';
 
 const CARTAO_403 = (req) => ({
   ok: false, erro: 'Seu perfil não tem permissão para esta ação.',
@@ -1058,6 +1060,56 @@ export function registrarRotasAdmin(app, db) {
         valorAprovado: aprovados.reduce((a, p) => a + Number(p.valorCentavos || 0), 0),
       },
     }));
+  });
+
+  /* ====================== RELATÓRIO DE VENDAS / INOVA ===================== */
+  function vendasDaConsulta(req){
+    const hoje=dataDaLoja(new Date());
+    const de=req.query.get('de')||hoje;
+    const ate=req.query.get('ate')||hoje;
+    if(!periodoValido(de,ate))return null;
+    return relatorioOperacionalVendas(db.collection('orders').all(),{de,ate});
+  }
+  app.get('/admin/relatorio-vendas', (req,res)=>{
+    if(!guard(req,res,'pedidos.ver'))return;
+    const dados=vendasDaConsulta(req);
+    if(!dados)return void res.status(400).html('Período inválido: máximo de 366 dias.');
+    res.set('Cache-Control','no-store');
+    res.html(telaRelatorioOperacional(ctxAdmin(req,db),dados));
+  });
+  app.get('/admin/api/relatorio-vendas.csv', (req,res)=>{
+    if(!guardApi(req,res,'pedidos.ver'))return;
+    const dados=vendasDaConsulta(req);
+    if(!dados)return void res.json({ok:false,erro:'Período inválido.'},400);
+    // Uma linha por produto. O total/desconto/frete só aparece na primeira
+    // linha do pedido para não duplicar valores em planilhas somadas.
+    const colunas=['Data do pagamento','Pedido','Cliente','Vendedor',
+      'EAN','SKU','Produto','Quantidade','Valor unitário','Subtotal do item',
+      'Total do pedido','Desconto do pedido','Frete do pedido',
+      'Forma recebida','Bandeira','Parcelas','Tipo','Situação da entrega'];
+    const linhas=[colunas.map(csv).join(';')];
+    for(const v of dados.vendas){
+      const p=v.pedido;
+      const itens=v.itens.length?v.itens:[{}];
+      itens.forEach((i,indice)=>{
+        const primeira=indice===0;
+        const moneyCSV=c=> (Number(c||0)/100).toFixed(2).replace('.',',');
+        linhas.push([
+          dataDaLoja(v.data),p.codigo,p.cliente?.nome||'',p.vendedor?.nome||'',
+          i.ean||'',i.sku||'',i.nome||'',i.quantidade||'',
+          moneyCSV(i.precoUnitarioCentavos),moneyCSV(i.subtotalCentavos),
+          primeira?moneyCSV(v.valorCentavos):'',
+          primeira?moneyCSV(p.descontoCentavos):'',
+          primeira?moneyCSV(p.freteCentavos):'',
+          v.forma,v.bandeira,v.parcelas,v.pagamentoLocal?'Presencial':'Online',
+          p.statusOperacional||'',
+        ].map(csv).join(';'));
+      });
+    }
+    res.set('Cache-Control','no-store');
+    res.set('Content-Disposition',
+      'attachment; filename="relatorio-vendas-inova-'+dados.de+'-a-'+dados.ate+'.csv"');
+    res.text('\uFEFF'+linhas.join('\r\n'),200,'text/csv; charset=utf-8');
   });
 
   /* ============================= RELATÓRIOS ============================= */
