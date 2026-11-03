@@ -53,6 +53,7 @@ import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
+import { consultarDescricaoEAN, preencherDescricaoAusente } from '../lib/busca-descricao-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1354,6 +1355,37 @@ function registrarApi(app, db) {
   });
 
   /* ------------------------------ PRODUTOS ------------------------------ */
+  // Ferramenta exclusiva para descrição do produto pelo EAN.
+  // Não altera preço, classificação sanitária, receitas nem nome cadastrado.
+  app.post('/admin/api/produtos/descricao-ean',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const ean=String(req.body?.ean||'');
+    if(!eanValido(ean))return void res.json({ok:false,erro:'EAN inválido.'},400);
+    const dados=await consultarDescricaoEAN(ean,{forcar:req.body?.forcar===true});
+    res.set('Cache-Control','no-store');
+    res.json(dados);
+  });
+  // Usado na ativação pela listagem: preencher somente descrição ausente,
+  // sem reescrever dados revisados pelo funcionário ou farmacêutico.
+  app.post('/admin/api/produtos/:id/buscar-descricao-ean',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)
+      return void res.json({ok:false,erro:'Produto indisponível.'},404);
+    if(String(p.descricao||'').trim()||!eanValido(p.ean))
+      return void res.json({ok:true,adicionado:false,mensagem:'Descrição preservada ou EAN inválido.'});
+    const dados=await consultarDescricaoEAN(p.ean);
+    const patch=preencherDescricaoAusente(p,dados);
+    if(Object.keys(patch).length){
+      db.collection('products').update(p.id,patch);
+      logAdmin(db,req.adminUser,'preencheu_descricao_ean','produto',p.id,{
+        ean:p.ean,origem:dados.origem
+      },req);
+    }
+    res.json({ok:true,adicionado:!!patch.descricao,
+      mensagem:patch.descricao?'Descrição cadastral inserida automaticamente.':
+        'Descrição não encontrada nas fontes disponíveis.'});
+  });
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador
   // antes de gravar a imagem na mídia local/R2.
