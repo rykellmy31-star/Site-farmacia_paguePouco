@@ -51,7 +51,7 @@ import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
-import { buscarDadosExternosEAN } from '../lib/enriquecimento-ean.js';
+import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1373,7 +1373,7 @@ function registrarApi(app, db) {
     if(!guardApi(req,res,'produtos.editar'))return;
     const p=db.collection('products').get(req.params.id);
     if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível'},404);
-    if((p.imagens||[]).length)return void res.json({ok:true,imagem:null,jaPossui:true});
+    if((p.imagens||[]).length&&!imagemAutomaticaAntiga(p))return void res.json({ok:true,imagem:null,jaPossui:true});
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem'});
     res.json({ok:true,ean:p.ean,imagem:dados.imagem});
@@ -1413,7 +1413,7 @@ function registrarApi(app, db) {
     if(!guardApi(req,res,'produtos.editar'))return;
     const p=db.collection('products').get(req.params.id);
     if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível'},404);
-    if((p.imagens||[]).length)return void res.json({ok:true,adicionada:false,mensagem:'Foto existente preservada.'});
+    if((p.imagens||[]).length&&!imagemAutomaticaAntiga(p))return void res.json({ok:true,adicionada:false,mensagem:'Foto manual existente preservada.'});
     if(!eanValido(p.ean)||String(req.body.ean)!==String(p.ean))
       return void res.json({ok:false,erro:'EAN não corresponde ao cadastro.'},409);
     const url=String(req.body.imagemUrl||'');
