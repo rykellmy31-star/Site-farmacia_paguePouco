@@ -330,10 +330,12 @@
       try {
         // Mesmo que o operador tenha marcado Ativo/Aprovar sem tirar o
         // foco do EAN, consultar dados antes de montar o FormData.
-        if(buscaEANAntesDeSalvar &&
-            ['peso','altura','largura','comprimento'].some(nome=>
-              !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0))){
-          await buscaEANAntesDeSalvar({silencioso:true});
+        if(buscaEANAntesDeSalvar){
+          const precisaMedidas=['peso','altura','largura','comprimento'].some(nome=>
+            !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0));
+          const precisaFoto=!form.querySelector('[name="imagens[]"]');
+          if(precisaMedidas||precisaFoto)
+            await buscaEANAntesDeSalvar({silencioso:true});
         }
         const resposta = await api(form.getAttribute('action'), {
           method: 'POST',
@@ -455,6 +457,29 @@
     const produtoId=formEAN.getAttribute('action')?.split('/').pop()||null;
     let codigoConsultado='';
     let emConsulta=false;
+    function adicionarFotoEAN(imagem){
+      if(!imagem?.url||!/^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(imagem.url))
+        return false;
+      if(formEAN.querySelector('[name="imagens[]"]'))return false;
+      // Anexar ao formulário como primeira imagem. O produto é persistido
+      // ao clicar Salvar, sem exigir upload manual de cada foto.
+      const input=document.createElement('input');
+      input.type='hidden';input.name='imagens[]';input.value=imagem.url;
+      const legenda=document.createElement('input');
+      legenda.type='hidden';legenda.name='imagemLegenda[]';
+      legenda.value=imagem.legenda||'Imagem com licença CC BY-SA 3.0 — Open Facts';
+      formEAN.append(input,legenda);
+      const galeria=$('#galeriaProduto');
+      if(galeria){
+        const item=document.createElement('div');item.className='item-midia';
+        const img=document.createElement('img');
+        img.src=imagem.url;img.alt='Foto encontrada pelo EAN';
+        const desc=document.createElement('p');
+        desc.className='texto-pequeno';desc.textContent='Foto EAN (salve para confirmar). Fonte: '+(imagem.fonteEAN?.fonte||'Open Facts');
+        item.append(img,desc);galeria.prepend(item);
+      }
+      return true;
+    }
     async function consultarMedidasEAN({silencioso=false,forcar=false}={}){
       const ean=String(campo('ean')?.value||'').replace(/[\s.-]/g,'');
       if(!/^\d{8}$|^\d{12,14}$/.test(ean)){
@@ -468,8 +493,12 @@
         const r=await post('/admin/api/produtos/dimensoes-ean',{ean,forcar,produtoId});
         if(ean!==String(campo('ean')?.value||'').replace(/[\s.-]/g,''))return;
         codigoConsultado=ean;
+        const fotoAdicionada=adicionarFotoEAN(r.imagem);
+        // A consulta pode achar foto, mas nenhuma dimensão publicada.
+        // A ausência de medidas não impede a inclusão da foto correta.
         if(!r.encontrado){
-          if(status)status.textContent=(r.mensagem||'Nenhuma medida confiável encontrada.')+
+          if(status)status.textContent=(fotoAdicionada?'Foto do produto encontrada e adicionada. ':'')+
+            (r.mensagem||'Nenhuma medida logística confiável encontrada.')+
             (r.consultadas?.length?' Fontes consultadas: '+r.consultadas.join(', ')+'.':'');
           if(btn)btn.textContent='🔄 Tentar buscar novamente pelo EAN';
           if(linkWeb){
@@ -490,10 +519,11 @@
             input.value=String(valor);preenchidos.push(nome);
           }
         }
-        if(status)status.textContent=preenchidos.length
-          ? 'Encontrado em '+r.origem+': preenchidos '+preenchidos.join(', ')+
-            '. Confira os valores da embalagem antes de salvar.'
-          : 'Encontrado em '+r.origem+', mas seus valores existentes foram preservados.';
+        if(status)status.textContent=(fotoAdicionada?'Foto adicionada pelo EAN. ':'')+
+          (preenchidos.length
+            ? 'Encontrado em '+r.origem+': preenchidos '+preenchidos.join(', ')+
+              '. Confira as medidas antes de cotar frete.'
+            : 'Medidas existentes preservadas ou não disponíveis.');
         if(!silencioso)notificar('Busca realizada. Confira as medidas antes de salvar.');
       }catch(err){
         if(status)status.textContent='Consulta indisponível. Você pode informar as medidas manualmente.';
@@ -506,7 +536,8 @@
     // e jamais sobrescreve peso/dimensões que o operador já informou.
     campo('ean')?.addEventListener('change',()=>{
       codigoConsultado='';
-      if(['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
+      if(!formEAN.querySelector('[name="imagens[]"]')||
+          ['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
         consultarMedidasEAN({silencioso:true});
     });
   }
