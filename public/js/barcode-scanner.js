@@ -139,10 +139,16 @@
         .filter(x=>x!==undefined);
       scanner=new window.Html5Qrcode('leitorCodigoArea',
         {formatsToSupport:types,verbose:false});
-      await scanner.start({facingMode:'environment'},
+      const iniciado=scanner;
+      await iniciado.start({facingMode:'environment'},
         {fps:10,qrbox:{width:260,height:130},aspectRatio:1.777},
         async code=>{await receber(code);},
         ()=>{});
+      if(!modal.open||scanner!==iniciado){
+        try{if(iniciado.getState()===2)await iniciado.stop();}catch{}
+        try{iniciado.clear();}catch{}
+        return;
+      }
       status('Aponte a câmera para as barras e mantenha o aparelho firme.');
     }catch(err){
       status('Não foi possível abrir a câmera. Verifique a permissão ou use “Ler de uma foto”.');
