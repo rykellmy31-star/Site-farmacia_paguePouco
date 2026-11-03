@@ -26,11 +26,11 @@ function validarFoto(url){
       /\.(?:jpg|jpeg|png|webp)$/i.test(u.pathname);
   }catch{return false;}
 }
-function registroImagem(url,fonte,ean){
+function registroImagem(url,fonte,ean,alternativas=[]){
   // OFF fornece o original em .full.jpg; .400.jpg é versão reduzida
   // e nunca deve ser convertida/esticada para parecer alta resolução.
   const urlAltaResolucao=url.replace(/\.(?:100|200|400)\.(jpe?g)$/i,'.full.$1');
-  return {url, urlAltaResolucao,principal:true,ordem:1,
+  return {url, urlAltaResolucao,alternativas,principal:true,ordem:1,
     legenda:'Imagem do produto — '+fonte+' (CC BY-SA 3.0; fonte: '+fonte+')',
     fonteEAN:{ean,fonte,licenca:'CC BY-SA 3.0',
       atribuicao:'Contribuidores de '+fonte,atribuidoEm:new Date().toISOString(),
@@ -68,18 +68,29 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   const resultado={ok:true,imagem:null,dimensoes:null,consultadas:[],origemDimensoes:''};
   // Fontes estruturadas com EAN exato e imagens reutilizáveis. Nunca
   // atribuir imagem de código parecido ou variante distinta.
-  if(somente!=='dimensoes')for(const [nome,base] of FACTS){
-    resultado.consultadas.push(nome);
-    const url=base+'/api/v2/product/'+encodeURIComponent(ean)+
-      '.json?fields=code,product_name,image_front_url,image_url,selected_images';
-    const json=await lerJson(url,{fetcher});
-    const p=json?.product;
-    if(!p||!eanIgual(p.code,ean))continue;
-    const urlFoto=[p.image_front_url,
-      p.selected_images?.front?.display?.pt,
-      p.selected_images?.front?.display?.en,
-      p.image_url].find(validarFoto);
-    if(urlFoto){resultado.imagem=registroImagem(urlFoto,nome,ean);break;}
+  if(somente!=='dimensoes'){
+    // Várias fontes + variantes de frente do MESMO EAN.
+    // Se a foto original falhar no download, o proxy tentará outra
+    // origem, evitando a mensagem genérica da versão antiga.
+    const respostas=await Promise.all(FACTS.map(async ([nome,base])=>{
+      const url=base+'/api/v2/product/'+encodeURIComponent(ean)+
+        '.json?fields=code,product_name,image_front_url,image_url,selected_images';
+      const json=await lerJson(url,{fetcher,timeoutMs:3500});
+      return {nome,produto:json?.product};
+    }));
+    const urls=[];
+    for(const {nome,produto:p} of respostas){
+      resultado.consultadas.push(nome);
+      if(!p||!eanIgual(p.code,ean))continue;
+      const fotos=[p.image_front_url,p.selected_images?.front?.display?.pt,
+        p.selected_images?.front?.display?.en,p.image_url]
+        .filter(validarFoto);
+      for(const url of fotos)if(!urls.some(x=>x.url===url))urls.push({url,nome});
+    }
+    if(urls.length){
+      resultado.imagem=registroImagem(urls[0].url,urls[0].nome,ean,
+        urls.slice(1).map(f=>f.url));
+    }
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
   // em janeiro de 2027, portanto não depende dela para operar.
