@@ -263,6 +263,8 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               em alta resolução, converte para PNG real e descarta imagens pequenas, apagadas ou sem origem
               autorizada. Não amplia foto pequena nem substitui imagem cadastrada.</p>
               <button class="botao pequeno secundario" type="button" id="botaoBuscarImagemEAN">🖼️ Buscar imagem PNG pelo EAN</button>
+              <a class="botao pequeno secundario" id="linkGoogleImagensEAN" hidden
+                 rel="noopener noreferrer" target="_blank">🔎 Buscar também no Google Imagens</a>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaImagemEAN" role="status" aria-live="polite">Ainda não pesquisado.</p>
             </div>
             <div class="alerta info" id="painelBuscaEAN">
