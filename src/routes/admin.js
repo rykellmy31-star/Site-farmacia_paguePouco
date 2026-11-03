@@ -1422,6 +1422,18 @@ function registrarApi(app, db) {
       mensagem:patch.descricao?'Descrição cadastral inserida automaticamente.':
         'Descrição não encontrada nas fontes disponíveis.'});
   });
+  // Identificação da variante no catálogo de cosméticos, usada apenas
+  // para esmaltes sem foto pelo EAN. No cadastro existente usar nome/marca
+  // reais do banco, não os enviados por um navegador.
+  const contextoImagemEsmalte=(ean,entrada={})=>{
+    const id=String(entrada?.produtoId||'').slice(0,90);
+    const cadastrado=id?db.collection('products').get(id):null;
+    if(cadastrado&&String(cadastrado.ean)===String(ean))
+      return {nomeProduto:String(cadastrado.nome||'').slice(0,130),
+        marcaProduto:String(cadastrado.marca||'').slice(0,80)};
+    return {nomeProduto:cleanText(entrada?.nome,130),
+      marcaProduto:cleanText(entrada?.marca,80)};
+  };
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador
   // antes de gravar a imagem na mídia local/R2.
@@ -1429,13 +1441,15 @@ function registrarApi(app, db) {
     if(!guardApi(req,res,'produtos.editar'))return;
     const ean=String(req.body?.ean||'');
     if(!eanValido(ean))return void res.json({ok:false,erro:'EAN inválido.'},400);
-    const result=await buscarDadosExternosEAN(ean,{somente:'imagem',force:req.body?.forcar===true});
+    const result=await buscarDadosExternosEAN(ean,{somente:'imagem',
+      force:req.body?.forcar===true,...contextoImagemEsmalte(ean,req.body)});
     res.set('Cache-Control','no-store');
     const fontes=(result.imagensCandidatas||[]).map(img=>({
       fonte:img.fonteEAN?.fonte||'Catálogo',
       atribuicao:img.fonteEAN?.urlAtribuicao||null,
       licenca:img.fonteEAN?.licenca||null,
       autor:img.fonteEAN?.atribuicao||null,
+      correspondencia:img.fonteEAN?.correspondencia||'ean',
     }));
     res.json({ok:true,imagem:result.imagem,fontes,
       consultadas:result.consultadas,
@@ -1451,13 +1465,15 @@ function registrarApi(app, db) {
     if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível'},404);
     if((p.imagens||[]).length&&!imagemAutomaticaAntiga(p))return void res.json({ok:true,imagem:null,jaPossui:true});
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
-    const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem'});
-    res.json({ok:true,ean:p.ean,imagem:dados.imagem,
+    const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem',
+      ...contextoImagemEsmalte(p.ean,{produtoId:p.id})});
+    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,imagem:dados.imagem,
       fontes:(dados.imagensCandidatas||[]).map(img=>({
         fonte:img.fonteEAN?.fonte||'Catálogo',
         atribuicao:img.fonteEAN?.urlAtribuicao||null,
         licenca:img.fonteEAN?.licenca||null,
         autor:img.fonteEAN?.atribuicao||null,
+        correspondencia:img.fonteEAN?.correspondencia||'ean',
       }))});
   });
   // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
@@ -1469,7 +1485,10 @@ function registrarApi(app, db) {
     const indice=Number(req.query.get('indice')||0);
     if(!Number.isInteger(indice)||indice<0||indice>35)
       return void res.text('Índice de imagem inválido.',400);
-    const dados=await buscarDadosExternosEAN(ean,{somente:'imagem'});
+    const dados=await buscarDadosExternosEAN(ean,{somente:'imagem',
+      ...contextoImagemEsmalte(ean,{
+        produtoId:req.query.get('produtoId'),nome:req.query.get('nome'),marca:req.query.get('marca'),
+      })});
     const candidata=(dados.imagensCandidatas||[])[indice];
     if(!candidata)return void res.text('Nenhuma foto disponível nesta fonte.',404);
     const arquivo=await buscarImagemDisponivel(candidata);
@@ -1527,6 +1546,9 @@ function registrarApi(app, db) {
       legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.';
     }else{
       legenda='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+      if(String(req.body.correspondencia||'')==='marca-cor-volume'&&
+         fonte==='Open Beauty Facts')
+        legenda+=' Correspondência por marca, cor e volume; código da fonte pode diferir.';
     }
     db.collection('products').update(p.id,{imagens:[{url,principal:true,ordem:1,legenda}]});
     logAdmin(db,req.adminUser,'anexou_imagem_png_ean','produto',p.id,{ean:p.ean,imagem:url},req);

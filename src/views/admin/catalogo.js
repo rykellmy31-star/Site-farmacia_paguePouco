@@ -262,6 +262,7 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               <p class="texto-pequeno mt-1">Busca foto frontal da embalagem (ou do produto), prioriza fonte
               em alta resolução nas fontes autorizadas, inclusive pesquisa extra automática por EAN,
               converte para PNG e grava a foto aprovada no produto existente.
+              Para esmaltes, também pesquisa pelo nome, marca, cor e volume nas bases de cosméticos.
               Não amplia imagens pequenas nem substitui fotos manuais.</p>
               <button class="botao pequeno secundario" type="button" id="botaoBuscarImagemEAN">🖼️ Buscar e salvar foto automaticamente</button>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaImagemEAN" role="status" aria-live="polite">Ainda não pesquisado.</p>

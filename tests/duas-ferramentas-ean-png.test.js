@@ -242,7 +242,7 @@ test('painel continua tentando depois de fotos com menos de 600 pixels sem abrir
   const html=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
   const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
   assert.match(js,/for\(let indice=0;indice<fontes\.length;indice\+\+\)/);
-  assert.match(js,/await enviarPNG\(ean,indice\)/);
+  assert.match(js,/await enviarPNG\(ean,indice,contexto\)/);
   assert.match(js,/erros\.push\(fonte/);
   assert.doesNotMatch(js,/google\.com\/search\?tbm=isch/);
   assert.doesNotMatch(html,/id="linkGoogleImagensEAN"/);
@@ -354,4 +354,95 @@ test('Openverse: atribuição e foto são vinculadas automaticamente no produto 
  assert.ok(publicPage.includes('creditoFotoOpenverse(produto)'));
  assert.match(js,/salvaNoProduto/);
  assert.doesNotMatch(js,/Google automático exige API/);
+});
+
+test('esmalte sem foto pelo EAN: busca catálogo de cosméticos por marca, tonalidade e volume',async()=>{
+ const e='7891000100103';
+ const foto='https://images.openbeautyfacts.org/images/products/789/100/010/0997/front_pt.7.400.jpg';
+ const consultas=[];
+ const candidatos=[
+  {code:'7891000100997',product_name:'Esmalte Risqué Renda 8ml',brands:'Risqué',
+   quantity:'8 ml',image_front_url:foto},
+  {code:'7891000100998',product_name:'Esmalte Risqué Renda Paetê 8ml',brands:'Risqué',
+   quantity:'8 ml',image_front_url:foto.replace('0997','0998')},
+  {code:'7891000100999',product_name:'Esmalte Risqué Renda 7ml',brands:'Risqué',
+   quantity:'7 ml',image_front_url:foto.replace('0997','0999')},
+  {code:'7891000100991',product_name:'Esmalte Impala Renda 8ml',brands:'Impala',
+   quantity:'8 ml',image_front_url:foto.replace('0997','0991')},
+ ];
+ const fetcher=async url=>{
+  consultas.push(url);
+  if(url.includes('/cgi/search.pl'))return {ok:true,json:async()=>({products:candidatos})};
+  return {ok:false};
+ };
+ const r=await buscarDadosExternosEAN(e,{
+   fetcher,googleKey:'',googleCx:'',somente:'imagem',
+   nomeProduto:'ESMALTE RISQUÉ RENDA 8ML',marcaProduto:'Risqué'});
+ assert.equal(r.imagensCandidatas.length,1);
+ assert.equal(r.imagem.url,foto);
+ assert.equal(r.imagem.fonteEAN.codigoNaFonte,'7891000100997');
+ assert.equal(r.imagem.fonteEAN.correspondencia,'marca-cor-volume');
+ assert.ok(r.consultadas.some(f=>f.includes('esmaltes por nome')));
+ assert.equal(consultas.filter(u=>u.includes('/cgi/search.pl')).length,1);
+ assert.ok(new URL(consultas.find(u=>u.includes('/cgi/search.pl'))).searchParams.get('search_terms').includes('RENDA'));
+});
+
+test('esmalte: não usar cor, acabamento ou volume diferentes e sem foto se faltar identidade',async()=>{
+ const e='7891000100103';
+ const foto='https://images.openbeautyfacts.org/images/products/789/100/010/0997/front_pt.7.400.jpg';
+ const buscar=async (nome,marca,produto)=>{
+  const chamadas=[];
+  const r=await buscarDadosExternosEAN(e,{somente:'imagem',nomeProduto:nome,marcaProduto:marca,
+   googleKey:'',googleCx:'',fetcher:async url=>{
+    chamadas.push(url);
+    return url.includes('/cgi/search.pl')
+      ?{ok:true,json:async()=>({products:[produto]})}:{ok:false};
+   }});
+  return {r,chamadas};
+ };
+ const original={code:'7891000100997',brands:'Risqué',quantity:'8 ml',image_front_url:foto};
+ for(const variante of [
+  'Esmalte Risqué Renda Paetê 8ml','Esmalte Risqué Renda Gel 8ml',
+  'Esmalte Risqué Renda 7ml','Esmalte Impala Renda 8ml',
+ ]){
+  const {r}=await buscar('Esmalte Risqué Renda 8ml','Risqué',
+    {...original,product_name:variante});
+  assert.equal(r.imagem,null,variante);
+ }
+ const semMarca=await buscar('Esmalte Marca Desconhecida Renda 8ml','',
+   {...original,product_name:'Esmalte Risqué Renda 8ml'});
+ assert.equal(semMarca.r.imagem,null);
+ assert.equal(semMarca.chamadas.some(u=>u.includes('/cgi/search.pl')),false);
+});
+
+test('esmalte: fotos Wikimedia e Openverse também podem ser buscadas pelo nome exato',async()=>{
+ const e='7891000100103';
+ const commons='https://upload.wikimedia.org/wikipedia/commons/e/e0/Esmalte_Risque_Renda_8ml.jpg';
+ const r=await buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'',googleCx:'',
+  nomeProduto:'Esmalte Risqué Renda 8ml',marcaProduto:'Risqué',
+  fetcher:async url=>{
+   if(url.includes('commons.wikimedia.org/w/api.php')&&
+      new URL(url).searchParams.get('gsrsearch').includes('RENDA'))
+    return {ok:true,json:async()=>({query:{pages:[{
+      title:'File:Esmalte_Risque_Renda_8ml.jpg',
+      imageinfo:[{url:commons,width:900,height:900,size:56000,
+        descriptionurl:'https://commons.wikimedia.org/wiki/File:Esmalte_Risque_Renda_8ml.jpg',
+        extmetadata:{LicenseShortName:{value:'CC BY-SA 4.0'}}}],
+     }]}})};
+   return {ok:false};
+  }});
+ assert.equal(r.imagem.url,commons);
+ assert.equal(r.imagem.fonteEAN.correspondencia,'marca-cor-volume');
+});
+test('admin conserva nome e marca durante pesquisa, conversão e salvamento do esmalte',()=>{
+ const root=new URL('../',import.meta.url);
+ const route=readFileSync(new URL('src/routes/admin.js',root),'utf8');
+ const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
+ assert.match(route,/contextoImagemEsmalte/);
+ assert.match(route,/nomeProduto:String\(cadastrado\.nome/);
+ assert.match(route,/correspondencia:img\.fonteEAN\?\.correspondencia/);
+ assert.match(js,/contextoBuscaImagemEAN/);
+ assert.match(js,/const r=await post\('\/admin\/api\/produtos\/imagem-ean',\{ean,forcar,\.\.\.contexto\}\)/);
+ assert.match(js,/new URLSearchParams\(\{ean,indice:/);
+ assert.match(js,/correspondencia:meta\.correspondencia/);
 });

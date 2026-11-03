@@ -501,9 +501,16 @@
     const el=$('#resultadoBuscaImagemEAN');
     if(el)el.textContent=msg;
   }
-  async function converterFotoEANparaPNG(ean,indice=0){
-    const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?ean='+encodeURIComponent(ean)+
-      '&indice='+encodeURIComponent(indice),{
+  function contextoBuscaImagemEAN(){
+    const acao=formEAN?.getAttribute('action')||'';
+    const id=acao.match(/^\/admin\/api\/produtos\/([^/]+)$/)?.[1]||'';
+    return {produtoId:id,nome:String(formEAN?.querySelector('[name="nome"]')?.value||'').slice(0,130),
+      marca:String(formEAN?.querySelector('[name="marca"]')?.value||'').slice(0,80)};
+  }
+  async function converterFotoEANparaPNG(ean,indice=0,contexto=contextoBuscaImagemEAN()){
+    const params=new URLSearchParams({ean,indice:String(indice),
+      nome:contexto.nome||'',marca:contexto.marca||'',produtoId:contexto.produtoId||''});
+    const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?'+params.toString(),{
       credentials:'same-origin',headers:{'X-CSRF-Token':CFG.csrf}});
     if(!resp.ok){
       const detalhe=(await resp.text().catch(()=>'' )).slice(0,180).trim();
@@ -583,8 +590,8 @@
       URL.revokeObjectURL(objetoUrl);
     }
   }
-  async function enviarPNG(ean,indice=0){
-    const arquivo=await converterFotoEANparaPNG(ean,indice);
+  async function enviarPNG(ean,indice=0,contexto=contextoBuscaImagemEAN()){
+    const arquivo=await converterFotoEANparaPNG(ean,indice,contexto);
     const fd=new FormData();
     fd.append('ean',ean);
     fd.append('arquivo',arquivo);
@@ -621,7 +628,8 @@
         ?'Foto frontal — '+fonte+'; '+String(meta.licenca||'')+
           '; autor: '+String(meta.autor||'')+'; origem: '+String(meta.atribuicao||'')+
           '; convertida em PNG.'
-        :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+        :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.'+
+        (meta.correspondencia==='marca-cor-volume'?' Correspondência por marca, cor e volume; EAN da fonte pode diferir.':'');
     formEAN.append(inp,leg);
     const galeria=$('#galeriaProduto');
     if(galeria){
@@ -647,7 +655,8 @@
     if(botao)botao.disabled=true;
     atualizarStatusFoto('Pesquisando foto frontal de alta qualidade para converter em PNG...');
     try{
-      const r=await post('/admin/api/produtos/imagem-ean',{ean,forcar});
+      const contexto=contextoBuscaImagemEAN();
+      const r=await post('/admin/api/produtos/imagem-ean',{ean,forcar,...contexto});
       const fontes=Array.isArray(r.fontes)?r.fontes:[];
       if(!fontes.length){
         atualizarStatusFoto(r.mensagem||'Nenhuma foto compatível localizada nas fontes gratuitas disponíveis.');
@@ -662,7 +671,7 @@
         try{
           // Decodificação, qualidade e resolução são avaliadas por fonte.
           // Se a imagem é pequena, tentar a próxima sem efetuar upload.
-          const midia=await enviarPNG(ean,indice);
+          const midia=await enviarPNG(ean,indice,contexto);
           if(ean!==eanAtual())return;
           const meta=fontes[indice]||{};
           const destino=formEAN?.getAttribute('action')||'';
@@ -673,6 +682,7 @@
               '/vincular-imagem-ean',{
                 ean,imagemUrl:midia.url,fonte,
                 atribuicao:meta.atribuicao,licenca:meta.licenca,autor:meta.autor,
+                correspondencia:meta.correspondencia,
               });
             if(!salvo.adicionada){
               atualizarStatusFoto(salvo.mensagem||'Foto existente preservada.');
@@ -704,13 +714,15 @@
     const result=await post('/admin/api/produtos/'+encodeURIComponent(id)+'/imagem-ean');
     if(!result.imagem||!formatoEAN(result.ean))return;
     const fontes=Array.isArray(result.fontes)?result.fontes:[];
+    const contexto={produtoId:id,nome:result.nome||'',marca:result.marca||''};
     for(let indice=0;indice<fontes.length;indice++){
       try{
-        const png=await enviarPNG(result.ean,indice);
+        const png=await enviarPNG(result.ean,indice,contexto);
         await post('/admin/api/produtos/'+encodeURIComponent(id)+'/vincular-imagem-ean',{
           ean:result.ean,imagemUrl:png.url,fonte:fontes[indice].fonte||'Catálogo',
           atribuicao:fontes[indice].atribuicao,licenca:fontes[indice].licenca,
           autor:fontes[indice].autor,
+          correspondencia:fontes[indice].correspondencia,
         });
         return;
       }catch(err){

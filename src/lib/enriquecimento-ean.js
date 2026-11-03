@@ -51,7 +51,7 @@ function fotoCommonsValida(url){
       !u.username&&!u.password&&!u.search&&!u.hash&&COMMONS_FILE.test(u.pathname);
   }catch{return false;}
 }
-function fotoCommonsPorEAN(json,ean){
+function fotoCommonsPorEAN(json,ean,referencia=null){
   const paginas=Object.values(json?.query?.pages||{});
   const imagens=[];
   for(const pagina of paginas){
@@ -60,7 +60,11 @@ function fotoCommonsPorEAN(json,ean){
     const titulo=String(pagina?.title||'');
     const descricao=String(meta.ImageDescription?.value||'').replace(/<[^>]*>/g,' ');
     // A imagem deve mencionar o EAN completo; não aceitar apenas nome semelhante.
-    if(!titulo.includes(ean)&&!descricao.includes(ean))continue;
+    const tituloLimpo=titulo.replace(/^File:/i,'').replace(/\.(?:png|jpe?g|webp)$/i,'').replace(/[_-]+/g,' ');
+    const esmalteIdentico=referencia&&esmalteMesmaVariante({
+      product_name:tituloLimpo,brands:'',quantity:''},referencia);
+    if(!titulo.includes(ean)&&!descricao.includes(ean)&&!esmalteIdentico)continue;
+    const variantePorNome=!titulo.includes(ean)&&!descricao.includes(ean)&&esmalteIdentico;
     if(!Number.isFinite(info?.width)||info.width<600||info.height<600||
       info.width/info.height>3.2||info.height/info.width>3.2||
       info.size>12*1024*1024||!fotoCommonsValida(info.url))continue;
@@ -77,6 +81,7 @@ function fotoCommonsPorEAN(json,ean){
       principal:true,ordem:1,
       legenda:'Foto de produto — Wikimedia Commons; '+licenca+'; autor: '+autor+'; origem: '+fonteUrl,
       fonteEAN:{ean,fonte:'Wikimedia Commons',licenca,atribuicao:autor,
+        correspondencia:variantePorNome?'marca-cor-volume':'ean',
         urlAtribuicao:fonteUrl,licencaUrl:String(meta.LicenseUrl?.value||''),
         atribuidoEm:new Date().toISOString()}});
   }
@@ -104,7 +109,7 @@ function paginaFlickrValida(url){
       /^\/photos\/[^/]+\/\d{5,15}\/?$/i.test(u.pathname);
   }catch{return false;}
 }
-function registroOpenverseFlickr(item,ean){
+function registroOpenverseFlickr(item,ean,referencia=null){
   if(String(item?.source||'').toLowerCase()!=='flickr'||!urlFlickrValida(item.url)||
     !paginaFlickrValida(item.foreign_landing_url)||item.mature===true)return null;
   const width=Number(item.width),height=Number(item.height);
@@ -112,7 +117,10 @@ function registroOpenverseFlickr(item,ean){
     width/height>3.2||height/width>3.2)return null;
   const identidade=[item.title,item.description,...(Array.isArray(item.tags)?item.tags.map(t=>t?.name):[])]
     .filter(x=>typeof x==='string').join(' ').replace(/<[^>]*>/g,' ');
-  if(!identidade.includes(ean))return null;
+  const esmalteIdentico=referencia&&esmalteMesmaVariante({
+    product_name:item.title,brands:'',quantity:''},referencia);
+  if(!identidade.includes(ean)&&!esmalteIdentico)return null;
+  const variantePorNome=!identidade.includes(ean)&&esmalteIdentico;
   const licenca=String(item.license||'').toLowerCase();
   const versao=String(item.license_version||'');
   const urlLicenca=String(item.license_url||'');
@@ -132,6 +140,7 @@ function registroOpenverseFlickr(item,ean){
     legenda:'Foto de produto — Openverse (Flickr); '+licencaNome+
       '; autor: '+autor+'; origem: '+item.foreign_landing_url,
     fonteEAN:{ean,fonte:'Openverse (Flickr)',licenca:licencaNome,
+      correspondencia:variantePorNome?'marca-cor-volume':'ean',
       atribuicao:autor,urlAtribuicao:item.foreign_landing_url,
       licencaUrl:urlLicenca,atribuidoEm:new Date().toISOString()}};
 }
@@ -158,6 +167,64 @@ function registroImagem(url,fonte,ean,alternativas=[]){
       atribuicao:'Contribuidores de '+fonte,atribuidoEm:new Date().toISOString(),
       licencaUrl:'https://creativecommons.org/licenses/by-sa/3.0/'}};
 }
+
+// Busca complementar de esmaltes em catálogo ESPECÍFICO de cosméticos.
+// O nome sozinho não basta: exigir marca, tonalidade completa e volume,
+// para não trocar, por exemplo, "Renda" por "Renda Paetê".
+const MARCAS_ESMALTE=['RISQUE','RISQUE','IMPALA','COLORAMA','DAILUS','VULT',
+  'AVON','HITS','BLANT','MOHDA','LUDURANA','NATI','REVLON','TOP BEAUTY',
+  'BEAUTY COLOR','STUDIO 35','ANA HICKMANN','SALLY HANSEN','OCEANE'];
+const GENERICOS_ESMALTE=new Set(['ESMALTE','ESM','VERNIZ','UNHAS','UNHA','PARA',
+  'DE','DA','DO','DAS','DOS','COR','CORES','FRASCO','ML','ESMALTACAO',
+  'UNIDADE','UN','COLECAO','VERNIS','NAIL','POLISH','NAGELLACK']);
+function textoComparavel(v){
+  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+}
+function tokensComparaveis(v){return textoComparavel(v).split(' ').filter(Boolean);}
+function contemSequencia(texto,expressao){
+  const a=' '+textoComparavel(texto)+' ',b=' '+textoComparavel(expressao)+' ';
+  return b.trim().length>=3&&a.includes(b);
+}
+function referenciaEsmalte(nome,marca){
+  const n=textoComparavel(nome);
+  if(!/\b(?:ESMALTE|ESM|VERNIZ|NAIL POLISH)\b/.test(n)||n.length<13||n.length>130)return null;
+  let fabricante=textoComparavel(marca);
+  if(!fabricante){
+    fabricante=MARCAS_ESMALTE.find(m=>contemSequencia(n,m))||'';
+  }
+  if(!fabricante||fabricante.length<4)return null;
+  const volume=n.match(/\b(\d{1,2})\s*ML\b/)?.[1]||'';
+  // Sem volume, a chance de confundir apresentações é maior.
+  if(!volume)return null;
+  const marcaTokens=new Set(tokensComparaveis(fabricante));
+  const especificos=tokensComparaveis(n).filter((t,i,tokens)=>
+    !GENERICOS_ESMALTE.has(t)&&!marcaTokens.has(t)&&
+    t!==volume+'ML'&&!(t===volume&&tokens[i+1]==='ML'));
+  if(!especificos.length||especificos.length>7)return null;
+  return {marca:fabricante,volume,especificos:[...new Set(especificos)],
+    query:[fabricante,...especificos].join(' ').slice(0,90)};
+}
+function esmalteMesmaVariante(produto,referencia){
+  if(!produto||!referencia)return false;
+  const nome=[produto.product_name_pt,produto.product_name].find(Boolean)||'';
+  if(!nome||!/\b(?:ESMALTE|ESM|VERNIZ|NAIL POLISH)\b/.test(textoComparavel(nome)))return false;
+  const texto=textoComparavel(nome);
+  const marcas=textoComparavel(produto.brands||'');
+  if(!contemSequencia(marcas,referencia.marca)&&!contemSequencia(texto,referencia.marca))return false;
+  const volumes=[texto, textoComparavel(produto.quantity)].map(t=>t.match(/\b(\d{1,2})\s*ML\b/)?.[1]).filter(Boolean);
+  if(!volumes.includes(referencia.volume))return false;
+  const marcaTokens=new Set(tokensComparaveis(referencia.marca));
+  const itens=tokensComparaveis(nome).filter((t,i,tokens)=>
+    !GENERICOS_ESMALTE.has(t)&&!marcaTokens.has(t)&&
+    t!==referencia.volume+'ML'&&!(t===referencia.volume&&tokens[i+1]==='ML'));
+  const detalhe=[...new Set(itens)];
+  // Exigir mesma tonalidade completa, sem aceitar tons parecidos ou versões
+  // diferentes com palavras adicionais ("Renda Paetê" ≠ "Renda").
+  return detalhe.length===referencia.especificos.length&&
+    detalhe.every(t=>referencia.especificos.includes(t));
+}
+
 async function lerJson(url,{fetcher,timeoutMs=2400}){
   const ctrl=new AbortController(),t=setTimeout(()=>ctrl.abort(),timeoutMs);
   try{
@@ -180,10 +247,11 @@ function extrairDimensaoGoogle(s){
 }
 export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     googleKey=config.googleEan?.key,googleCx=config.googleEan?.cx,force=false,
-    somente='ambos'}={}){
+    somente='ambos',nomeProduto='',marcaProduto=''}={}){
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
-  const cacheKey=ean+':'+somente;
+  const referencia=somente==='dimensoes'?null:referenciaEsmalte(nomeProduto,marcaProduto);
+  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'');
   if(fetcher===globalThis.fetch&&!force){
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
@@ -221,6 +289,33 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       }
     }
   }
+  // ESMALTES: se a marca/cor/volume são conhecidos, procurar também por
+  // nome no índice de cosméticos Open Beauty Facts, mesmo sem o EAN indexado.
+  // Não aceitar tons similares; manter a origem do código diferente visível.
+  if(somente!=='dimensoes'&&referencia){
+    resultado.consultadas.push('Open Beauty Facts — esmaltes por nome, cor e marca');
+    const query=new URL('https://world.openbeautyfacts.org/cgi/search.pl');
+    for(const [k,v] of Object.entries({search_terms:referencia.query,
+      search_simple:'1',action:'process',json:'1',page_size:'24',
+      fields:'code,product_name,product_name_pt,brands,quantity,image_front_url,image_url,selected_images'}))
+      query.searchParams.set(k,v);
+    const lista=await lerJson(query.href,{fetcher,timeoutMs:4100});
+    for(const produto of (Array.isArray(lista?.products)?lista.products:[]).slice(0,24)){
+      if(!esmalteMesmaVariante(produto,referencia))continue;
+      // Se veio um EAN diferente, a correspondência é pela ficha: não
+      // atribuir falsamente que o catálogo confirmou o EAN pesquisado.
+      const urls=[produto.image_front_url,produto.selected_images?.front?.display?.pt,
+        produto.selected_images?.front?.display?.en,produto.image_url]
+        .filter(validarFoto);
+      for(const url of [...new Set(urls)].slice(0,3)){
+        const imagem=registroImagem(url,'Open Beauty Facts',ean);
+        imagem.fonteEAN.correspondencia='marca-cor-volume';
+        imagem.fonteEAN.codigoNaFonte=String(produto.code||'');
+        imagem.legenda+='; correspondência por nome, marca, cor e volume.';
+        adicionar(imagem);
+      }
+    }
+  }
   // Fallback pela API pública oficial do PreçoMelhor, quando Open Facts
   // não oferece imagem. Uso comercial permitido com crédito visível.
   // Nunca usar fotos de URLs desconhecidas, nem aceitar EAN divergente.
@@ -253,6 +348,18 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       consulta.searchParams.set(k,v);
     const json=await lerJson(consulta.href,{fetcher,timeoutMs:3800});
     for(const imagem of fotoCommonsPorEAN(json,ean))adicionar(imagem);
+    // Para esmaltes sem foto indexada pelo código: procurar o tom exato
+    // pelo nome em arquivos de licença livre no Wikimedia.
+    if(referencia){
+      const nomeBusca=new URL(COMMONS_API);
+      for(const [k,v] of Object.entries({action:'query',generator:'search',
+        gsrsearch:'"'+referencia.marca+'" "'+referencia.especificos.join(' ')+
+          '" esmalte '+referencia.volume+'ml',gsrnamespace:'6',gsrlimit:'15',
+        prop:'imageinfo',iiprop:'url|size|extmetadata',format:'json',formatversion:'2'}))
+        nomeBusca.searchParams.set(k,v);
+      const encontrados=await lerJson(nomeBusca.href,{fetcher,timeoutMs:3400});
+      for(const imagem of fotoCommonsPorEAN(encontrados,ean,referencia))adicionar(imagem);
+    }
   }
   // Catálogo Openverse agrega fotos autorizadas de outras fontes, como
   // Flickr. Busca automaticamente sem exigir API key, com rate limit público.
@@ -267,6 +374,20 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     for(const item of (Array.isArray(resposta?.results)?resposta.results:[]).slice(0,15)){
       const foto=registroOpenverseFlickr(item,ean);
       if(foto)adicionar(foto);
+    }
+    // Fotos com marca, tonalidade e volume exatos também podem existir
+    // sem o código EAN nos metadados.
+    if(referencia){
+      const consulta=new URL(OPENVERSE_API);
+      consulta.searchParams.set('q',referencia.query+' esmalte '+referencia.volume+'ml');
+      consulta.searchParams.set('source','flickr');
+      consulta.searchParams.set('license_type','commercial');
+      consulta.searchParams.set('page_size','12');
+      const fotos=await lerJson(consulta.href,{fetcher,timeoutMs:3400});
+      for(const item of (Array.isArray(fotos?.results)?fotos.results:[]).slice(0,12)){
+        const foto=registroOpenverseFlickr(item,ean,referencia);
+        if(foto)adicionar(foto);
+      }
     }
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
