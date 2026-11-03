@@ -198,6 +198,11 @@ export function telaPagamentoPresencial(ctx,{totais,endereco,frete,vendedores=[]
         detalhes+
         '<div class="cartao"><p>O pedido será enviado à farmácia. O pagamento ficará '+
           'pendente até que a equipe confirme o recebimento.</p></div>'+
+        (ctx.settings.evolutionWhatsapp?.ativo&&ctx.settings.evolutionWhatsapp?.avisarCliente
+          ? '<div class="cartao"><label><input type="checkbox" name="acaoWhatsappPedido" '+
+              'value="autorizar"> Desejo receber avisos sobre o pedido pelo WhatsApp, '+
+              'incluindo nomes dos produtos (inclusive medicamentos). Posso desativar '+
+              'em Minha conta.</label></div>' : '')+
         '<button class="botao destaque grande bloquinho" id="botaoFinalizar" type="submit">'+
           'Confirmar pedido sem pagar pelo site</button>'+
       '</form><aside><div class="resumo-pedido"><h3>Resumo do pedido</h3>'+
