@@ -62,8 +62,9 @@ function fotoCommonsPorEAN(json,ean,referencia=null){
     // A imagem deve mencionar o EAN completo; não aceitar apenas nome semelhante.
     const tituloLimpo=titulo.replace(/^File:/i,'').replace(/\.(?:png|jpe?g|webp)$/i,'').replace(/[_-]+/g,' ');
     const esmalteIdentico=referencia&&esmalteMesmaVariante({
-      product_name:tituloLimpo,brands:'',quantity:referencia.volume+' ml'},referencia);
+      product_name:tituloLimpo,brands:'',quantity:''},referencia);
     if(!titulo.includes(ean)&&!descricao.includes(ean)&&!esmalteIdentico)continue;
+    const variantePorNome=!titulo.includes(ean)&&!descricao.includes(ean)&&esmalteIdentico;
     if(!Number.isFinite(info?.width)||info.width<600||info.height<600||
       info.width/info.height>3.2||info.height/info.width>3.2||
       info.size>12*1024*1024||!fotoCommonsValida(info.url))continue;
@@ -80,6 +81,7 @@ function fotoCommonsPorEAN(json,ean,referencia=null){
       principal:true,ordem:1,
       legenda:'Foto de produto — Wikimedia Commons; '+licenca+'; autor: '+autor+'; origem: '+fonteUrl,
       fonteEAN:{ean,fonte:'Wikimedia Commons',licenca,atribuicao:autor,
+        correspondencia:variantePorNome?'marca-cor-volume':'ean',
         urlAtribuicao:fonteUrl,licencaUrl:String(meta.LicenseUrl?.value||''),
         atribuidoEm:new Date().toISOString()}});
   }
@@ -116,8 +118,9 @@ function registroOpenverseFlickr(item,ean,referencia=null){
   const identidade=[item.title,item.description,...(Array.isArray(item.tags)?item.tags.map(t=>t?.name):[])]
     .filter(x=>typeof x==='string').join(' ').replace(/<[^>]*>/g,' ');
   const esmalteIdentico=referencia&&esmalteMesmaVariante({
-    product_name:item.title,brands:'',quantity:referencia.volume+' ml'},referencia);
+    product_name:item.title,brands:'',quantity:''},referencia);
   if(!identidade.includes(ean)&&!esmalteIdentico)return null;
+  const variantePorNome=!identidade.includes(ean)&&esmalteIdentico;
   const licenca=String(item.license||'').toLowerCase();
   const versao=String(item.license_version||'');
   const urlLicenca=String(item.license_url||'');
@@ -137,6 +140,7 @@ function registroOpenverseFlickr(item,ean,referencia=null){
     legenda:'Foto de produto — Openverse (Flickr); '+licencaNome+
       '; autor: '+autor+'; origem: '+item.foreign_landing_url,
     fonteEAN:{ean,fonte:'Openverse (Flickr)',licenca:licencaNome,
+      correspondencia:variantePorNome?'marca-cor-volume':'ean',
       atribuicao:autor,urlAtribuicao:item.foreign_landing_url,
       licencaUrl:urlLicenca,atribuidoEm:new Date().toISOString()}};
 }
