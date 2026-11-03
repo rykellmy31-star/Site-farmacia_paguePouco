@@ -355,6 +355,21 @@
     const radiosEndereco = $$('input[name=enderecoSalvo]', document);
     let versao = 0;
     let timer = null;
+    let ultimoCep = '';
+    let enderecoNovoInicializado = false;
+    const campoUF = form.querySelector('[name="uf"]');
+    const campoCidade = form.querySelector('[name="cidade"]');
+    const campoRua = form.querySelector('[name="logradouro"]');
+    const campoBairro = form.querySelector('[name="bairro"]');
+    const statusCep = $('#avisoCepAutomatico');
+    const dizerCep = (msg) => { if(statusCep) statusCep.textContent=msg; };
+    const limparLocalidade = () => {
+      // Não herdar BA / Itanhém do endereço salvo ao trocar o CEP.
+      if(campoUF) campoUF.value='';
+      if(campoCidade) campoCidade.value='';
+      if(campoRua) campoRua.value='';
+      if(campoBairro) campoBairro.value='';
+    };
 
     // Nunca inserir HTML do cadastro ou da API sem escapar: CEP, cidade e
     // textos da cotação podem conter dados inseridos pelos clientes.
@@ -373,7 +388,17 @@
       if (enderecoSalvo) enderecoSalvo.value = salvo ? '1' : '';
       if(campos){
         campos.hidden=!!salvo;
-        $$('input, select, textarea',campos).forEach(campo => campo.disabled=!!salvo);
+        $('input, select, textarea',campos).forEach(campo => campo.disabled=!!salvo);
+      }
+      const outroEscolhido=radiosEndereco.some(r=>r.checked&&r.value==='novo');
+      if(outroEscolhido&&!enderecoNovoInicializado){
+        enderecoNovoInicializado=true;
+        for(const nome of ['cep','logradouro','numero','complemento','bairro','cidade','uf']){
+          const input=form.querySelector('[name="'+nome+'"]');
+          if(input)input.value='';
+        }
+        ultimoCep='';
+        dizerCep('Digite o CEP para identificar cidade e estado automaticamente.');
       }
     };
     const aviso = (mensagem) => {
@@ -412,20 +437,33 @@
       if(cep.length!==8) { aviso('Informe um CEP válido com 8 dígitos.');return; }
       aviso('Calculando frete automaticamente...');
       try {
-        // Resolve a UF e a cidade a partir do CEP digitado para não usar uma
-        // cotação do endereço anterior, especialmente em mudanças de estado.
+        // Busca sempre o destino atual, com a UF verificada pelo servidor
+        // e cidade preenchida por ViaCEP ou BrasilAPI.
         if(!destino.salvo){
           const info=await api('/api/cep/'+cep);
           if(atual!==versao)return;
-          if(info.uf) {
-            destino.uf=info.uf;
-            const uf=form.querySelector('[name=uf]');
-            if(uf)uf.value=info.uf;
+          if(!info.valido||!info.uf) {
+            aviso(info.erro||'CEP inválido. Confira os oito dígitos.');
+            return;
           }
-          if(info.cidade){
+          destino.uf=info.uf;
+          if(campoUF)campoUF.value=info.uf;
+          if(info.cidade) {
             destino.cidade=info.cidade;
-            const cidade=form.querySelector('[name=cidade]');
-            if(cidade)cidade.value=info.cidade;
+            if(campoCidade)campoCidade.value=info.cidade;
+          } else {
+            destino.cidade=campoCidade?.value.trim()||'';
+          }
+          if(info.logradouro&&campoRua&&!campoRua.value.trim())
+            campoRua.value=info.logradouro;
+          if(info.bairro&&campoBairro&&!campoBairro.value.trim())
+            campoBairro.value=info.bairro;
+          dizerCep(info.cidade
+            ? 'CEP identificado: '+info.cidade+'/'+info.uf+'.'
+            : 'Estado identificado: '+info.uf+'. Informe a cidade manualmente.');
+          if(!destino.cidade) {
+            aviso('Não foi possível localizar a cidade automaticamente. Informe a cidade para continuar.');
+            return;
           }
         }
         if(atual!==versao)return;
@@ -450,13 +488,22 @@
       alternarCampos();agendar();
     }));
     if(cepInput){
-      cepInput.addEventListener('input',agendar);
-      cepInput.addEventListener('change',agendar);
+      const alterouCep=()=>{
+        const cep=cepInput.value.replace(/\D/g,'');
+        if(cep!==ultimoCep){
+          ultimoCep=cep;
+          limparLocalidade();
+          dizerCep('Consultando cidade e estado do novo CEP...');
+        }
+        agendar();
+      };
+      cepInput.addEventListener('input',alterouCep);
+      cepInput.addEventListener('change',alterouCep);
       cepInput.addEventListener('blur',()=>{
         if(cepInput.value.replace(/\D/g,'').length===8)agendar();
       });
     }
-    for(const campo of [form.querySelector('[name=uf]'),form.querySelector('[name=cidade]')]){
+    for(const campo of [campoUF,campoCidade]){
       campo?.addEventListener('change',agendar);
     }
     form.addEventListener('submit',ev=>{
@@ -467,7 +514,10 @@
     });
     alternarCampos();
     // Mesmo que exista uma cotação anterior, sempre calcula de novo ao entrar.
-    if(radiosEndereco.length||cepInput?.value.replace(/\D/g,'').length===8)agendar();
+    if(radiosEndereco.length||cepInput?.value.replace(/\D/g,'').length===8){
+      ultimoCep=cepInput?.value.replace(/\D/g,'')||'';
+      agendar();
+    }
   }
 
   /* ------------------- checkout: abas de pagamento ------------------- */
