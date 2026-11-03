@@ -87,7 +87,7 @@ test('integração exige permissão admin e não altera pagamento, preço nem re
   const tela=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
   const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
   assert.match(rotas,/guardApi\(req,res,'produtos\.editar'\)/);
-  assert.match(rotas,/buscarMedidasFaltantes/);
+  assert.match(rotas,/buscarMedidasPorEAN\(p\.ean\)/);
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/ativar', \(req, res\)/);
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/buscar-medidas-ean',async/);
   assert.match(rotas,/aplicarMedidasAusentes\(p,r\)/);
