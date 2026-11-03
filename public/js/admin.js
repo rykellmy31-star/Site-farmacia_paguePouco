@@ -306,6 +306,13 @@
     }
     (async () => {
       try {
+        // Mesmo que o operador tenha marcado Ativo/Aprovar sem tirar o
+        // foco do EAN, consultar dados antes de montar o FormData.
+        if(buscaEANAntesDeSalvar &&
+            ['peso','altura','largura','comprimento'].some(nome=>
+              !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0))){
+          await buscaEANAntesDeSalvar({silencioso:true});
+        }
         const resposta = await api(form.getAttribute('action'), {
           method: 'POST',
           body: new FormData(form),
@@ -416,6 +423,7 @@
   renderCaracteristicas();
 
   /* ------------ dimensões logísticas por código EAN (admin) ------------ */
+  let buscaEANAntesDeSalvar=null;
   const formEAN=$('#formProduto');
   if(formEAN){
     const campo=nome=>formEAN.querySelector('[name="'+nome+'"]');
@@ -459,6 +467,7 @@
         if(!silencioso)notificar(err.message||'Falha ao consultar EAN.','erro');
       }finally{emConsulta=false;if(btn)btn.disabled=false;}
     }
+    buscaEANAntesDeSalvar=consultarMedidasEAN;
     btn?.addEventListener('click',()=>consultarMedidasEAN());
     // Pesquisa quando um novo EAN é digitado. Evita requisições repetidas
     // e jamais sobrescreve peso/dimensões que o operador já informou.
@@ -488,8 +497,15 @@
 
     const altProd = alvo('[data-alternar-produto]');
     if (altProd) {
-      try { await post(`/admin/api/produtos/${altProd.getAttribute('data-alternar-produto')}/ativar`); location.reload(); }
-      catch (err) { notificar(err.message, 'erro'); }
+      const id=altProd.getAttribute('data-alternar-produto');
+      try {
+        // Busca opcional e limitada, não pode impedir ativação se
+        // nenhum catálogo público tiver informações para o EAN.
+        try { await post(`/admin/api/produtos/${id}/buscar-medidas-ean`); }
+        catch { /* cotação requer dados reais; não bloquear cadastro */ }
+        await post(`/admin/api/produtos/${id}/ativar`);
+        location.reload();
+      } catch (err) { notificar(err.message, 'erro'); }
       return;
     }
 
