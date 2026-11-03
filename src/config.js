@@ -93,6 +93,10 @@ export const config = {
       pixKey: process.env.MP_PIX_KEY || '',
     },
   },
+  cosmos: {
+    // Opcional, para titulares de licença/API da Bluesoft Cosmos.
+    token: process.env.COSMOS_API_TOKEN || '',
+  },
   googleEan: {
     // Opcional: apenas contas existentes da Custom Search JSON API.
     key: process.env.GOOGLE_CSE_API_KEY || '',
@@ -156,6 +160,7 @@ export function configureCloudflare(env, origin, persistentSecret) {
     webhookSecret: env.MP_WEBHOOK_SECRET || '', pixKey: env.MP_PIX_KEY || '',
     sandbox: bool(env.MP_SANDBOX, true),
   };
+  config.cosmos = {token: env.COSMOS_API_TOKEN || ''};
   config.googleEan = {
     key: env.GOOGLE_CSE_API_KEY || '',
     cx: env.GOOGLE_CSE_CX || '',
