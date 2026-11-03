@@ -113,7 +113,7 @@ export function registrarRotasApi(app, db) {
     if (!isValidCep(cep)) return void res.json({ ok: false, erro: 'Informe um CEP válido com 8 dígitos.' }, 400);
     const cart = getCart(db, req);
     const calc = calcularFrete({
-      config: ctx.settings.frete,
+      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep, uf, cidade,
       items: cart.itens || [],
       subtotalCents: (cart.itens || []).reduce((a, i) => a + i.precoUnitarioCentavos * i.quantidade, 0),

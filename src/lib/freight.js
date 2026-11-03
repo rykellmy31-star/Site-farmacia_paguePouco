@@ -125,7 +125,7 @@ function deadlineText(min, max) {
  * @param {boolean} params.cupomFreteGratis
  * @returns {object} { disponivel, motivo, opcoes: [{id,label,valor,prazo,detalhe}] , uf, pesoTotalKg }
  */
-export function calcularFrete({ config: rawCfg, cep, uf, cidade, items = [], subtotalCents = 0, cupomFreteGratis = false }) {
+export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidade, items = [], subtotalCents = 0, cupomFreteGratis = false }) {
   const cfg = normalizeFreightConfig(rawCfg);
   const cepNorm = normalizeCep(cep);
   const ufFinal = ufFromCep(cepNorm);
@@ -180,35 +180,44 @@ export function calcularFrete({ config: rawCfg, cep, uf, cidade, items = [], sub
 
   const opcoes = [];
 
-  // 3) Retirada na farmácia
-  if (cfg.retirada?.ativo) {
-    opcoes.push({
-      id: 'retirada',
-      label: cfg.retirada.label || 'Retirar na farmácia',
-      valor: 0,
-      prazoMin: cfg.retirada.prazoMin,
-      prazoMax: cfg.retirada.prazoMax,
-      prazo: deadlineText(cfg.retirada.prazoMin, cfg.retirada.prazoMax),
-      detalhe: `${cfg.retirada.endereco || ''}${cfg.retirada.horario ? ' — ' + cfg.retirada.horario : ''}`.trim(),
-      gratis: true,
-    });
+  // Mesmo CEP da sede: somente retirada e entrega local (se habilitadas).
+  // Qualquer CEP diferente: apenas entrega pelo frete vigente do estado.
+  // CEP da sede não cadastrado nunca é confundido com um destino local.
+  const cepSede=normalizeCep(cepFarmacia);
+  const mesmoCepSede=isValidCep(cepSede)&&ufFromCep(cepSede)&&cepNorm===cepSede;
+  if(mesmoCepSede){
+    if(cfg.entregaLocal?.ativo){
+      opcoes.push({
+        id:'entrega_local',
+        label:'Entrega Local',
+        valor:Number(cfg.entregaLocal.valor)||0,
+        prazoMin:cfg.entregaLocal.prazoMin,
+        prazoMax:cfg.entregaLocal.prazoMax,
+        prazo:deadlineText(cfg.entregaLocal.prazoMin,cfg.entregaLocal.prazoMax),
+        detalhe:'Entrega realizada pela própria farmácia no CEP da sede.',
+        gratis:!cfg.entregaLocal.valor,
+      });
+    }
+    if(cfg.retirada?.ativo){
+      opcoes.push({
+        id:'retirada',
+        label:cfg.retirada.label||'Retirar na farmácia',
+        valor:0,
+        prazoMin:cfg.retirada.prazoMin,
+        prazoMax:cfg.retirada.prazoMax,
+        prazo:deadlineText(cfg.retirada.prazoMin,cfg.retirada.prazoMax),
+        detalhe:`${cfg.retirada.endereco||''}${cfg.retirada.horario?' — '+cfg.retirada.horario:''}`.trim(),
+        gratis:true,
+      });
+    }
+    result.opcoes=opcoes;
+    result.disponivel=opcoes.length>0;
+    if(!result.disponivel)
+      result.motivo='Entrega local e retirada estão desativadas. Entre em contato com a farmácia.';
+    return result;
   }
 
-  // 4) Entrega local
-  const cidadeNorm = stripAccents(cidade);
-  const isLocal = cfg.entregaLocal?.ativo && cidadeNorm && (cfg.entregaLocal.cidades || []).some((c) => stripAccents(c) === cidadeNorm);
-  if (isLocal) {
-    opcoes.push({
-      id: 'entrega_local',
-      label: cfg.entregaLocal.label || 'Entrega local',
-      valor: Number(cfg.entregaLocal.valor) || 0,
-      prazoMin: cfg.entregaLocal.prazoMin,
-      prazoMax: cfg.entregaLocal.prazoMax,
-      prazo: deadlineText(cfg.entregaLocal.prazoMin, cfg.entregaLocal.prazoMax),
-      detalhe: `Entrega realizada pela própria farmácia em ${cidade}.`,
-      gratis: !cfg.entregaLocal.valor,
-    });
-  }
+  const cidadeNorm=stripAccents(cidade);
 
   // 5) Frete por estado (ou exceção)
   if (!ufFinal) {
@@ -286,9 +295,12 @@ export function calcularFrete({ config: rawCfg, cep, uf, cidade, items = [], sub
  * Valida e devolve o frete escolhido pelo cliente, RECALCULANDO no servidor.
  * Nunca confia em valor enviado pelo navegador (segurança de preço).
  */
-export function resolverFreteEscolhido({ config, cep, uf, cidade, items, subtotalCents, opcaoId, cupomFreteGratis }) {
-  const calc = calcularFrete({ config, cep, uf, cidade, items, subtotalCents, cupomFreteGratis });
+export function resolverFreteEscolhido({ config, cep, cepFarmacia = '', uf, cidade, items, subtotalCents, opcaoId, cupomFreteGratis }) {
+  const calc = calcularFrete({ config, cep, cepFarmacia, uf, cidade, items, subtotalCents, cupomFreteGratis });
   if (!calc.disponivel) return { ok: false, erro: calc.motivo || 'Entrega indisponível para o destino informado.' };
+  // Impede pedido de retirada com CEP diferente por opção antiga/injetada.
+  if (opcaoId && !calc.opcoes.some((o) => o.id === opcaoId))
+    return { ok: false, erro: 'A forma de entrega escolhida não está disponível para este CEP. Confira o frete novamente.' };
   const escolhida = calc.opcoes.find((o) => o.id === opcaoId) || calc.opcoes[0];
   if (!escolhida) return { ok: false, erro: 'Selecione uma forma de entrega.' };
   return {
