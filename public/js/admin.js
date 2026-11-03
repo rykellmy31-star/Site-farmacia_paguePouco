@@ -628,7 +628,8 @@
         ?'Foto frontal — '+fonte+'; '+String(meta.licenca||'')+
           '; autor: '+String(meta.autor||'')+'; origem: '+String(meta.atribuicao||'')+
           '; convertida em PNG.'
-        :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+        :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.'+
+        (meta.correspondencia==='marca-cor-volume'?' Correspondência por marca, cor e volume; EAN da fonte pode diferir.':'');
     formEAN.append(inp,leg);
     const galeria=$('#galeriaProduto');
     if(galeria){
@@ -681,6 +682,7 @@
               '/vincular-imagem-ean',{
                 ean,imagemUrl:midia.url,fonte,
                 atribuicao:meta.atribuicao,licenca:meta.licenca,autor:meta.autor,
+                correspondencia:meta.correspondencia,
               });
             if(!salvo.adicionada){
               atualizarStatusFoto(salvo.mensagem||'Foto existente preservada.');
@@ -720,6 +722,7 @@
           ean:result.ean,imagemUrl:png.url,fonte:fontes[indice].fonte||'Catálogo',
           atribuicao:fontes[indice].atribuicao,licenca:fontes[indice].licenca,
           autor:fontes[indice].autor,
+          correspondencia:fontes[indice].correspondencia,
         });
         return;
       }catch(err){
