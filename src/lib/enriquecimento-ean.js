@@ -38,6 +38,51 @@ function registroImagemPrecoMelhor(fotos,ean){
       atribuicao:'PreçoMelhor',urlAtribuicao:origem,atribuidoEm:new Date().toISOString()}};
 }
 
+// Pesquisa de arquivos com licenças comerciais claras no Wikimedia Commons.
+// A busca por EAN exige identidade explícita, sem inferir embalagens parecidas.
+const COMMONS_API='https://commons.wikimedia.org/w/api.php';
+const COMMONS_LICENSE=/^(?:CC BY(?:-SA)? (?:2\.0|2\.5|3\.0|4\.0)|CC0(?: 1\.0)?|Public domain)$/i;
+const COMMONS_FILE=/^\/wikipedia\/commons\/[0-9a-f]\/[0-9a-f]{2}\/[a-z0-9_%()'!,+\-.]+\.(?:png|jpe?g|webp)$/i;
+function fotoCommonsValida(url){
+  if(typeof url!=='string'||url.length>850)return false;
+  try{
+    const u=new URL(url);
+    return u.protocol==='https:'&&u.hostname==='upload.wikimedia.org'&&!u.port&&
+      !u.username&&!u.password&&!u.search&&!u.hash&&COMMONS_FILE.test(u.pathname);
+  }catch{return false;}
+}
+function fotoCommonsPorEAN(json,ean){
+  const paginas=Object.values(json?.query?.pages||{});
+  const imagens=[];
+  for(const pagina of paginas){
+    const info=pagina?.imageinfo?.[0];
+    const meta=info?.extmetadata||{};
+    const titulo=String(pagina?.title||'');
+    const descricao=String(meta.ImageDescription?.value||'').replace(/<[^>]*>/g,' ');
+    // A imagem deve mencionar o EAN completo; não aceitar apenas nome semelhante.
+    if(!titulo.includes(ean)&&!descricao.includes(ean))continue;
+    if(!Number.isFinite(info?.width)||info.width<600||info.height<600||
+      info.width/info.height>3.2||info.height/info.width>3.2||
+      info.size>12*1024*1024||!fotoCommonsValida(info.url))continue;
+    const licenca=String(meta.LicenseShortName?.value||'').trim();
+    if(!COMMONS_LICENSE.test(licenca))continue;
+    const fonteUrl=String(info.descriptionurl||'');
+    let validacao;
+    try{validacao=new URL(fonteUrl)}catch{continue}
+    if(validacao.protocol!=='https:'||validacao.hostname!=='commons.wikimedia.org'||
+       !validacao.pathname.startsWith('/wiki/File:')||validacao.search||validacao.hash)continue;
+    const autor=String(meta.Artist?.value||'Contribuidores Wikimedia Commons')
+      .replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
+    imagens.push({url:info.url,urlAltaResolucao:info.url,
+      principal:true,ordem:1,
+      legenda:'Foto de produto — Wikimedia Commons; '+licenca+'; autor: '+autor+'; origem: '+fonteUrl,
+      fonteEAN:{ean,fonte:'Wikimedia Commons',licenca,atribuicao:autor,
+        urlAtribuicao:fonteUrl,licencaUrl:String(meta.LicenseUrl?.value||''),
+        atribuidoEm:new Date().toISOString()}});
+  }
+  return imagens.slice(0,5);
+}
+
 const CACHE=new Map();
 const AGENTE='FarmaciaPaguePouco/1.0 (site.farmaciapaguepouco.app)';
 const normal=s=>String(s||'').replace(/\D/g,'');
@@ -142,6 +187,18 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         for(const url of unicas.slice(1))adicionar(registroImagemPrecoMelhor([url],ean));
       }
     }
+  }
+  // Wikimedia Commons: busca automática sem cadastro ou API key, com
+  // verificação de EAN, resolução, origem e licença por arquivo.
+  if(somente!=='dimensoes'){
+    resultado.consultadas.push('Wikimedia Commons');
+    const consulta=new URL(COMMONS_API);
+    for(const [k,v] of Object.entries({action:'query',generator:'search',
+      gsrsearch:'"'+ean+'"',gsrnamespace:'6',gsrlimit:'12',
+      prop:'imageinfo',iiprop:'url|size|extmetadata',format:'json',formatversion:'2'}))
+      consulta.searchParams.set(k,v);
+    const json=await lerJson(consulta.href,{fetcher,timeoutMs:3800});
+    for(const imagem of fotoCommonsPorEAN(json,ean))adicionar(imagem);
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
   // em janeiro de 2027, portanto não depende dela para operar.

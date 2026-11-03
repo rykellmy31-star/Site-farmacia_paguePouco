@@ -23,7 +23,7 @@ test('imagem EAN isolada seleciona a frente em resolução full (não miniatura)
  assert.equal(r.imagem.url,jpg);
  assert.equal(r.imagem.urlAltaResolucao,jpg.replace('.400.jpg','.full.jpg'));
  assert.equal(r.dimensoes,null);
- assert.equal(urls.length,5); // Quatro catálogos Open Facts + PreçoMelhor
+ assert.equal(urls.length,6); // Quatro catálogos Open Facts + PreçoMelhor + Commons
 });
 test('dimensões EAN isoladas não consultam catálogo de imagens',async()=>{
  const urls=[];
@@ -210,7 +210,7 @@ test('múltiplas fontes EAN: foto ruim não impede fontes posteriores de serem t
   assert.equal(r.imagensCandidatas[1].fonteEAN.fonte,'PreçoMelhor');
   assert.equal(r.imagem,r.imagensCandidatas[0]);
   assert.equal(r.consultadas.includes('Open Pet Food Facts'),true);
-  assert.equal(urls.length,5);
+  assert.equal(urls.length,6);
 });
 
 test('Google API antiga quando configurada amplia candidatos sem baixar imagens de lojas',async()=>{
@@ -236,7 +236,7 @@ test('Google API antiga quando configurada amplia candidatos sem baixar imagens 
   assert.ok(new URL(call).searchParams.get('rights').includes('cc_attribute'));
 });
 
-test('painel continua tentando depois de fotos com menos de 600 pixels e mostra Google Imagens',()=>{
+test('painel continua tentando depois de fotos com menos de 600 pixels sem abrir Google manualmente',()=>{
   const base=new URL('../',import.meta.url);
   const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
   const html=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
@@ -244,8 +244,63 @@ test('painel continua tentando depois de fotos com menos de 600 pixels e mostra 
   assert.match(js,/for\(let indice=0;indice<fontes\.length;indice\+\+\)/);
   assert.match(js,/await enviarPNG\(ean,indice\)/);
   assert.match(js,/erros\.push\(fonte/);
-  assert.match(js,/google\.com\/search\?tbm=isch/);
-  assert.match(html,/id="linkGoogleImagensEAN"/);
+  assert.doesNotMatch(js,/google\.com\/search\?tbm=isch/);
+  assert.doesNotMatch(html,/id="linkGoogleImagensEAN"/);
+  assert.match(html,/Buscar e salvar foto automaticamente/);
   assert.match(route,/const indice=Number\(req\.query\.get\('indice'\)/);
   assert.match(route,/imagensCandidatas\|\|\[\]\)\[indice\]/);
+});
+
+test('Wikimedia Commons entra no fluxo automático apenas com EAN, licença e arquivo correto',async()=>{
+  const e='7896006716112';
+  const foto='https://upload.wikimedia.org/wikipedia/commons/e/e0/'+e+'.jpg';
+  const origem='https://commons.wikimedia.org/wiki/File:'+e+'.jpg';
+  const fetcher=async url=>{
+    if(url.startsWith('https://commons.wikimedia.org/w/api.php'))
+      return {ok:true,json:async()=>({query:{pages:[{
+        title:'File:'+e+'.jpg',
+        imageinfo:[{url:foto,descriptionurl:origem,width:920,height:930,size:95000,
+          extmetadata:{LicenseShortName:{value:'CC BY-SA 4.0'},
+            Artist:{value:'<a href="/wiki/User:Author">Fotógrafo</a>'},
+            LicenseUrl:{value:'https://creativecommons.org/licenses/by-sa/4.0/'}}}],
+      }]}})};
+    return {ok:false};
+  };
+  const r=await buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'',googleCx:'',fetcher});
+  assert.equal(r.imagem.url,foto);
+  assert.equal(r.imagem.fonteEAN.fonte,'Wikimedia Commons');
+  assert.equal(r.imagem.fonteEAN.urlAtribuicao,origem);
+  assert.equal(r.imagem.fonteEAN.licenca,'CC BY-SA 4.0');
+  assert.equal(origemImagemPermitida(foto,e),true);
+  assert.equal(origemImagemPermitida('https://upload.wikimedia.org.evil.test/wikipedia/commons/e/e0/'+e+'.jpg',e),false);
+});
+
+test('Wikimedia Commons rejeita EAN diferente, foto pequena e licença incerta',async()=>{
+  const e='7896006716112';
+  const foto='https://upload.wikimedia.org/wikipedia/commons/e/e0/'+e+'.jpg';
+  const tentativa=async (title,width,license)=>{
+    const fetcher=async url=>url.includes('commons.wikimedia.org/w/api.php')
+      ?{ok:true,json:async()=>({query:{pages:[{title,
+        imageinfo:[{url:foto,descriptionurl:'https://commons.wikimedia.org/wiki/File:'+e+'.jpg',
+          width,height:900,size:12345,extmetadata:{LicenseShortName:{value:license}}}]}]}})}
+      :{ok:false};
+    return buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'',googleCx:'',fetcher});
+  };
+  for(const args of [
+    ['File:7896006716113.jpg',900,'CC BY 4.0'],
+    ['File:'+e+'.jpg',399,'CC BY-SA 4.0'],
+    ['File:'+e+'.jpg',900,'All rights reserved'],
+  ])assert.equal((await tentativa(...args)).imagem,null);
+});
+
+test('um clique salva imagem PNG no cadastro existente, sem abrir outra aba',()=>{
+  const base=new URL('../',import.meta.url);
+  const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
+  const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
+  assert.match(js,/const produtoExistente=destino\.match/);
+  assert.match(js,/const salvo=await post/);
+  assert.match(js,/vincular-imagem-ean/);
+  assert.match(js,/salvaNoProduto\?'salva automaticamente no produto/);
+  assert.match(route,/fonte==='Wikimedia Commons'/);
+  assert.match(route,/Atribuição ou licença da foto inválida/);
 });

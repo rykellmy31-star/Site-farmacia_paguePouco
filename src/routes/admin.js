@@ -1434,6 +1434,8 @@ function registrarApi(app, db) {
     const fontes=(result.imagensCandidatas||[]).map(img=>({
       fonte:img.fonteEAN?.fonte||'Catálogo',
       atribuicao:img.fonteEAN?.urlAtribuicao||null,
+      licenca:img.fonteEAN?.licenca||null,
+      autor:img.fonteEAN?.atribuicao||null,
     }));
     res.json({ok:true,imagem:result.imagem,fontes,
       consultadas:result.consultadas,
@@ -1451,7 +1453,12 @@ function registrarApi(app, db) {
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem'});
     res.json({ok:true,ean:p.ean,imagem:dados.imagem,
-      fontes:(dados.imagensCandidatas||[]).map(img=>({fonte:img.fonteEAN?.fonte||'Catálogo'}))});
+      fontes:(dados.imagensCandidatas||[]).map(img=>({
+        fonte:img.fonteEAN?.fonte||'Catálogo',
+        atribuicao:img.fonteEAN?.urlAtribuicao||null,
+        licenca:img.fonteEAN?.licenca||null,
+        autor:img.fonteEAN?.atribuicao||null,
+      }))});
   });
   // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
   // informado. Não aceita URL externa ou redirecionamento para outros hosts.
@@ -1490,9 +1497,24 @@ function registrarApi(app, db) {
       Number(m.largura)>=600&&Number(m.altura)>=600);
     if(!media)return void res.json({ok:false,erro:'Imagem PNG de boa resolução não encontrada no armazenamento.'},400);
     const fonte=String(req.body.fonte||'Open Facts').slice(0,90);
-    const legenda=fonte==='PreçoMelhor'
-      ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.'
-      :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+    let legenda;
+    if(fonte==='Wikimedia Commons'){
+      const origem=String(req.body.atribuicao||'');
+      const licenca=String(req.body.licenca||'');
+      const autor=cleanText(req.body.autor,140);
+      let url;
+      try{url=new URL(origem)}catch{return void res.json({ok:false,erro:'Origem da licença inválida.'},400)}
+      if(url.protocol!=='https:'||url.hostname!=='commons.wikimedia.org'||
+         !url.pathname.startsWith('/wiki/File:')||url.search||url.hash||
+         !/^(?:CC BY(?:-SA)? (?:2\.0|2\.5|3\.0|4\.0)|CC0(?: 1\.0)?|Public domain)$/i.test(licenca))
+        return void res.json({ok:false,erro:'Atribuição ou licença da foto inválida.'},400);
+      legenda='Foto frontal — Wikimedia Commons; '+licenca+'; autor: '+autor+
+        '; origem: '+origem+'; convertida em PNG.';
+    }else if(fonte==='PreçoMelhor'){
+      legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.';
+    }else{
+      legenda='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+    }
     db.collection('products').update(p.id,{imagens:[{url,principal:true,ordem:1,legenda}]});
     logAdmin(db,req.adminUser,'anexou_imagem_png_ean','produto',p.id,{ean:p.ean,imagem:url},req);
     res.json({ok:true,adicionada:true});

@@ -24,6 +24,8 @@ export function origemImagemPermitida(url,ean=null){
         /\.(?:jpe?g|png|webp)$/i.test(u.pathname);
     // A API PreçoMelhor pode apontar para um CDN próprio, mas o proxy só
     // baixa o arquivo cujo nome corresponde EXATAMENTE ao EAN pesquisado.
+    if(u.hostname==='upload.wikimedia.org')
+      return /^\/wikipedia\/commons\/[0-9a-f]\/[0-9a-f]{2}\/[a-z0-9_%()'!,+\-.]+\.(?:png|jpe?g|webp)$/i.test(u.pathname);
     return u.hostname===PRECOMELHOR_CDN&&/^\d{8}$|^\d{12,14}$/.test(String(ean||''))&&
       new RegExp('^/'+ean+'(?:_w200)?\\.(?:webp|png|jpe?g)$','i').test(u.pathname);
   }catch{return false;}
