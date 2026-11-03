@@ -13,10 +13,14 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
   const promo = temPromocao(produto);
   const disponivel = estoqueDisponivel(produto);
   const img = imagemPrincipal(produto);
+  const commonsLegenda=(produto.imagens||[]).find(f=>String(f.legenda||'').includes('Wikimedia Commons'))?.legenda||'';
+  const commonsURL=commonsLegenda.match(/https:\/\/commons\.wikimedia\.org\/wiki\/File:[^\s;]+/)?.[0];
   const creditoImagemPrecoMelhor=(produto.imagens||[]).some(f=>String(f.legenda||'').includes('PreçoMelhor'))
     ?'<a href="https://www.precomelhor.com.br/p/'+encodeURIComponent(String(produto.ean||''))+
       '" target="_blank" rel="noopener noreferrer" class="texto-pequeno" style="font-size:10px;text-align:center;display:block">Foto: PreçoMelhor</a>'
-    :'';
+    :commonsURL
+      ?'<a href="'+e(commonsURL)+'" target="_blank" rel="noopener noreferrer" class="texto-pequeno" style="font-size:10px;text-align:center;display:block">Foto: Wikimedia Commons (licença e autor)</a>'
+      :'';
   const parcelamentoSemJuros = mostrarParcela ? melhorParcelamentoSemJuros(db, preco) : null;
   const bloqueio = venda.bloqueioSanitario ? venda.motivo : null;
 
