@@ -64,6 +64,7 @@ import { telaVendedores } from '../views/admin/sellers.js';
 import { validarNovoCupom } from '../lib/coupon-validation.js';
 import { pedidoOcultoDoCliente, ocultarPedidoDoCliente, restaurarPedidoAoCliente } from '../lib/order-visibility.js';
 import { listarVendasPagasParaAviso } from '../lib/avisos-vendas.js';
+import { validarRecebimentoPresencial } from '../lib/recebimento-presencial.js';
 
 const CARTAO_403 = (req) => ({
   ok: false, erro: 'Seu perfil não tem permissão para esta ação.',
@@ -935,30 +936,44 @@ export function registrarRotasAdmin(app, db) {
   });
 
   app.post('/admin/pedidos/:id/confirmar-pagamento-presencial', (req,res) => {
-    // Somente administrador financeiro após VERIFICAR dinheiro, Pix ou cartão
-    // presencial recebido. Não aprova nem consulta Mercado Pago.
-    if(!guard(req,res,'pagamentos.estornar'))return;
+    // Funcionário responsável pode confirmar somente a quitação de um
+    // pedido PRESENCIAL após conferir o recebimento; jamais o Mercado Pago.
+    if(!guard(req,res,'pedidos.editar'))return;
     const p=db.collection('orders').get(req.params.id);
     if(!p||!p.pagamentoPresencial||p.pagamentoId)
-      return void res.status(409).html('Este pedido não é um pagamento presencial pendente.');
-    if(p.statusFinanceiro!=='pendente'||p.statusOperacional==='cancelado')
-      return void res.status(409).html('Pagamento já confirmado ou pedido cancelado.');
-    if(String(req.body.confirmouRecebimento||'')!=='1')
-      return void res.status(400).html('Confirme que o pagamento realmente foi recebido.');
+      return void res.status(409).html('Pedido não é um pagamento presencial pendente.');
+    if(p.statusFinanceiro!=='pendente'||['cancelado','entregue'].includes(p.statusOperacional))
+      return void res.status(409).html('Pedido cancelado, entregue ou pagamento já confirmado.');
+    const check=validarRecebimentoPresencial(req.body);
+    if(!check.ok)return void res.status(400).html(e(check.erro));
+    const entregarAgora=String(req.body.entregarAgora||'')==='1';
+    const recebidoEm=new Date().toISOString();
+    // Baixa o estoque pela transição financeira existente, uma única vez.
     const r=atualizarStatusFinanceiro(db,p.id,'aprovado',{
       por:req.adminUser.nome,obs:'Pagamento presencial recebido e conferido pela equipe.'
     });
     if(!r.ok)return void res.status(409).html('Não foi possível confirmar: '+e(r.erro));
-    db.collection('orders').update(p.id,{pagamentoPresencial:{...p.pagamentoPresencial,
-      status:'recebido',confirmadoEm:new Date().toISOString(),
-      confirmadoPor:req.adminUser.nome}});
+    db.collection('orders').update(p.id,{pagamentoPresencial:{
+      ...p.pagamentoPresencial,status:'recebido',
+      confirmadoEm:recebidoEm,confirmadoPor:req.adminUser.nome,
+      recebimento:check.recebimento,
+    }});
+    let entrega=null;
+    if(entregarAgora)entrega=atualizarStatusOperacional(db,p.id,'entregue',{
+      por:req.adminUser.nome,obs:'Pedido entregue e pagamento presencial conferido.'
+    });
     logAdmin(db,req.adminUser,'confirmou_pagamento_presencial','pedido',p.id,
-      {codigo:p.codigo,metodo:p.metodoPagamento,valorCentavos:p.totalCentavos},req);
+      {codigo:p.codigo,metodoRecebido:check.recebimento.metodo,
+        bandeira:check.recebimento.bandeira,
+        parcelas:check.recebimento.parcelas,
+        entregue:entrega?.ok===true,valorCentavos:p.totalCentavos},req);
     const atualizado=db.collection('orders').get(p.id);
     enfileirarEvolution(db,atualizado,'cliente_pago');
     enfileirarEvolution(db,atualizado,'responsavel_pago');
-    res.redirect('/admin/pedidos/'+encodeURIComponent(p.id));
+    res.redirect('/admin/pedidos/'+encodeURIComponent(p.id)+
+      (entrega&&!entrega.ok?'?aviso='+encodeURIComponent('Pagamento confirmado. Atualize a entrega separadamente.'):''));
   });
+
   app.post('/admin/pedidos/:id/recebido', (req, res) => {
     if (!guard(req, res, 'pedidos.editar')) return;
     const pedido = db.collection('orders').get(req.params.id);
