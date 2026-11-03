@@ -76,7 +76,7 @@ test('cliente não vê seletor; as rotas mantêm registro interno sem exigir ven
  assert.doesNotMatch(vista,/Selecione seu vendedor|SELECIONE SEU VENDEDOR/);
  assert.doesNotMatch(vista,/name="vendedorId"/);
  assert.match(route,/vendedorId: null/);
- assert.match(admin,/anexarImagemAusente\(p,externos\.imagem\)/);
- assert.match(js,/adicionarFotoEAN/);
+ assert.match(admin,/vincular-imagem-ean/);
+ assert.match(js,/anexarFotoFormulario/);
  assert.match(js,/const precisaFoto=/);
 });
