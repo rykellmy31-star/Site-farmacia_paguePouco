@@ -20,6 +20,7 @@ import { logSystem } from './audit.js';
 import { enfileirarAvisoPedido } from './order-notifications.js';
 import { enfileirarEvolution } from './evolution-whatsapp.js';
 import { installmentOptions } from './payments/index.js';
+import { pedidoPresencialPorCEP, validarPagamentoPresencial } from './pagamento-presencial.js';
 
 export const STATUS_FINANCEIRO = {
   pendente: { id: 'pendente', nome: 'Aguardando pagamento', cor: '#b26a00', bg: '#fff4d6' },
@@ -135,7 +136,7 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
  * Cria o pedido a partir do carrinho, REVALIDANDO tudo no servidor.
  * @returns {{ok:boolean, erro?:string, pedido?:object, avisos?:string[]}}
  */
-export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cepFarmacia = '', freteOriginalCentavos = null, cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, enviarItensWhatsappPedido = false, req = null }) {
+export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cepFarmacia = '', freteOriginalCentavos = null, pagamentoLocal = null, cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, enviarItensWhatsappPedido = false, req = null }) {
   const avisos = [];
   const loja = db.collection('settings').get('loja') || {};
   if (loja.lojaAberta === false) return { ok: false, erro: 'A loja está fechada para novos pedidos.' };
@@ -216,11 +217,25 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
   if (baseCentavos < Number(loja.valorMinimoPedido || 0)) {
     return { ok: false, erro: 'O pedido não atingiu o valor mínimo da loja.' };
   }
+  // A decisão é exclusiva do servidor, com CEP real da sede: não confiar
+  // em um campo 'presencial' enviado pelo navegador.
+  const local=pedidoPresencialPorCEP(endereco.cep,cepFarmacia);
+  if(local&&!pagamentoLocal)
+    return {ok:false,erro:'Escolha como deseja pagar no recebimento do pedido.'};
+  if(!local&&pagamentoLocal)
+    return {ok:false,erro:'Pagamento na entrega disponível apenas para o CEP da farmácia.'};
+  if(!local&&metodoPagamento==='cash')
+    return {ok:false,erro:'Pagamento em dinheiro está disponível apenas para CEP local.'};
   const pagamentos = db.collection('settings').get('pagamentos') || db.collection('settings').get('payments') || {};
   let descontoPixCentavos = 0;
   let acrescimoJurosCentavos = 0;
   let parcelasValidadas = 1;
-  if (metodoPagamento === 'pix') {
+  if (local) {
+    // Sem pagamento online: não aplicar descontos ou juros do Mercado Pago.
+    // O preço final é o do carrinho + frete - cupom.
+    if(!Object.hasOwn({pix:1,credit_card:1,debit_card:1,cash:1},metodoPagamento))
+      return {ok:false,erro:'Forma de pagamento presencial inválida.'};
+  } else if (metodoPagamento === 'pix') {
     const percentual = Math.max(0, Math.min(100, Number(pagamentos.descontoPixPercentual) || 0));
     descontoPixCentavos = Math.round(baseCentavos * percentual / 100);
   } else if (metodoPagamento === 'credit_card') {
@@ -233,6 +248,12 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     return { ok: false, erro: 'Meio de pagamento inválido.' };
   }
   const totalCentavos = baseCentavos - descontoPixCentavos + acrescimoJurosCentavos;
+  const presencialValidado=local?validarPagamentoPresencial({
+    metodo:metodoPagamento,precisaTroco:pagamentoLocal?.precisaTroco,
+    trocoPara:pagamentoLocal?.trocoPara,totalCentavos,
+  }):null;
+  if(local&&!presencialValidado?.ok)
+    return {ok:false,erro:presencialValidado?.erro||'Pagamento presencial inválido.'};
 
   // 4) Proteção contra pedido duplicado (mesmo cliente/carrinho nos últimos 60s)
   const agora = Date.now();
@@ -289,22 +310,30 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
       detalhe: frete.opcao.detalhe || '',
     },
     totalCentavos,
-    metodoPagamento, // pix | credit_card | debit_card
+    metodoPagamento, // pix | credit_card | debit_card | cash (somente presencial)
+    pagamentoPresencial: local?{
+      ...presencialValidado.presencial,confirmadoEm:null,confirmadoPor:null,
+      momento:'na_entrega_ou_retirada',status:'aguardando_recebimento',
+    }:null,
     parcelas: parcelasValidadas,
     receberWhatsappPedido: receberWhatsappPedido===true,
     enviarItensWhatsappPedido: receberWhatsappPedido===true&&enviarItensWhatsappPedido===true,
     statusFinanceiro: 'pendente',
-    statusOperacional: 'aguardando_pagamento',
+    // Para entrega local, a equipe já pode separar o pedido e aguardar
+    // pagamento no recebimento. Estoque continua reservado até pagamento.
+    statusOperacional: local?'em_separacao':'aguardando_pagamento',
     endereco: { ...endereco },
     rastreio: { codigo: '', transportadora: '', url: '', enviadoEm: null },
     pagamentoId: null,
     // Se o Worker reiniciar antes de associar o pagamento ao pedido, o
     // reconciliador identifica esta etapa sem presumir recusa ou aprovação.
-    pendenciaPagamento: 'criacao_em_andamento',
+    pendenciaPagamento: local?null:'criacao_em_andamento',
     observacoes: '',
     historico: [{
-      tipo: 'operacional', status: 'aguardando_pagamento', em: nowISO(),
-      por: cliente?.nome || 'cliente', obs: 'Pedido registrado.',
+      tipo: 'operacional', status: local?'em_separacao':'aguardando_pagamento', em: nowISO(),
+      por: cliente?.nome || 'cliente', obs: local
+        ? 'Pedido local registrado. Receber pagamento presencialmente, sem cobrança online.'
+        : 'Pedido registrado.',
     }],
     criadoEm: nowISO(),
     atualizadoEm: nowISO(),
@@ -435,7 +464,10 @@ export function atualizarStatusFinanceiro(db, pedidoId, status, { obs = '', por 
       const p = db.collection('products').get(item.produtoId);
       if (p) db.collection('products').update(p.id, { vendas: Number(p.vendas || 0) + item.quantidade });
     }
-    patch.statusOperacional = 'em_separacao';
+    // Pedido presencial pode já ter avançado na preparação. Não regredir.
+    patch.statusOperacional = pedido.pagamentoPresencial &&
+      (STATUS_OPERACIONAL[pedido.statusOperacional]?.ordem||0)>2
+        ? pedido.statusOperacional : 'em_separacao';
   }
   if (status === 'recusado' || status === 'expirado') {
     patch.statusOperacional = 'cancelado';
@@ -564,7 +596,12 @@ export function atualizarStatusOperacional(db, pedidoId, status, { obs = '', por
     return { ok: false, erro: 'Não é permitido retroceder etapas da entrega.' };
   }
   if (pedido.statusFinanceiro !== 'aprovado' && (status !== pedido.statusOperacional || rastreio)) {
-    return { ok: false, erro: 'Pedido não pago não pode avançar operacionalmente.' };
+    const localPendente=!!pedido.pagamentoPresencial &&
+      pedido.statusFinanceiro==='pendente' && !pedido.pagamentoId;
+    if(!localPendente || status==='entregue')
+      return {ok:false,erro:localPendente
+        ? 'Confirme o recebimento do pagamento presencial antes de marcar como entregue.'
+        : 'Pedido não pago não pode avançar operacionalmente.'};
   }
   const patch = { statusOperacional: status, atualizadoEm: nowISO() };
   if (rastreio) patch.rastreio = { ...(pedido.rastreio || {}), ...rastreio };
