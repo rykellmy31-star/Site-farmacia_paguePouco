@@ -306,6 +306,13 @@
     }
     (async () => {
       try {
+        // Mesmo que o operador tenha marcado Ativo/Aprovar sem tirar o
+        // foco do EAN, consultar dados antes de montar o FormData.
+        if(buscaEANAntesDeSalvar &&
+            ['peso','altura','largura','comprimento'].some(nome=>
+              !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0))){
+          await buscaEANAntesDeSalvar({silencioso:true});
+        }
         const resposta = await api(form.getAttribute('action'), {
           method: 'POST',
           body: new FormData(form),
@@ -415,6 +422,62 @@
   }
   renderCaracteristicas();
 
+  /* ------------ dimensões logísticas por código EAN (admin) ------------ */
+  let buscaEANAntesDeSalvar=null;
+  const formEAN=$('#formProduto');
+  if(formEAN){
+    const campo=nome=>formEAN.querySelector('[name="'+nome+'"]');
+    const btn=$('#botaoBuscarMedidasEAN');
+    const status=$('#resultadoBuscaEAN');
+    let codigoConsultado='';
+    let emConsulta=false;
+    async function consultarMedidasEAN({silencioso=false}={}){
+      const ean=String(campo('ean')?.value||'').replace(/[\s.-]/g,'');
+      if(!/^\d{8}$|^\d{12,14}$/.test(ean)){
+        if(!silencioso)notificar('Informe um EAN válido para pesquisar.','erro');
+        return;
+      }
+      if(emConsulta||ean===codigoConsultado)return;
+      emConsulta=true;if(btn)btn.disabled=true;
+      if(status)status.textContent='Pesquisando medidas do EAN em catálogos públicos...';
+      try{
+        const r=await post('/admin/api/produtos/dimensoes-ean',{ean});
+        if(ean!==String(campo('ean')?.value||'').replace(/[\s.-]/g,''))return;
+        codigoConsultado=ean;
+        if(!r.encontrado){
+          if(status)status.textContent=r.mensagem||'Nenhuma medida confiável encontrada.';
+          return;
+        }
+        const valores={peso:r.peso,largura:r.dimensoes?.largura,
+          altura:r.dimensoes?.altura,comprimento:r.dimensoes?.comprimento};
+        const preenchidos=[];
+        for(const [nome,valor] of Object.entries(valores)){
+          const input=campo(nome);
+          if(input&&!(Number(input.value)>0)&&Number(valor)>0){
+            input.value=String(valor);preenchidos.push(nome);
+          }
+        }
+        if(status)status.textContent=preenchidos.length
+          ? 'Encontrado em '+r.origem+': preenchidos '+preenchidos.join(', ')+
+            '. Confira os valores da embalagem antes de salvar.'
+          : 'Encontrado em '+r.origem+', mas seus valores existentes foram preservados.';
+        if(!silencioso)notificar('Busca realizada. Confira as medidas antes de salvar.');
+      }catch(err){
+        if(status)status.textContent='Consulta indisponível. Você pode informar as medidas manualmente.';
+        if(!silencioso)notificar(err.message||'Falha ao consultar EAN.','erro');
+      }finally{emConsulta=false;if(btn)btn.disabled=false;}
+    }
+    buscaEANAntesDeSalvar=consultarMedidasEAN;
+    btn?.addEventListener('click',()=>consultarMedidasEAN());
+    // Pesquisa quando um novo EAN é digitado. Evita requisições repetidas
+    // e jamais sobrescreve peso/dimensões que o operador já informou.
+    campo('ean')?.addEventListener('change',()=>{
+      codigoConsultado='';
+      if(['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
+        consultarMedidasEAN({silencioso:true});
+    });
+  }
+
   /* --------------------------- ações genéricas -------------------------- */
   document.addEventListener('click', async (ev) => {
     const alvo = (seletor) => ev.target.closest(seletor);
@@ -434,8 +497,17 @@
 
     const altProd = alvo('[data-alternar-produto]');
     if (altProd) {
-      try { await post(`/admin/api/produtos/${altProd.getAttribute('data-alternar-produto')}/ativar`); location.reload(); }
-      catch (err) { notificar(err.message, 'erro'); }
+      const id=altProd.getAttribute('data-alternar-produto');
+      try {
+        // Busca opcional e limitada, não pode impedir ativação se
+        // nenhum catálogo público tiver informações para o EAN.
+        if(altProd.textContent.trim()==='Ativar'){
+          try { await post(`/admin/api/produtos/${id}/buscar-medidas-ean`); }
+          catch { /* busca não impede ativação */ }
+        }
+        await post(`/admin/api/produtos/${id}/ativar`);
+        location.reload();
+      } catch (err) { notificar(err.message, 'erro'); }
       return;
     }
 
