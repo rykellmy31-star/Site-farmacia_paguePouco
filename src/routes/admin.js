@@ -28,7 +28,7 @@ import {telaEvolutionWhatsapp} from '../views/admin/evolution.js';
 import {evolutionConfig,validarEvolutionConfig,resumoEvolution} from '../lib/evolution-whatsapp.js';
 import {credenciaisEvolution,estadoEvolution,conectarEvolution} from '../lib/evolution-connection.js';
 import {
-  telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias,
+  telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias, telaFontesImagemFabricante,
   telaEstoque, telaMidia, telaBanners, telaPromocoes,
 } from '../views/admin/catalogo.js';
 import {
@@ -52,6 +52,7 @@ import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/set
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
+import { inventarioFabricantesFotos } from '../lib/fabricantes-fontes.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { consultarDescricaoEAN, preencherDescricaoAusente } from '../lib/busca-descricao-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
@@ -299,6 +300,15 @@ export function registrarRotasAdmin(app, db) {
     const total = todos.length;
     const produtos = todos.slice((pagina - 1) * porPagina, pagina * porPagina);
     res.html(telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias: db.collection('categories').all().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), filtros: { categoria, status } }));
+  });
+
+  // Inventário interno, somente leitura. Usa o banco já carregado na
+  // sessão administrativa; não publica a lista nem expõe clientes.
+  app.get('/admin/produtos/fontes-de-imagens',(req,res)=>{
+    if(!guard(req,res,'produtos.ver'))return;
+    res.set('Cache-Control','private, no-store');
+    const dados=inventarioFabricantesFotos(db.collection('products').all());
+    res.html(telaFontesImagemFabricante(ctxAdmin(req,db),dados));
   });
 
   app.get('/admin/produtos/novo', (req, res) => {
