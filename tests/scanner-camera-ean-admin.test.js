@@ -9,8 +9,8 @@ const scanner=readFileSync(new URL('public/js/barcode-scanner.js',raiz),'utf8');
 const vendor=readFileSync(new URL('public/js/vendor/html5-qrcode.min.js',raiz),'utf8');
 
 test('camera em busca e formulario sem submeter produto automaticamente',()=>{
- assert.match(view,/data-leitor-codigo='form\[action="/admin\/produtos"\] input\[name="q"\]'/);
- assert.match(view,/data-leitor-codigo="#formProduto input\[name=ean\]"/);
+ assert.ok(view.includes("data-leitor-codigo='form[action=\"/admin/produtos\"] input[name=\"q\"]'"));
+ assert.ok(view.includes('data-leitor-codigo="#formProduto input[name=ean]"'));
  assert.match(view,/📷 Bipar com a câmera/);
  assert.match(view,/📷 Ler EAN/);
  assert.match(layout,/barcode-scanner\.js\?v=/);
