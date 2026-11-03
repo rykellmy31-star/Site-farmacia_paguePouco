@@ -360,14 +360,19 @@
     const campoUF = form.querySelector('[name="uf"]');
     const campoCidade = form.querySelector('[name="cidade"]');
     const campoRua = form.querySelector('[name="logradouro"]');
+    const campoNumero = form.querySelector('[name="numero"]');
+    const campoComplemento = form.querySelector('[name="complemento"]');
     const campoBairro = form.querySelector('[name="bairro"]');
     const statusCep = $('#avisoCepAutomatico');
     const dizerCep = (msg) => { if(statusCep) statusCep.textContent=msg; };
     const limparLocalidade = () => {
-      // Não herdar BA / Itanhém do endereço salvo ao trocar o CEP.
+      // Nunca herdar número, complemento ou localidade do endereço anterior.
+      // Nome e telefone do destinatário continuam preenchidos.
       if(campoUF) campoUF.value='';
       if(campoCidade) campoCidade.value='';
       if(campoRua) campoRua.value='';
+      if(campoNumero) campoNumero.value='';
+      if(campoComplemento) campoComplemento.value='';
       if(campoBairro) campoBairro.value='';
     };
 
