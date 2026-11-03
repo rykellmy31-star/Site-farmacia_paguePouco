@@ -48,6 +48,8 @@ jobs:
         run: node --test tests/busca-descricao-ean.test.js
       - name: Validar fallback das origens de imagem por EAN
         run: node --test tests/fallback-origem-ean.test.js
+      - name: Validar pesquisa de fotos por fabricante em catálogos abertos
+        run: node --test tests/fotos-fabricantes-openfacts.test.js
       - name: Conferir imagens PNG de qualidade e ferramentas EAN separadas
         run: node --test tests/duas-ferramentas-ean-png.test.js
       - name: Validar câmera EAN no painel e leitura móvel sem CDN externa
