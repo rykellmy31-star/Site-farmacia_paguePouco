@@ -145,6 +145,83 @@ function registroOpenverseFlickr(item,ean,referencia=null){
       licencaUrl:urlLicenca,atribuidoEm:new Date().toISOString()}};
 }
 
+// Consulta oficial Dailus (Shopify) — nunca usa resultados do Google
+// nem aceita fotos de outro fabricante ou outro GTIN.
+const DAILUS_SITE='https://www.dailus.com.br';
+const DAILUS_CDN='cdn.shopify.com';
+const DAILUS_STORE='/s/files/1/0936/1702/9411/files/';
+// Referência conhecida e comprovada pela ficha oficial do fabricante.
+const DAILUS_HANDLES_POR_EAN=new Map([['7894222042381','esmalte-brigadeirao']]);
+function urlFotoDailus(url){
+  if(typeof url!=='string'||url.length>800)return '';
+  try{
+    const u=new URL(url.startsWith('//')?'https:'+url:url);
+    if(u.protocol!=='https:'||u.hostname!==DAILUS_CDN||u.port||
+      u.username||u.password||u.hash||u.searchParams.size>1||
+      [...u.searchParams.keys()].some(k=>k!=='v')||
+      (u.searchParams.has('v')&&!/^\d{8,16}$/.test(u.searchParams.get('v'))))
+      return '';
+    if(!u.pathname.startsWith(DAILUS_STORE)||
+      !/^\/s\/files\/1\/0936\/1702\/9411\/files\/[a-zA-Z0-9_%.\-]+\.(?:jpe?g|png|webp)$/i.test(u.pathname))
+      return '';
+    // O proxy nunca recebe URL de fora da CDN oficial e não envia query.
+    return u.origin+u.pathname;
+  }catch{return '';}
+}
+function registroDailusOficial(dados,ean){
+  if(!dados||String(dados.vendor||'').toUpperCase()!=='DAILUS'||
+    !/esmalte/i.test(String(dados.type||dados.product_type||''))||
+    !(dados.variants||[]).some(v=>eanIgual(v.barcode,ean)))return null;
+  const handle=String(dados.handle||'');
+  if(!/^[a-z0-9-]{3,100}$/.test(handle))return null;
+  const imagens=(Array.isArray(dados.media)?dados.media:[]).filter(m=>
+    m?.media_type==='image'&&Number(m.width)>=600&&Number(m.height)>=600&&
+    Number(m.width)/Number(m.height)<=3.2&&Number(m.height)/Number(m.width)<=3.2)
+    .map(m=>urlFotoDailus(m.src)).filter(Boolean);
+  // Só usar mídia do próprio fabricante, não fotografias de lojas externas.
+  const urls=[...new Set(imagens)].slice(0,5);
+  if(!urls.length)return null;
+  const origem=DAILUS_SITE+'/products/'+handle;
+  return {url:urls[0],urlAltaResolucao:urls[0],alternativas:urls.slice(1),
+    principal:true,ordem:1,legenda:'Foto do produto — catálogo oficial Dailus ('+origem+'); direitos da fabricante.',
+    fonteEAN:{ean,fonte:'Dailus (fabricante)',licenca:'Imagem oficial Dailus — direitos reservados',
+      atribuicao:'Dailus',urlAtribuicao:origem,atribuidoEm:new Date().toISOString()}};
+}
+async function consultarDailusEAN(ean,nomeProduto,{fetcher}){
+  const cod=normalizarEAN(ean).replace(/^0+(?=\d{13}$)/,'');
+  const handleConhecido=DAILUS_HANDLES_POR_EAN.get(cod);
+  const handles=[];
+  if(handleConhecido)handles.push(handleConhecido);
+  const nome=String(nomeProduto||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase();
+  if(/\bdailus\b/.test(nome)||handleConhecido){
+    const palavras=nome.split(/[^a-z0-9]+/).filter(x=>
+      x.length>=4&&!['dailus','esmalte','cremoso','choco','cherry','colecao'].includes(x));
+    // Buscar prioritariamente a cor, nunca usar nome genérico do esmalte.
+    const cor=palavras.at(-1)||'';
+    if(cor){
+      const q=new URL(DAILUS_SITE+'/search/suggest.json');
+      q.searchParams.set('q',cor);
+      q.searchParams.set('resources[type]','product');
+      q.searchParams.set('resources[limit]','10');
+      const r=await lerJson(q.href,{fetcher,timeoutMs:3400});
+      for(const p of (r?.resources?.results?.products||[]).slice(0,10)){
+        if(String(p.vendor||'').toUpperCase()!=='DAILUS'||
+          !/esmalte/i.test(String(p.type||'')))continue;
+        const h=String(p.handle||'');
+        if(/^[a-z0-9-]{3,100}$/.test(h)&&!handles.includes(h))handles.push(h);
+      }
+    }
+  }
+  for(const handle of handles.slice(0,7)){
+    const dados=await lerJson(DAILUS_SITE+'/products/'+handle+'.js',
+      {fetcher,timeoutMs:3300});
+    const imagem=registroDailusOficial(dados,ean);
+    if(imagem)return imagem;
+  }
+  return null;
+}
+
 const CACHE=new Map();
 const AGENTE='FarmaciaPaguePouco/1.0 (site.farmaciapaguepouco.app)';
 const normal=s=>String(s||'').replace(/\D/g,'');
@@ -335,6 +412,21 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         adicionar(registroImagemPrecoMelhor(unicas,ean));
         for(const url of unicas.slice(1))adicionar(registroImagemPrecoMelhor([url],ean));
       }
+    }
+  }
+  // Dailus: fonte do fabricante. Exige código de barras idêntico
+  // no cadastro oficial para impedir troca de tonalidades dos esmaltes.
+  if(somente!=='dimensoes'&&(
+      DAILUS_HANDLES_POR_EAN.has(ean.replace(/^0+(?=\d{13}$)/,''))||
+      /\bdailus\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||'')))){
+    resultado.consultadas.push('Dailus (fabricante)');
+    const oficial=await consultarDailusEAN(ean,nomeProduto||marcaProduto,{fetcher});
+    if(oficial){
+      adicionar(oficial);
+      // Outras fotos do mesmo SKU permanecem alternativas se a primeira
+      // estiver ruim, sem misturar com esmaltes da mesma coleção.
+      for(const url of oficial.alternativas)
+        adicionar({...oficial,url,urlAltaResolucao:url,alternativas:[]});
     }
   }
   // Wikimedia Commons: busca automática sem cadastro ou API key, com
