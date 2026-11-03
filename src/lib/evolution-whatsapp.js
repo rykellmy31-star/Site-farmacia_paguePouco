@@ -143,15 +143,24 @@ export function enfileirarEvolution(db,pedido,tipo){
     pix:'Pix',credit_card:'Cartão de crédito',
     debit_card:'Cartão de débito',cash:'Dinheiro',
   })[recebimento?.metodo]||metodoEscolhido;
+  const trocoPara=Number(pedido.pagamentoPresencial?.trocoParaCentavos);
+  const trocoSalvo=pedido.pagamentoPresencial?.trocoCentavos;
+  const trocoCalculado=Number.isSafeInteger(trocoSalvo)&&trocoSalvo>=0
+    ?trocoSalvo
+    : Number.isSafeInteger(trocoPara)&&Number.isSafeInteger(pedido.totalCentavos)
+      &&trocoPara>=pedido.totalCentavos
+      ?trocoPara-pedido.totalCentavos:null;
   const texto=tipo==='responsavel_local'
     ? '🔔 NOVO PEDIDO LOCAL — FARMÁCIA PAGUE POUCO\n📦 Pedido: #'+codigo+
       (itens ? ' :'+itens : '\n')+
       quantidadeMsg+formaEscolhida+
       (pedido.pagamentoPresencial?.precisaTroco
-        ? '\n💵 CLIENTE VAI ENTREGAR: R$ '+
-            (pedido.pagamentoPresencial.trocoParaCentavos/100).toFixed(2).replace('.',',')+
-          '\n💰 *TROCO A SEPARAR: R$ '+
-            (pedido.pagamentoPresencial.trocoCentavos/100).toFixed(2).replace('.',',')+'*'
+        ? (Number.isSafeInteger(trocoCalculado)
+          ? '\n💵 CLIENTE VAI ENTREGAR: R$ '+
+              (trocoPara/100).toFixed(2).replace('.',',')+
+            '\n💰 *TROCO A SEPARAR: R$ '+
+              (trocoCalculado/100).toFixed(2).replace('.',',')+'*'
+          : '\nTroco solicitado: confirmar valor no painel.')
         : '\nTroco: não solicitado.')+
       '\nPagamento pendente. Consulte endereço e detalhes no painel.'
     : tipo==='responsavel_pago'
