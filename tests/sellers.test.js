@@ -40,7 +40,7 @@ test('apenas vendedor ativo é aceito; sem ativos há atendimento geral e IDs ma
  assert.deepEqual(selecionarVendedorPedido(db,null),{ok:true,vendedor:null});
  assert.equal(selecionarVendedorPedido(db,'inventado').ok,false);
  const s=cadastrarVendedor(db,{nome:'Maria Santos',codigoInova:'00126',ativo:true}).vendedor;
- assert.equal(selecionarVendedorPedido(db,null).ok,false);
+ assert.deepEqual(selecionarVendedorPedido(db,null),{ok:true,vendedor:null});
  assert.equal(selecionarVendedorPedido(db,'00126').ok,false);
  assert.equal(selecionarVendedorPedido(db,s.id).vendedor.codigoInova,'00126');
  assert.equal(editarVendedor(db,s.id,{nome:'Maria',codigoInova:'00126',ativo:false}).ok,true);
@@ -59,22 +59,17 @@ test('permissões: super/admin podem administrar, gerente apenas ler; operador e
  assert.equal(can(null,'vendedores.editar'),false);
 });
 
-test('checkout mostra só vendedores ativos e exige seleção quando existem',()=>{
+test('checkout não exige vendedor, mesmo com vendedores ativos na farmácia',()=>{
  const {db,ctx}=setup();
- const ativo=cadastrarVendedor(db,{nome:'João Silva',codigoInova:'00125'}).vendedor;
+ cadastrarVendedor(db,{nome:'João Silva',codigoInova:'00125'});
  cadastrarVendedor(db,{nome:'Vendedor Oculto',codigoInova:'00126',ativo:false});
  const opts={totais:{totalCentavos:190,subtotalCentavos:190,freteCentavos:0},
    parcelas:[],formasPagamento:{pix:true},endereco:{cep:'45970000'},
    frete:{label:'Retirar na farmácia'},vendedores:vendedoresAtivos(db)};
  const html=telaPagamento(ctx,opts);
- assert.match(html,/SELECIONE SEU VENDEDOR/);
- assert.match(html,/name="vendedorId" required/);
- assert.match(html,/João Silva/);
- assert.doesNotMatch(html,/Vendedor Oculto|00125|00126/);
- assert.match(html,new RegExp('value="'+ativo.id+'"'));
- const vazio=telaPagamento(ctx,{...opts,vendedores:[]});
- assert.match(vazio,/Atendimento geral/);
- assert.doesNotMatch(vazio,/name="vendedorId"/);
+ assert.doesNotMatch(html,/SELECIONE SEU VENDEDOR|Selecione seu vendedor/);
+ assert.doesNotMatch(html,/name="vendedorId"|João Silva|Vendedor Oculto/);
+ assert.deepEqual(selecionarVendedorPedido(db,null),{ok:true,vendedor:null});
 });
 
 test('snapshot no pedido não muda com edição; cliente não recebe código, painel recebe',()=>{

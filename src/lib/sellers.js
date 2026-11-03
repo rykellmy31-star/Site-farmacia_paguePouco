@@ -53,7 +53,10 @@ export function selecionarVendedorPedido(db, idRecebido) {
     if (idRecebido) return { ok: false, erro: 'Vendedor não disponível. Atualize o checkout.' };
     return { ok: true, vendedor: null };
   }
+  // O cliente não escolhe vendedor: atribuição opcional interna na farmácia.
+  // Sem seleção no checkout, o pedido segue como atendimento geral.
   const id = String(idRecebido || '');
+  if(!id)return {ok:true,vendedor:null};
   const vendedor = ativos.find(v => v.id === id);
   if (!vendedor) return { ok: false, erro: 'Selecione um vendedor ativo para continuar.' };
   return { ok: true, vendedor: {

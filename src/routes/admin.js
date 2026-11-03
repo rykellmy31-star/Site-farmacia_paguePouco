@@ -51,6 +51,7 @@ import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
+import { buscarDadosExternosEAN, anexarImagemAusente } from '../lib/enriquecimento-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1352,40 +1353,71 @@ function registrarApi(app, db) {
   });
 
   /* ------------------------------ PRODUTOS ------------------------------ */
-  // Busca por EAN: endpoint com permissão administrativa, sem modificar
-  // cadastro até o operador salvar o formulário.
+  // Pesquisa por EAN exato: medidas + foto legalmente reutilizável.
+  // Campos do produto não são alterados pela busca do formulário.
   app.post('/admin/api/produtos/dimensoes-ean', async (req,res) => {
     if (!guardApi(req,res,'produtos.editar')) return;
     const ean=String(req.body?.ean||'');
     if(!eanValido(ean))
       return void res.json({ok:false,erro:'EAN inválido. Confira o código de barras.'},400);
-    const resultado=buscarMedidasNoCatalogo(db,ean,req.body?.produtoId||null)||
-      await buscarMedidasPorEAN(ean,{forcar:req.body?.forcar===true});
+    const local=buscarMedidasNoCatalogo(db,ean,req.body?.produtoId||null);
+    const [medidas,externos]=await Promise.all([
+      local?Promise.resolve(local):buscarMedidasPorEAN(ean,{forcar:req.body?.forcar===true}),
+      buscarDadosExternosEAN(ean,{force:req.body?.forcar===true}),
+    ]);
+    const result={...medidas};
+    if(!result.encontrado&&externos.dimensoes){
+      Object.assign(result,{encontrado:true,ok:true,ean,
+        origem:externos.origemDimensoes,
+        dimensoes:externos.dimensoes,peso:0,
+        campos:['largura','altura','comprimento'],
+        mensagem:'Dimensões da embalagem localizadas em resultado do Google; confira antes de cotar frete.'});
+    }else if(externos.dimensoes&&result.encontrado&&
+      !Number(result.dimensoes?.largura)){
+      result.dimensoes=externos.dimensoes;
+      result.campos=[...(result.campos||[]),'largura','altura','comprimento'];
+    }
+    result.imagem=externos.imagem;
+    result.consultadas=[...new Set([...(result.consultadas||[]),...(externos.consultadas||[])])];
     res.set('Cache-Control','no-store');
-    res.json(resultado);
+    res.json(result);
   });
-  // Busca e aplica no banco só as medidas ausentes do mesmo EAN, ao
-  // acionar Ativar na lista; preserva toda a lógica sanitária existente.
+  // Ao clicar Ativar na lista, preencher dados logísticos vazios e
+  // adicionar foto SOMENTE quando inexistente. Nunca sobrepor imagem manual.
   app.post('/admin/api/produtos/:id/buscar-medidas-ean',async(req,res)=>{
     if(!guardApi(req,res,'produtos.editar'))return;
     const p=db.collection('products').get(req.params.id);
     if(!p)return void res.json({ok:false,erro:'Produto não encontrado.'},404);
     if(p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto arquivado.'},409);
     if(!eanValido(p.ean))return void res.json({ok:true,encontrado:false,
-      mensagem:'Produto sem EAN válido. Informe medidas manualmente.'});
-    if([p.peso,p.dimensoes?.altura,p.dimensoes?.largura,p.dimensoes?.comprimento]
-      .every(x=>Number(x)>0))
-      return void res.json({ok:true,encontrado:false,mensagem:'Medidas já cadastradas; nenhuma alteração.'});
-    const r=buscarMedidasNoCatalogo(db,p.ean,p.id)||
-      await buscarMedidasPorEAN(p.ean);
-    const patch=aplicarMedidasAusentes(p,r);
+      mensagem:'Produto sem EAN válido. Informe foto e medidas manualmente.'});
+    const faltaMedida=[p.peso,p.dimensoes?.altura,p.dimensoes?.largura,
+      p.dimensoes?.comprimento].some(v=>!(Number(v)>0));
+    const faltaImagem=!(p.imagens||[]).length;
+    if(!faltaMedida&&!faltaImagem)
+      return void res.json({ok:true,encontrado:false,
+        mensagem:'Produto já possui foto e medidas; nenhum dado sobrescrito.'});
+    const [medidas,externos]=await Promise.all([
+      faltaMedida?
+        (buscarMedidasNoCatalogo(db,p.ean,p.id)||buscarMedidasPorEAN(p.ean)):
+        Promise.resolve(null),
+      buscarDadosExternosEAN(p.ean),
+    ]);
+    const encontrados=medidas?.encontrado?medidas:
+      externos.dimensoes?{encontrado:true,ean:p.ean,origem:externos.origemDimensoes,
+        peso:0,dimensoes:externos.dimensoes}:null;
+    const patch={...aplicarMedidasAusentes(p,encontrados),
+      ...anexarImagemAusente(p,externos.imagem)};
     if(Object.keys(patch).length){
       db.collection('products').update(p.id,patch);
-      logAdmin(db,req.adminUser,'consultou_medidas_ean','produto',p.id,
-        {origem:r.origem,campos:r.campos},req);
+      logAdmin(db,req.adminUser,'enriqueceu_produto_por_ean','produto',p.id,
+        {foto:!!patch.imagens,medidas:!!patch.dimensoes,
+          fontes:externos.consultadas},req);
     }
-    res.json({ok:true,encontrado:r.encontrado===true,campos:r.campos||[],
-      mensagem:r.encontrado?'Medidas encontradas; confira a embalagem.':r.mensagem||'Não encontrado.'});
+    res.json({ok:true,encontrado:Object.keys(patch).length>0,
+      fotoAdicionada:!!patch.imagens,medidasAdicionadas:!!(patch.dimensoes||patch.peso),
+      mensagem:patch.imagens?'Foto do EAN adicionada automaticamente.': 
+        'Nenhuma foto licenciada encontrada para este EAN.'});
   });
 
   const lerProdutoDoForm = (body) => {
