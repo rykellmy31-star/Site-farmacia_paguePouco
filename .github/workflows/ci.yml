@@ -54,6 +54,10 @@ jobs:
         run: node --test tests/enriquecimento-automatico-ean.test.js
       - name: Comprovar busca REAL de esmalte Dailus por EAN e download da foto
         run: node scripts/test-ean-dailus-live.mjs
+      - name: Validar correspondência GTIN14 e GTIN13 de fraldas Personal
+        run: node --test tests/personal-gtin14-ean.test.js
+      - name: Comprovar mídia REAL das fraldas Personal em alta resolução
+        run: node scripts/test-personal-imagem-live.mjs
       - name: Verificar busca automatica de peso e dimensoes via EAN
         run: node --test tests/busca-medidas-ean.test.js
       - name: Validar vendas presenciais, relatorio Inova e WhatsApp
