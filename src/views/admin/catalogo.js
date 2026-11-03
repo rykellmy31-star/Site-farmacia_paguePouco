@@ -262,6 +262,8 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               <p class="texto-pequeno mt-1">Ao cadastrar ou ativar, o sistema procura peso e medidas em bases públicas.
               A pesquisa também pode ser feita agora; campos preenchidos por você não serão substituídos.</p>
               <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">🔎 Buscar peso e dimensões pelo EAN</button>
+              <a id="linkPesquisaEAN" class="botao pequeno secundario mt-1" target="_blank"
+                rel="noopener noreferrer" style="display:none">🌐 Procurar medidas deste EAN na web</a>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaEAN" role="status">
                 ${p.logisticaFonte?.origem
                   ? `Fonte: ${e(p.logisticaFonte.origem)} · ${p.logisticaFonte.revisaoPendente ? 'Conferência da embalagem pendente' : 'Medidas revisadas'}`

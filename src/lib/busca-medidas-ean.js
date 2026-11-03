@@ -66,42 +66,70 @@ async function buscarJson(url,fetcher,timeoutMs){
     return await r.json();
   }catch{return null;}finally{clearTimeout(t);}
 }
-let ultimaConsulta=0;
+let ultimaConsultaUPC=0;
 export async function buscarMedidasPorEAN(eanBruto,{fetcher=globalThis.fetch,timeoutMs=2500,
-  now=()=>Date.now()}={}){
+  now=()=>Date.now(),forcar=false}={}){
   const ean=normalizarEAN(eanBruto);
   if(!eanValido(ean))return {ok:false,encontrado:false,
     mensagem:'Informe um código EAN/GTIN válido para pesquisar.'};
   const cacheAtivo=fetcher===globalThis.fetch;
   if(cacheAtivo){
     const c=CACHE.get(ean);
-    if(c&&c.expira>now())return {...c.valor,cache:true};
-    // Plano gratuito UPCitemDB: no máximo 6 consultas/minuto; respeitar
-    // intervalo de 10s para evitar banimento. Nunca bloquear ativação.
-    if(now()-ultimaConsulta<10000)return {ok:true,encontrado:false,
-      mensagem:'Busca temporariamente limitada. Tente novamente em alguns segundos.'};
-    ultimaConsulta=now();
+    if(!forcar&&c&&c.expira>now())return {...c.valor,cache:true};
   }
-  let resultado=null;
-  const upc=await buscarJson(urlUpc+ean,fetcher,timeoutMs);
-  for(const item of Array.isArray(upc?.items)?upc.items:[]){
-    resultado=converterItem(item,ean,'UPCitemDB');
-    if(resultado)break;
+  let resultado=null, produtoEncontrado=false;
+  const consultadas=[];
+  // O limite gratuito de UPCitemDB NÃO deve bloquear outras bases:
+  // cada catálogo público é independente. EAN diferente também pode
+  // ser consultado nas bases Open Facts imediatamente.
+  const permiteUPC=!cacheAtivo||now()-ultimaConsultaUPC>=10000;
+  if(permiteUPC){
+    if(cacheAtivo)ultimaConsultaUPC=now();
+    consultadas.push('UPCitemDB');
+    const upc=await buscarJson(urlUpc+ean,fetcher,timeoutMs);
+    for(const item of Array.isArray(upc?.items)?upc.items:[]){
+      if(!codigoCompativel(ean,item))continue;
+      produtoEncontrado=true;
+      resultado=converterItem(item,ean,'UPCitemDB');
+      if(resultado)break;
+    }
   }
-  // Bases abertas: somente atributos explicitamente estruturados de
-  // dimensões da embalagem, jamais quantidade líquida ou tamanho de imagens.
-  if(!resultado)for(const [nome,base] of fontesFacts){
+  // Bases abertas: atributos explicitamente estruturados de embalagem;
+  // nunca usar quantidade líquida nem tamanho de fotos. Complementa
+  // pesquisas parciais, mas não mistura duas fontes com dimensões conflitantes.
+  if(!resultado?.peso||!resultado?.dimensoes?.largura)for(const [nome,base] of fontesFacts){
+    consultadas.push(nome);
     const raw=await buscarJson(base+ean+'.json?fields=code,product_name,package_dimensions,packaging_dimensions,package_weight,shipping_weight',fetcher,timeoutMs);
     const p=raw?.product;
-    if(!p)continue;
-    resultado=converterItem({...p,ean:p.code||ean},ean,nome);
-    if(resultado)break;
+    if(!p||!codigoCompativel(ean,p))continue;
+    produtoEncontrado=true;
+    const encontrado=converterItem(p,ean,nome);
+    if(!encontrado)continue;
+    if(!resultado)resultado=encontrado;
+    else{
+      // Completar apenas campos ausentes; fonte principal permanece
+      // registrada para o operador revisar no cadastro.
+      if(!resultado.peso&&encontrado.peso){
+        resultado.peso=encontrado.peso;resultado.campos.push('peso');
+      }
+      if(!resultado.dimensoes?.largura&&encontrado.dimensoes?.largura){
+        resultado.dimensoes=encontrado.dimensoes;
+        resultado.campos.push('largura','altura','comprimento');
+      }
+    }
+    if(resultado?.peso&&resultado?.dimensoes?.largura)break;
   }
-  const ret=resultado?{ok:true,encontrado:true,...resultado}:{
-    ok:true,encontrado:false,mensagem:'Nenhuma medida logística confiável disponível para este EAN nas bases consultadas. Preencha manualmente.'};
+  const ret=resultado?{ok:true,encontrado:true,...resultado,consultadas,produtoEncontrado:true}:{
+    ok:true,encontrado:false,consultadas,produtoEncontrado,
+    mensagem:produtoEncontrado
+      ? 'Produto identificado pelo EAN, mas não há peso e dimensões de transporte disponíveis nessas bases. Confira a embalagem ou consulte o fabricante.'
+      : 'Não foram encontradas medidas de transporte para este EAN. As bases públicas podem não ter produtos brasileiros. Confira o código e consulte outras fontes.'};
+  if(!permiteUPC&&cacheAtivo&&!ret.encontrado)
+    ret.mensagem+=' A UPCitemDB está no intervalo gratuito entre consultas; você pode tentar novamente em alguns segundos.';
   if(cacheAtivo){
     if(CACHE.size>200)CACHE.delete(CACHE.keys().next().value);
-    CACHE.set(ean,{valor:ret,expira:now()+(ret.encontrado?86400000:3600000)});
+    // Não prender o operador por 1 hora ao receber uma falha ou ausência.
+    CACHE.set(ean,{valor:ret,expira:now()+(ret.encontrado?86400000:90000)});
   }
   return ret;
 }
@@ -120,4 +148,30 @@ export function aplicarMedidasAusentes(produto,resultado){
     patch.logisticaFonte={origem:resultado.origem,ean:resultado.ean,
       revisaoPendente:true,consultadoEm:new Date().toISOString()};
   return patch;
+}
+
+/**
+ * Reutiliza medidas confirmadas de outro cadastro COM O MESMO EAN.
+ * Não usa estimativas nem medidas aguardando revisão.
+ */
+export function buscarMedidasNoCatalogo(db,eanBruto,produtoId=null){
+  const ean=normalizarEAN(eanBruto);
+  if(!eanValido(ean)||!db?.collection)return null;
+  const produtos=db.collection('products').all();
+  for(const produto of produtos){
+    if(produto.id===produtoId||produto.inovaArquivado?.em||
+       produto.logisticaFonte?.revisaoPendente===true||
+       normalizarEAN(produto.ean).padStart(14,'0')!==ean.padStart(14,'0'))continue;
+    const pesoValor=Number(produto.peso)||0;
+    const d=produto.dimensoes||{};
+    if(!(pesoValor>0||(['largura','altura','comprimento'].every(k=>Number(d[k])>0))))continue;
+    return {ok:true,encontrado:true,ean,origem:'Cadastro já revisado da farmácia',
+      nome:produto.nome||'',peso:pesoValor,dimensoes:{
+        largura:Number(d.largura)||0,altura:Number(d.altura)||0,
+        comprimento:Number(d.comprimento)||0},
+      campos:[...(pesoValor>0?['peso']:[]),
+        ...(['largura','altura','comprimento'].every(k=>Number(d[k])>0)?['largura','altura','comprimento']:[])],
+      consultadas:['Catálogo interno'],produtoEncontrado:true};
+  }
+  return null;
 }
