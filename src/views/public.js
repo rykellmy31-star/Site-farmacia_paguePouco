@@ -305,6 +305,12 @@ function barraOrdenacao(ordenar, total, filtros = {}) {
 export function produtoPage(ctx, { produto, categoria, relacionados, configLoja }) {
   const venda = podeVender(produto);
   const imagens = produto.imagens || [];
+  const imagemPrecoMelhor=imagens.some(img=>String(img.legenda||'').includes('PreçoMelhor'));
+  const creditoPrecoMelhor=imagemPrecoMelhor
+    ?'<p class="texto-pequeno texto-suave mt-1">Foto: <a href="https://www.precomelhor.com.br/p/'+
+      encodeURIComponent(String(produto.ean||''))+
+      '" target="_blank" rel="noopener noreferrer">PreçoMelhor</a></p>'
+    :'';
   const videos = produto.videos || [];
   const preco = precoVigenteCentavos(produto);
   const parcelamentoSemJuros = melhorParcelamentoSemJuros(ctx.db, preco);
@@ -327,6 +333,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
           <video src="${e(v.url)}" muted preload="metadata"></video>
         </button>`).join('')}
     </div>
+    ${creditoPrecoMelhor}
   </div>`;
 
   const caracteristicas = Object.entries(produto.caracteristicas || {});

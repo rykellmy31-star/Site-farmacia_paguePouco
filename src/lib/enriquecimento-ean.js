@@ -14,6 +14,29 @@ const FACTS=[
   ['Open Products Facts','https://world.openproductsfacts.org'],
 ];
 const URL_IMAGEM=/^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i;
+const PRECOMELHOR_API='https://www.precomelhor.com.br';
+const PRECOMELHOR_CDN='pub-251da151f43b454d9e192d38bf5e6d71.r2.dev';
+// Nunca importar links arbitrários da API como URL de download.
+// Aceitar somente o armazenamento oficial e nome vinculado ao EAN solicitado.
+function fotoPrecoMelhorValida(url,ean){
+  if(typeof url!=='string'||url.length>380||!eanValido(ean))return false;
+  try{
+    const u=new URL(url);
+    return u.protocol==='https:'&&u.hostname===PRECOMELHOR_CDN&&
+      !u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&
+      new RegExp('^/'+ean+'(?:_w200)?\\.(?:webp|png|jpe?g)$','i').test(u.pathname);
+  }catch{return false;}
+}
+function registroImagemPrecoMelhor(fotos,ean){
+  const principal=fotos[0];
+  const origem=PRECOMELHOR_API+'/p/'+encodeURIComponent(ean);
+  return {url:principal,urlAltaResolucao:principal,alternativas:fotos.slice(1),
+    principal:true,ordem:1,
+    legenda:'Foto de produto — PreçoMelhor (uso comercial com atribuição: '+origem+')',
+    fonteEAN:{ean,fonte:'PreçoMelhor',licenca:'Uso comercial com atribuição',
+      atribuicao:'PreçoMelhor',urlAtribuicao:origem,atribuidoEm:new Date().toISOString()}};
+}
+
 const CACHE=new Map();
 const AGENTE='FarmaciaPaguePouco/1.0 (site.farmaciapaguepouco.app)';
 const normal=s=>String(s||'').replace(/\D/g,'');
@@ -92,6 +115,24 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         urls.slice(1).map(f=>f.url));
     }
   }
+  // Fallback pela API pública oficial do PreçoMelhor, quando Open Facts
+  // não oferece imagem. Uso comercial permitido com crédito visível.
+  // Nunca usar fotos de URLs desconhecidas, nem aceitar EAN divergente.
+  if(somente!=='dimensoes'&&!resultado.imagem){
+    resultado.consultadas.push('PreçoMelhor');
+    const api=PRECOMELHOR_API+'/api/product/'+encodeURIComponent(ean);
+    const dados=await lerJson(api,{fetcher,timeoutMs:3800});
+    const produto=dados?.product;
+    if(produto&&eanIgual(produto.ean,ean)){
+      const opcoes=[
+        dados?.details?.media_high_res_url,
+        dados?.details?.image_url_main,
+        produto.image_url,
+      ].filter(url=>fotoPrecoMelhorValida(url,ean));
+      const unicas=[...new Set(opcoes)];
+      if(unicas.length)resultado.imagem=registroImagemPrecoMelhor(unicas,ean);
+    }
+  }
   // Google só por API oficial com credenciais existentes. API descontinuada
   // em janeiro de 2027, portanto não depende dela para operar.
   if(googleKey&&googleCx){
@@ -139,7 +180,9 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
 }
 
 export function anexarImagemAusente(produto,imagem){
-  if((produto?.imagens||[]).length||!imagem||!validarFoto(imagem.url)||!eanIgual(produto.ean,imagem.fonteEAN?.ean))
+  if((produto?.imagens||[]).length||!imagem||
+    !(validarFoto(imagem.url)||fotoPrecoMelhorValida(imagem.url,imagem.fonteEAN?.ean))||
+    !eanIgual(produto.ean,imagem.fonteEAN?.ean))
     return {};
   return {imagens:[{...imagem,principal:true,ordem:1}]};
 }

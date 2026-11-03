@@ -11,26 +11,33 @@ const ALLOWED=new Set([
  'images.openproductsfacts.org','static.openproductsfacts.org',
 ]);
 const MAX_SOURCE_BYTES=12*1024*1024;
-export function origemImagemPermitida(url){
+const PRECOMELHOR_CDN='pub-251da151f43b454d9e192d38bf5e6d71.r2.dev';
+export function origemImagemPermitida(url,ean=null){
   if(typeof url!=='string'||url.length>900)return false;
   try{
     const u=new URL(url);
-    return u.protocol==='https:'&&ALLOWED.has(u.hostname.toLowerCase())&&
-      !u.port&&!u.username&&!u.password&&!u.hash&&!u.search&&
-      u.pathname.startsWith('/images/products/')&&
-      /\.(?:jpe?g|png|webp)$/i.test(u.pathname);
+    if(u.protocol!=='https:'||u.port||u.username||u.password||u.hash||u.search)
+      return false;
+    if(ALLOWED.has(u.hostname.toLowerCase()))
+      return u.pathname.startsWith('/images/products/')&&
+        /\.(?:jpe?g|png|webp)$/i.test(u.pathname);
+    // A API PreçoMelhor pode apontar para um CDN próprio, mas o proxy só
+    // baixa o arquivo cujo nome corresponde EXATAMENTE ao EAN pesquisado.
+    return u.hostname===PRECOMELHOR_CDN&&/^\d{8}$|^\d{12,14}$/.test(String(ean||''))&&
+      new RegExp('^/'+ean+'(?:_w200)?\\.(?:webp|png|jpe?g)$','i').test(u.pathname);
   }catch{return false;}
 }
 export function candidatosImagemEAN(imagem){
+  const ean=imagem?.fonteEAN?.ean;
   const urls=[imagem?.urlAltaResolucao,imagem?.url,
     ...(Array.isArray(imagem?.alternativas)?imagem.alternativas:[]),
     ...(Array.isArray(imagem?.candidatos)?imagem.candidatos:[])];
   const ret=[],vistas=new Set();
-  const add=u=>{if(origemImagemPermitida(u)&&!vistas.has(u)){
+  const add=u=>{if(origemImagemPermitida(u,ean)&&!vistas.has(u)){
     vistas.add(u);ret.push(u);
   }};
   for(const url of urls){
-    if(!origemImagemPermitida(url))continue;
+    if(!origemImagemPermitida(url,ean))continue;
     // Formato oficial front_pt.42.full.jpg, conforme API Open Facts.
     // Manter a versão publicada como fallback; não ampliar a miniatura.
     const full=url.replace(/\.(?:100|200|400)\.(jpe?g)$/i,'.full.$1');
@@ -82,7 +89,7 @@ export async function buscarImagemDisponivel(imagem,{
     const timer=setTimeout(()=>ctrl.abort(),timeoutMs);
     try{
       while(true){
-        if(!origemImagemPermitida(url))throw new Error('indisponivel');
+        if(!origemImagemPermitida(url,imagem?.fonteEAN?.ean))throw new Error('indisponivel');
         const resp=await fetcher(url,{
           method:'GET',redirect:'manual',signal:ctrl.signal,
           headers:{Accept:'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
@@ -92,7 +99,7 @@ export async function buscarImagemDisponivel(imagem,{
           const destino=resp.headers?.get?.('location');
           if(!destino||redirects++>=2)throw new Error('indisponivel');
           const novo=new URL(destino,url).href;
-          if(!origemImagemPermitida(novo))throw new Error('indisponivel');
+          if(!origemImagemPermitida(novo,imagem?.fonteEAN?.ean))throw new Error('indisponivel');
           url=novo;continue;
         }
         if(!resp.ok)throw new Error('indisponivel');

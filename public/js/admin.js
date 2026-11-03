@@ -614,7 +614,9 @@
     inp.type='hidden';inp.name='imagens[]';inp.value=midia.url;
     const leg=document.createElement('input');
     leg.type='hidden';leg.name='imagemLegenda[]';
-    leg.value='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+    leg.value=fonte==='PreçoMelhor'
+      ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(eanAtual())+'), convertida em PNG.'
+      :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
     formEAN.append(inp,leg);
     const galeria=$('#galeriaProduto');
     if(galeria){

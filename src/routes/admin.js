@@ -1434,7 +1434,7 @@ function registrarApi(app, db) {
     res.json({ok:true,imagem:result.imagem,
       consultadas:result.consultadas,
       mensagem:result.imagem?'Imagem frontal localizada; verificando resolução e qualidade para gerar PNG.':
-        'Nenhuma imagem frontal licenciada localizada para este EAN. Nenhuma foto foi adicionada.'});
+        'Nenhuma foto de fonte autorizada localizada para este EAN nas bases consultadas. Nenhuma foto foi adicionada.'});
   });
   // Pesquisa separada para ativação pela listagem: devolve somente
   // o candidato (não grava JPEG e não tenta preencher medidas).
@@ -1480,7 +1480,9 @@ function registrarApi(app, db) {
       Number(m.largura)>=600&&Number(m.altura)>=600);
     if(!media)return void res.json({ok:false,erro:'Imagem PNG de boa resolução não encontrada no armazenamento.'},400);
     const fonte=String(req.body.fonte||'Open Facts').slice(0,90);
-    const legenda='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+    const legenda=fonte==='PreçoMelhor'
+      ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.'
+      :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
     db.collection('products').update(p.id,{imagens:[{url,principal:true,ordem:1,legenda}]});
     logAdmin(db,req.adminUser,'anexou_imagem_png_ean','produto',p.id,{ean:p.ean,imagem:url},req);
     res.json({ok:true,adicionada:true});
