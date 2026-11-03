@@ -257,6 +257,21 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               ${campoAdmin({ nome: 'quantidade', rotulo: 'Quantidade em estoque', tipo: 'number', min: '0', valor: p.estoque?.quantidade ?? 0 })}
               ${campoAdmin({ nome: 'estoqueMinimo', rotulo: 'Estoque mínimo (alerta)', tipo: 'number', min: '0', valor: p.estoque?.minimo ?? 5 })}
             </div>
+            <div class="alerta info" id="painelBuscaEAN">
+              <strong>📦 Dimensões automáticas pelo EAN</strong>
+              <p class="texto-pequeno mt-1">Ao cadastrar ou ativar, o sistema procura peso e medidas em bases públicas.
+              A pesquisa também pode ser feita agora; campos preenchidos por você não serão substituídos.</p>
+              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">🔎 Buscar peso e dimensões pelo EAN</button>
+              <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaEAN" role="status">
+                ${p.logisticaFonte?.origem
+                  ? `Fonte: ${e(p.logisticaFonte.origem)} · ${p.logisticaFonte.revisaoPendente ? 'Conferência da embalagem pendente' : 'Medidas revisadas'}`
+                  : 'Nenhuma busca realizada neste formulário.'}
+              </p>
+              ${p.logisticaFonte?.revisaoPendente ? `<label class="check mt-1">
+                <input type="checkbox" name="confirmouMedidasLogisticas" value="1">
+                <span>Conferi as medidas e o peso da embalagem que será enviada.</span>
+              </label>` : ''}
+            </div>
             <div class="campo-linha">
               ${campoAdmin({ nome: 'peso', rotulo: 'Peso (kg)', tipo: 'number', step: '0.001', min: '0', valor: p.peso ?? 0 })}
               ${campoAdmin({ nome: 'largura', rotulo: 'Largura (cm)', tipo: 'number', step: '0.1', min: '0', valor: p.dimensoes?.largura ?? 0 })}
