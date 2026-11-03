@@ -29,6 +29,16 @@ test('pesquisa pelo EAN somente no Google Imagens BR, sem expor token na URL',as
  assert.equal(url.searchParams.get('brd_json'),'1');
  assert.doesNotMatch(payload.url,/SEGREDO/);
 });
+test('interpreta campos nativos images[].original_image e image_alt da Bright Data',()=>{
+ const imagens=candidatosGoogleImagens({images:[{
+   original_image:'https://cdn.fabricante.com.br/7891000100103.jpg',
+   image_alt:'Foto frontal do produto '+ean,
+   link:'https://www.google.com/imgres?imgurl=https%3A%2F%2Fcdn.fabricante.com.br%2F7891000100103.jpg'
+ }]},ean);
+ assert.equal(imagens.length,1);
+ assert.match(imagens[0].url,/7891000100103\.jpg$/);
+ assert.match(imagens[0].titulo,/Foto frontal/);
+});
 test('rejeita EAN inválido antes da consulta e exige a configuração',async()=>{
  const fetcher=()=>{throw Error('não deveria consultar')};
  assert.equal((await consultarGoogleImagensEAN('999',{fetcher})).status,400);
