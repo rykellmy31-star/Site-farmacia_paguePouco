@@ -15,7 +15,6 @@ import { sendMail } from '../lib/mailer.js';
 import { enfileirarEvolution, autorizouWhatsappPedidos, autorizouWhatsappProdutos, numeroWhatsapp, decidirAvisosWhatsappPedido } from '../lib/evolution-whatsapp.js';
 import { config } from '../config.js';
 import { uid } from '../lib/store.js';
-import { vendedoresAtivos } from '../lib/sellers.js';
 import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 import { pedidoPresencialPorCEP } from '../lib/pagamento-presencial.js';
 
@@ -251,7 +250,6 @@ export function registrarRotasCheckout(app, db) {
     if(local)return void res.html(telaPagamentoPresencial(ctx,{
       totais,endereco:cart.frete.endereco,
       frete:{label:revalidado.opcao.label,prazo:revalidado.opcao.prazo},
-      vendedores:vendedoresAtivos(db),
       erros:req.query.get('erro')?{pagamento:req.query.get('erro')}:{},
     }));
     ctx.infoPagamento = providerPublicInfo(db);
@@ -266,7 +264,6 @@ export function registrarRotasCheckout(app, db) {
         descontoPix: Number(cfgPag.descontoPixPercentual || 0),
       },
       endereco: cart.frete.endereco,
-      vendedores: vendedoresAtivos(db),
       frete: { label: revalidado.opcao.label, prazo: revalidado.opcao.prazo },
     }));
   });
@@ -326,7 +323,8 @@ export function registrarRotasCheckout(app, db) {
         trocoPara:String(req.body.trocoPara||''),
       }:null,
       cupomCodigo: cart.cupom?.codigo || null,
-      vendedorId: req.body.vendedorId || null,
+      // Sem seleção de vendedor no checkout público; a atribuição é interna.
+      vendedorId: null,
       receberWhatsappPedido: avisosWhatsapp, enviarItensWhatsappPedido: permiteItensWhatsapp, req,
     });
 
