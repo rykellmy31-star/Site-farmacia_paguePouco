@@ -114,7 +114,12 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         p.selected_images?.front?.display?.en,p.image_url]
         .filter(validarFoto);
       const urls=[...new Set(fotos)];
-      if(urls.length)adicionar(registroImagem(urls[0],nome,ean,urls.slice(1)));
+      if(urls.length){
+        adicionar(registroImagem(urls[0],nome,ean,urls.slice(1)));
+        // Uma imagem da mesma base pode ter várias fotos frontais.
+        // Se a primeira for de resolução baixa, tentar também as outras.
+        for(const url of urls.slice(1))adicionar(registroImagem(url,nome,ean));
+      }
     }
   }
   // Fallback pela API pública oficial do PreçoMelhor, quando Open Facts
@@ -132,7 +137,10 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         produto.image_url,
       ].filter(url=>fotoPrecoMelhorValida(url,ean));
       const unicas=[...new Set(opcoes)];
-      if(unicas.length)adicionar(registroImagemPrecoMelhor(unicas,ean));
+      if(unicas.length){
+        adicionar(registroImagemPrecoMelhor(unicas,ean));
+        for(const url of unicas.slice(1))adicionar(registroImagemPrecoMelhor([url],ean));
+      }
     }
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
