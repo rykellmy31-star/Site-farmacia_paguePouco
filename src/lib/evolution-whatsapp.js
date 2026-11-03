@@ -130,29 +130,52 @@ export function enfileirarEvolution(db,pedido,tipo){
   if(col.get(id))return {ok:true,duplicado:true};
   const codigo=codigoSeguro(pedido.codigo);
   const itens=resumoItensWhatsapp(pedido,{paraResponsavel:['responsavel_pago','responsavel_local'].includes(tipo)});
+  const metodoEscolhido=({
+    pix:'Pix',credit_card:'Cartão de crédito',debit_card:'Cartão de débito',
+    cash:'Dinheiro',
+  })[pedido.metodoPagamento]||'Não informado';
+  const formaEscolhida='Forma de pagamento escolhida: *'+metodoEscolhido+
+    '* (na entrega ou retirada).\n';
+  const quantidadeItens=(pedido.itens||[]).reduce((n,i)=>n+(Number(i.quantidade)||0),0);
+  const quantidadeMsg='Quantidade de itens: '+quantidadeItens+' unidade(s).\n';
+  const recebimento=pedido.pagamentoPresencial?.recebimento;
+  const metodoRecebido=({
+    pix:'Pix',credit_card:'Cartão de crédito',
+    debit_card:'Cartão de débito',cash:'Dinheiro',
+  })[recebimento?.metodo]||metodoEscolhido;
   const texto=tipo==='responsavel_local'
     ? '🔔 NOVO PEDIDO LOCAL — FARMÁCIA PAGUE POUCO\n📦 Pedido: #'+codigo+
       (itens ? ' :'+itens : '\n')+
-      'PAGAMENTO NA ENTREGA/RETIRADA: '+
-      ({pix:'Pix',credit_card:'Crédito',debit_card:'Débito',cash:'Dinheiro'}[pedido.metodoPagamento]||'')+
+      quantidadeMsg+formaEscolhida+
       (pedido.pagamentoPresencial?.precisaTroco
         ? '\nTroco para: R$ '+(pedido.pagamentoPresencial.trocoParaCentavos/100).toFixed(2)
         : '')+'\nPagamento pendente. Consulte endereço e detalhes no painel.'
     : tipo==='responsavel_pago'
     ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+
       (itens ? ' :'+itens : '\n')+
-      'O pagamento foi confirmado. Acesse o painel para separar o pedido.'
+      (pedido.pagamentoPresencial
+        ? 'Pagamento presencial recebido: '+metodoRecebido+'. '+
+          (pedido.statusOperacional==='entregue'
+            ? 'Pedido entregue ao cliente.'
+            : 'Confira o andamento no painel.')
+        : 'O pagamento foi confirmado. Acesse o painel para separar o pedido.')
     : tipo==='cliente_pago'
     ? 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! ✅\n'+
       'O pagamento do seu pedido #'+codigo+' na Farmácia Pague Pouco foi confirmado!'+
       (itens || '\n')+
-      'Nossa equipe vai preparar seu pedido. Acompanhe o andamento pelo site.\n'+
+      (pedido.pagamentoPresencial
+        ? 'Forma de pagamento recebida: '+metodoRecebido+'. '+
+          (pedido.statusOperacional==='entregue'
+            ? 'Seu pedido foi entregue.\n'
+            : 'Acompanhe o andamento do pedido pelo site.\n')
+        : 'Nossa equipe vai preparar seu pedido. Acompanhe o andamento pelo site.\n')+
       'Esta mensagem é automática.'
     : 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! 👋\n'+
       'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+
       (itens ? ' :'+itens : '.\n')+
       (pedido.pagamentoPresencial
-        ? 'O pedido foi registrado. Pague na entrega ou retirada com a forma escolhida. Nenhuma cobrança foi gerada pelo site.\n'
+        ? quantidadeMsg+formaEscolhida+
+          'O pedido foi registrado para pagamento no recebimento. Nenhuma cobrança foi gerada pelo site.\n'
         : 'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!\n')+
       'Acompanhe seu pedido pelo site. Esta mensagem é automática.';
   col.insert({id,pedidoId:pedido.id,tipo,numero,texto,status:'fila',
