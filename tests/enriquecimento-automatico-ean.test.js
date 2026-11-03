@@ -25,7 +25,7 @@ test('EAN real igual, foto licenciada incorporada e proveniência preservada',as
  assert.equal(r.imagem.url,imagem);
  assert.match(r.imagem.legenda,/CC BY-SA 3\.0/);
  assert.equal(r.imagem.fonteEAN.ean,ean);
- assert.equal(chamados.length,6); // quatro Open Facts + PreçoMelhor + Commons
+ assert.equal(chamados.length,7); // quatro Open Facts + PreçoMelhor + Commons + Openverse
  assert.equal(chamados.some(url=>url.includes('googleapis')),false);
  const patch=anexarImagemAusente({ean,imagens:[]},r.imagem);
  assert.equal(patch.imagens.length,1);
