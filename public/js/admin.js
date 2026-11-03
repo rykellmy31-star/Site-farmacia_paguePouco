@@ -505,7 +505,8 @@
     const acao=formEAN?.getAttribute('action')||'';
     const id=acao.match(/^\/admin\/api\/produtos\/([^/]+)$/)?.[1]||'';
     return {produtoId:id,nome:String(formEAN?.querySelector('[name="nome"]')?.value||'').slice(0,130),
-      marca:String(formEAN?.querySelector('[name="marca"]')?.value||'').slice(0,80)};
+      marca:String(formEAN?.querySelector('[name="marca"]')?.value||
+        formEAN?.querySelector('[name="fabricante"]')?.value||'').slice(0,80)};
   }
   async function converterFotoEANparaPNG(ean,indice=0,contexto=contextoBuscaImagemEAN()){
     const params=new URLSearchParams({ean,indice:String(indice),
@@ -623,7 +624,12 @@
     const leg=document.createElement('input');
     leg.type='hidden';leg.name='imagemLegenda[]';
     leg.value=fonte==='PreçoMelhor'
-      ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(eanAtual())+'), convertida em PNG.'
+      ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: '+
+        'https://www.precomelhor.com.br/p/'+
+        encodeURIComponent(meta.correspondencia==='gtin14-embalagem'&&meta.codigoNaFonte
+          ?meta.codigoNaFonte:eanAtual())+'), convertida em PNG.'+
+        (meta.correspondencia==='gtin14-embalagem'
+          ?' GTIN14 relacionado à embalagem de varejo; confira foto e quantidade.':'')
       :fonte==='Dailus (fabricante)'
         ?'Foto frontal — catálogo oficial Dailus ('+String(meta.atribuicao||'')+
           '); direitos reservados da fabricante; convertida em PNG.'
@@ -685,7 +691,7 @@
               '/vincular-imagem-ean',{
                 ean,imagemUrl:midia.url,fonte,
                 atribuicao:meta.atribuicao,licenca:meta.licenca,autor:meta.autor,
-                correspondencia:meta.correspondencia,
+                correspondencia:meta.correspondencia,codigoNaFonte:meta.codigoNaFonte,
               });
             if(!salvo.adicionada){
               atualizarStatusFoto(salvo.mensagem||'Foto existente preservada.');
