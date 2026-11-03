@@ -1440,8 +1440,8 @@ function registrarApi(app, db) {
     res.json({ok:true,imagem:result.imagem,fontes,
       consultadas:result.consultadas,
       googleAutomatico:!!(config.googleEan?.key&&config.googleEan?.cx),
-      mensagem:fontes.length?'Encontradas '+fontes.length+' fontes. Verificando as fotos, uma por vez.':
-        'Nenhuma foto de fonte autorizada localizada para este EAN nas bases consultadas. Nenhuma foto foi adicionada.'});
+      mensagem:fontes.length?'Encontradas '+fontes.length+' fotos candidatas nas fontes autorizadas. Verificando a qualidade.':
+        'Nenhuma foto compatível com o EAN localizada nas fontes automáticas disponíveis. Nenhuma foto foi adicionada.'});
   });
   // Pesquisa separada para ativação pela listagem: devolve somente
   // o candidato (não grava JPEG e não tenta preencher medidas).
@@ -1467,7 +1467,7 @@ function registrarApi(app, db) {
     const ean=String(req.query.get('ean')||'');
     if(!eanValido(ean))return void res.text('EAN inválido',400);
     const indice=Number(req.query.get('indice')||0);
-    if(!Number.isInteger(indice)||indice<0||indice>20)
+    if(!Number.isInteger(indice)||indice<0||indice>35)
       return void res.text('Índice de imagem inválido.',400);
     const dados=await buscarDadosExternosEAN(ean,{somente:'imagem'});
     const candidata=(dados.imagensCandidatas||[])[indice];
@@ -1509,6 +1509,19 @@ function registrarApi(app, db) {
          !/^(?:CC BY(?:-SA)? (?:2\.0|2\.5|3\.0|4\.0)|CC0(?: 1\.0)?|Public domain)$/i.test(licenca))
         return void res.json({ok:false,erro:'Atribuição ou licença da foto inválida.'},400);
       legenda='Foto frontal — Wikimedia Commons; '+licenca+'; autor: '+autor+
+        '; origem: '+origem+'; convertida em PNG.';
+    }else if(fonte==='Openverse (Flickr)'){
+      const origem=String(req.body.atribuicao||'');
+      const licenca=String(req.body.licenca||'');
+      const autor=cleanText(req.body.autor,120);
+      let link;
+      try{link=new URL(origem)}catch{return void res.json({ok:false,erro:'Origem Flickr inválida.'},400)}
+      if(link.protocol!=='https:'||!['flickr.com','www.flickr.com'].includes(link.hostname)||
+         link.port||link.username||link.password||link.search||link.hash||
+         !/^\/photos\/[^/]+\/\d{5,15}\/?$/i.test(link.pathname)||
+         !/^(?:CC BY(?:-SA)? (?:2\.0|2\.5|3\.0|4\.0)|CC0 1\.0)$/i.test(licenca))
+        return void res.json({ok:false,erro:'Atribuição ou licença Openverse inválida.'},400);
+      legenda='Foto frontal — Openverse (Flickr); '+licenca+'; autor: '+autor+
         '; origem: '+origem+'; convertida em PNG.';
     }else if(fonte==='PreçoMelhor'){
       legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.';
