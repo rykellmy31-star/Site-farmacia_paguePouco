@@ -465,7 +465,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   // autoriza uma foto: nome, marca, tamanho e unidades devem coincidir.
   if(somente!=='dimensoes'&&!resultado.imagem){
     const varejo=gtinVarejoDaEmbalagem(ean);
-    if(varejo&&/\\bPERSONAL\\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||''))){
+    if(varejo&&/\bPERSONAL\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||''))){
       resultado.consultadas.push('PreçoMelhor — GTIN de embalagem Personal');
       const referencia13=await lerJson(PRECOMELHOR_API+'/api/product/'+varejo,
         {fetcher,timeoutMs:3900});
