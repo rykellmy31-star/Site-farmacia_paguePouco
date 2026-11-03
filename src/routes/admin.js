@@ -50,6 +50,7 @@ import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
+import { buscarMedidasPorEAN, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1257,6 +1258,24 @@ function registrarApi(app, db) {
   });
 
   /* ------------------------------ PRODUTOS ------------------------------ */
+  // Busca por EAN: endpoint com permissão administrativa, sem modificar
+  // cadastro até o operador salvar o formulário.
+  app.post('/admin/api/produtos/dimensoes-ean', async (req,res) => {
+    if (!guardApi(req,res,'produtos.editar')) return;
+    const ean=String(req.body?.ean||'');
+    if(!eanValido(ean))
+      return void res.json({ok:false,erro:'EAN inválido. Confira o código de barras.'},400);
+    const resultado=await buscarMedidasPorEAN(ean);
+    res.set('Cache-Control','no-store');
+    res.json(resultado);
+  });
+  async function buscarMedidasFaltantes(dados) {
+    if(!dados.ativo||!eanValido(dados.ean)||[dados.peso,
+      dados.dimensoes?.altura,dados.dimensoes?.largura,
+      dados.dimensoes?.comprimento].every(v=>Number(v)>0))return {dados,resultado:null};
+    const resultado=await buscarMedidasPorEAN(dados.ean);
+    return {dados:{...dados,...aplicarMedidasAusentes(dados,resultado)},resultado};
+  }
   const lerProdutoDoForm = (body) => {
     const arr = (v) => (Array.isArray(v) ? v : v ? [v] : []);
     const imagens = arr(body['imagens[]']).map((url, i) => ({
@@ -1310,10 +1329,10 @@ function registrarApi(app, db) {
     };
   };
 
-  app.post('/admin/api/produtos', (req, res) => {
+  app.post('/admin/api/produtos', async (req, res) => {
     if (!guardApi(req, res, 'produtos.criar')) return;
     if (!cleanText(req.body.nome, 200)) return void res.json({ ok: false, erro: 'Informe o nome do produto.' }, 400);
-    const dados = lerProdutoDoForm(req.body);
+    const {dados,resultado:medidasBusca}=await buscarMedidasFaltantes(lerProdutoDoForm(req.body));
     dados.slug = slugUnicoProduto(db, dados.nome);
     const quantidadeInicial = Math.max(0, Number(req.body.quantidade) || 0);
     if (inovaAtiva() && quantidadeInicial > 0) {
@@ -1333,10 +1352,11 @@ function registrarApi(app, db) {
       });
     }
     logAdmin(db, req.adminUser, 'criou_produto', 'produto', produto.id, { nome: produto.nome }, req);
-    res.json({ ok: true, id: produto.id, url: `/admin/produtos/${produto.id}` });
+    res.json({ ok: true, id: produto.id, url: `/admin/produtos/${produto.id}`,
+      medidasEAN:medidasBusca?.encontrado===true });
   });
 
-  app.post('/admin/api/produtos/:id', (req, res) => {
+  app.post('/admin/api/produtos/:id', async (req, res) => {
     if (!guardApi(req, res, 'produtos.editar')) return;
     const produto = db.collection('products').get(req.params.id);
     if (!produto) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
@@ -1357,7 +1377,15 @@ function registrarApi(app, db) {
       return void res.json({ok:false,erro:'Este cadastro já foi aprovado. Confirme a revisão sanitária e salve as alterações.'},409);
     if (aprovarAoSalvar && revisaoInovaPendente && !confirmouRevisao)
       return void res.json({ok:false,erro:'Confira a classificação sanitária e marque a confirmação antes de salvar.'},409);
-    const dados = lerProdutoDoForm(req.body);
+    let dados = lerProdutoDoForm(req.body);
+    // Preserva a fonte e evita reconsulta ao editar produto já preenchido.
+    dados.logisticaFonte=produto.logisticaFonte||null;
+    // Se o operador conferiu as dimensões da embalagem, marca como revisadas.
+    if(req.body.confirmouMedidasLogisticas==='1'&&dados.logisticaFonte)
+      dados.logisticaFonte={...dados.logisticaFonte,revisaoPendente:false,
+        revisadoEm:new Date().toISOString(),revisadoPor:req.adminUser.id};
+    const buscaMedidas=await buscarMedidasFaltantes(dados);
+    dados=buscaMedidas.dados;
     dados.slug = produto.slug;
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
     const estoque = { ...(produto.estoque || {}) };
@@ -1428,10 +1456,11 @@ function registrarApi(app, db) {
     }
     logAdmin(db, req.adminUser, 'editou_produto', 'produto', produto.id, { nome: dados.nome }, req);
     res.json({ ok: true, id: produto.id, aprovacaoAplicada: aprovarAoSalvar,
-      revisaoConcluida: finalizarRevisao, ativacaoAutomatica, motivoAtivacao });
+      revisaoConcluida: finalizarRevisao, ativacaoAutomatica, motivoAtivacao,
+      medidasEAN:buscaMedidas.resultado?.encontrado===true });
   });
 
-  app.post('/admin/api/produtos/:id/ativar', (req, res) => {
+  app.post('/admin/api/produtos/:id/ativar', async (req, res) => {
     if (!guardApi(req, res, 'produtos.editar')) return;
     const p = db.collection('products').get(req.params.id);
     if (!p) return void res.json({ ok: false, erro: 'Produto não encontrado.' }, 404);
@@ -1442,9 +1471,18 @@ function registrarApi(app, db) {
       if(!aptidao.ok)
         return void res.json({ok:false,erro:aptidao.motivo,codigo:aptidao.codigo},409);
     }
-    db.collection('products').update(p.id, { ativo: !p.ativo });
+    // Ao ativar, tenta preencher medidas faltantes sem jamais bloquear a
+    // venda por ausência de dados em uma base pública. Frete só usa medidas
+    // reais cadastradas; preços e restrições sanitárias seguem inalterados.
+    let dados={ativo:!p.ativo};
+    if(!p.ativo){
+      const busca=await buscarMedidasFaltantes({...p,ativo:true});
+      const medidas=aplicarMedidasAusentes(p,busca.resultado);
+      dados={...dados,...medidas};
+    }
+    db.collection('products').update(p.id, dados);
     logAdmin(db, req.adminUser, p.ativo ? 'desativou_produto' : 'ativou_produto', 'produto', p.id, { nome: p.nome }, req);
-    res.json({ ok: true, ativo: !p.ativo });
+    res.json({ ok: true, ativo: !p.ativo, medidasEAN:Boolean(dados.logisticaFonte) });
   });
 
   app.post('/admin/api/produtos/:id/excluir', (req, res) => {
