@@ -298,7 +298,7 @@ test('um clique salva imagem PNG no cadastro existente, sem abrir outra aba',()=
   const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
   const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
   assert.match(js,/const produtoExistente=destino\.match/);
-  assert.match(js,/await post\('\/admin\/api\/produtos\/\+'/);
+  assert.match(js,/const salvo=await post/);
   assert.match(js,/vincular-imagem-ean/);
   assert.match(js,/salvaNoProduto\?'salva automaticamente no produto/);
   assert.match(route,/fonte==='Wikimedia Commons'/);
