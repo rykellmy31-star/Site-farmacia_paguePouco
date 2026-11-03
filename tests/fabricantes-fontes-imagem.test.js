@@ -49,3 +49,17 @@ test('inventário vem do banco protegido e está linkado na lista de produtos',(
  assert.match(view,/e\(grupo\.marcas\.join/);
  assert.match(view,/href="\/admin\/produtos\/fontes-de-imagens"/);
 });
+
+test('buscador de fotos leva fabricante real do cadastro para verificação do SKU',()=>{
+ const root=new URL('../',import.meta.url);
+ const admin=readFileSync(new URL('src/routes/admin.js',root),'utf8');
+ const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
+ const en=readFileSync(new URL('src/lib/enriquecimento-ean.js',root),'utf8');
+ assert.match(admin,/fabricanteProduto:String\(cadastrado\.fabricante\|\|''\)/);
+ assert.match(admin,/fabricanteProduto:cleanText\(entrada\?\.fabricante,100\)/);
+ assert.match(admin,/fabricante:req\.query\.get\('fabricante'\)/);
+ assert.match(js,/fabricante:String\(formEAN\?\.querySelector\('\[name="fabricante"\]'\)/);
+ assert.match(js,/fabricante:contexto\.fabricante\|\|''/);
+ assert.match(en,/fabricanteProduto=''/);
+ assert.match(en,/String\(fabricanteProduto\|\|''\)/);
+});
