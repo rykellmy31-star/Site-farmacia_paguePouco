@@ -135,7 +135,7 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
  * Cria o pedido a partir do carrinho, REVALIDANDO tudo no servidor.
  * @returns {{ok:boolean, erro?:string, pedido?:object, avisos?:string[]}}
  */
-export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, enviarItensWhatsappPedido = false, req = null }) {
+export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cepFarmacia = '', cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, enviarItensWhatsappPedido = false, req = null }) {
   const avisos = [];
   const loja = db.collection('settings').get('loja') || {};
   if (loja.lojaAberta === false) return { ok: false, erro: 'A loja está fechada para novos pedidos.' };
@@ -197,7 +197,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
 
   // 3) Frete recalculado no servidor
   const frete = resolverFreteEscolhido({
-    config: freteConfig,
+    config: freteConfig, cepFarmacia,
     cep: endereco.cep,
     uf: endereco.uf,
     cidade: endereco.cidade,
