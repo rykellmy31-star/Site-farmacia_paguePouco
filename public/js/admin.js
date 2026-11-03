@@ -429,25 +429,36 @@
     const campo=nome=>formEAN.querySelector('[name="'+nome+'"]');
     const btn=$('#botaoBuscarMedidasEAN');
     const status=$('#resultadoBuscaEAN');
+    const linkWeb=$('#linkPesquisaEAN');
+    const produtoId=formEAN.getAttribute('action')?.split('/').pop()||null;
     let codigoConsultado='';
     let emConsulta=false;
-    async function consultarMedidasEAN({silencioso=false}={}){
+    async function consultarMedidasEAN({silencioso=false,forcar=false}={}){
       const ean=String(campo('ean')?.value||'').replace(/[\s.-]/g,'');
       if(!/^\d{8}$|^\d{12,14}$/.test(ean)){
         if(!silencioso)notificar('Informe um EAN válido para pesquisar.','erro');
         return;
       }
-      if(emConsulta||ean===codigoConsultado)return;
+      if(emConsulta||(!forcar&&ean===codigoConsultado))return;
       emConsulta=true;if(btn)btn.disabled=true;
       if(status)status.textContent='Pesquisando medidas do EAN em catálogos públicos...';
       try{
-        const r=await post('/admin/api/produtos/dimensoes-ean',{ean});
+        const r=await post('/admin/api/produtos/dimensoes-ean',{ean,forcar,produtoId});
         if(ean!==String(campo('ean')?.value||'').replace(/[\s.-]/g,''))return;
         codigoConsultado=ean;
         if(!r.encontrado){
-          if(status)status.textContent=r.mensagem||'Nenhuma medida confiável encontrada.';
+          if(status)status.textContent=(r.mensagem||'Nenhuma medida confiável encontrada.')+
+            (r.consultadas?.length?' Fontes consultadas: '+r.consultadas.join(', ')+'.':'');
+          if(btn)btn.textContent='🔄 Tentar buscar novamente pelo EAN';
+          if(linkWeb){
+            linkWeb.href='https://www.google.com/search?q='+encodeURIComponent(
+              'EAN '+ean+' peso bruto dimensões embalagem altura largura comprimento');
+            linkWeb.style.display='inline-flex';
+          }
           return;
         }
+        if(linkWeb){linkWeb.removeAttribute('href');linkWeb.style.display='none';}
+        if(btn)btn.textContent='🔎 Buscar peso e dimensões pelo EAN';
         const valores={peso:r.peso,largura:r.dimensoes?.largura,
           altura:r.dimensoes?.altura,comprimento:r.dimensoes?.comprimento};
         const preenchidos=[];
@@ -468,7 +479,7 @@
       }finally{emConsulta=false;if(btn)btn.disabled=false;}
     }
     buscaEANAntesDeSalvar=consultarMedidasEAN;
-    btn?.addEventListener('click',()=>consultarMedidasEAN());
+    btn?.addEventListener('click',()=>consultarMedidasEAN({forcar:true}));
     // Pesquisa quando um novo EAN é digitado. Evita requisições repetidas
     // e jamais sobrescreve peso/dimensões que o operador já informou.
     campo('ean')?.addEventListener('change',()=>{
