@@ -963,8 +963,9 @@ export function registrarRotasAdmin(app, db) {
     if (!guard(req, res, 'pedidos.editar')) return;
     const pedido = db.collection('orders').get(req.params.id);
     if (!pedido) return void res.status(404).html('Pedido não encontrado.');
-    if (pedido.statusFinanceiro !== 'aprovado')
-      return void res.status(409).html('Somente pedidos com pagamento aprovado podem ser recebidos.');
+    if (pedido.statusFinanceiro !== 'aprovado' && !(
+      pedido.pagamentoPresencial && pedido.statusFinanceiro==='pendente'))
+      return void res.status(409).html('Este pedido precisa de pagamento aprovado para ser recebido.');
     if (!pedido.pedidoRecebidoEm) {
       const em = new Date().toISOString();
       db.collection('orders').update(pedido.id, {
