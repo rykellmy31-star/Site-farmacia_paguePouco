@@ -102,6 +102,10 @@ export const config = {
     key: process.env.GOOGLE_CSE_API_KEY || '',
     cx: process.env.GOOGLE_CSE_CX || '',
   },
+  brightDataGoogle: {
+    token: process.env.BRIGHTDATA_API_TOKEN || '',
+    zone: process.env.BRIGHTDATA_SERP_ZONE || 'cr_farmacia_imagens',
+  },
   melhorEnvio: {
     // APENAS cotação: nenhuma permissão de compra/geração de etiquetas.
     token: process.env.MELHOR_ENVIO_TOKEN || '',
@@ -164,6 +168,10 @@ export function configureCloudflare(env, origin, persistentSecret) {
   config.googleEan = {
     key: env.GOOGLE_CSE_API_KEY || '',
     cx: env.GOOGLE_CSE_CX || '',
+  };
+  config.brightDataGoogle = {
+    token: env.BRIGHTDATA_API_TOKEN || '',
+    zone: env.BRIGHTDATA_SERP_ZONE || 'cr_farmacia_imagens',
   };
   config.melhorEnvio = {
     token: env.MELHOR_ENVIO_TOKEN || '',
