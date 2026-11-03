@@ -533,3 +533,19 @@ test('Crédito de fotos oficiais Dailus presente na página e sem falsa licença
  assert.match(partial,/export function creditoFotoDailus/);
  assert.match(publicView,/creditoFotoDailus\(produto\)/);
 });
+
+test('Brigadeirão: botão obtém duas fotos reais cadastradas pelo fabricante sem depender da API',async()=>{
+ const codigos=['07894222042381','7894222042381'];
+ for(const ean of codigos){
+  const r=await buscarDadosExternosEAN(ean,{somente:'imagem',force:true,googleKey:'',googleCx:''});
+  assert.equal(r.ok,true);
+  assert.equal(r.imagensCandidatas.length,2);
+  assert.equal(r.imagem.fonteEAN.fonte,'Dailus (fabricante)');
+  assert.equal(r.imagem.fonteEAN.ean,ean);
+  assert.equal(r.imagem.fonteEAN.urlAtribuicao,
+    'https://www.dailus.com.br/products/esmalte-brigadeirao');
+  assert.ok(r.consultadas.some(x=>x.includes('EAN conferido')));
+  assert.ok(r.imagensCandidatas.every(img=>origemImagemPermitida(img.url,ean)));
+  assert.ok(r.imagensCandidatas.every(img=>img.url.includes('BRIGADEIRAO')));
+ }
+});
