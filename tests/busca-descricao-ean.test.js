@@ -23,7 +23,7 @@ test('busca gratuita retorna descrição, nome, marca e embalagem pelo EAN exato
  assert.equal(r.nome,'Sabonete Lavanda');assert.equal(r.marca,'Marca Exemplo');
  assert.match(r.descricao,/Sabonete em barra/);
  assert.match(r.descricao,/90 g/);
- assert.match(r.descricao,/Fonte:/);
+ assert.match(r.descricao,/fonte: Open Beauty Facts/);
  assert.equal(urls.length,3);
  assert.ok(urls.every(url=>url.includes('/api/v2/product/')));
 });
