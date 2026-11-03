@@ -446,3 +446,90 @@ test('admin conserva nome e marca durante pesquisa, conversão e salvamento do e
  assert.match(js,/new URLSearchParams\(\{ean,indice:/);
  assert.match(js,/correspondencia:meta\.correspondencia/);
 });
+
+test('GTIN-14 com zero inicial acha esmalte Brigadeirão na loja oficial Dailus por barcode exato',async()=>{
+ const e='07894222042381';
+ const source='https://cdn.shopify.com/s/files/1/0936/1702/9411/files/800x915_BRIGADEIRAO_02_jpg.webp?v=1776547134';
+ const src2='https://cdn.shopify.com/s/files/1/0936/1702/9411/files/800x915_BRIGADEIRAO_01_jpg.webp?v=1776547134';
+ const mock={vendor:'DAILUS',type:'Esmaltes',title:'Esmalte Choco Cherry – Brigadeirão',
+   handle:'esmalte-brigadeirao',variants:[{barcode:'7894222042381'}],
+   media:[{media_type:'image',width:1667,height:1906,src:source},
+     {media_type:'image',width:1667,height:1906,src:src2}]};
+ const urls=[];
+ const fetcher=async url=>{
+   urls.push(url);
+   if(url.includes('/products/esmalte-brigadeirao.js'))
+     return {ok:true,json:async()=>mock};
+   if(url.includes('/search/suggest.json'))return {ok:true,json:async()=>({resources:{results:{products:[]}}})};
+   return {ok:false};
+ };
+ const r=await buscarDadosExternosEAN(e,{fetcher,somente:'imagem',googleKey:'',googleCx:'',
+   nomeProduto:'ESMALTE DAILUS CHOCO CHERRY BRIGADEIRÃO 8ML',marcaProduto:'DAILUS'});
+ assert.equal(r.imagem.fonteEAN.fonte,'Dailus (fabricante)');
+ assert.equal(r.imagem.fonteEAN.ean,e);
+ assert.equal(r.imagem.fonteEAN.urlAtribuicao,'https://www.dailus.com.br/products/esmalte-brigadeirao');
+ assert.ok(r.imagem.url.endsWith('800x915_BRIGADEIRAO_02_jpg.webp'));
+ assert.equal(r.imagem.alternativas.length,1);
+ assert.equal(origemImagemPermitida(r.imagem.url,e),true);
+ assert.equal(origemImagemPermitida(r.imagem.url+'?target=other',e),false);
+ assert.ok(urls.some(u=>u.endsWith('/products/esmalte-brigadeirao.js')));
+});
+
+test('Dailus oficial: impede barcode de outra tonalidade, fornecedor falso e CDN externa',async()=>{
+ const e='07894222042381';
+ const src='https://cdn.shopify.com/s/files/1/0936/1702/9411/files/800x915_BRIGADEIRAO_02_jpg.webp?v=1776547134';
+ const original={vendor:'DAILUS',type:'Esmaltes',handle:'esmalte-brigadeirao',
+   variants:[{barcode:'7894222042381'}],media:[{media_type:'image',width:1667,height:1906,src}]};
+ for(const alterado of [
+   {...original,variants:[{barcode:'7894222042374'}]},
+   {...original,vendor:'VENDEDOR DESCONHECIDO'},
+   {...original,media:[{...original.media[0],src:'https://evil.test/foto.webp'}]},
+   {...original,media:[{...original.media[0],src:src.replace('cdn.shopify.com','cdn.shopify.com.evil.test')}]},
+   {...original,media:[{...original.media[0],src:src.replace('BRIGADEIRAO_02','OUTRA_MARCA_02').replace('/1/0936/1702/9411/','/1/0000/0000/0000/')}]},
+ ]){
+   const r=await buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'',googleCx:'',
+     fetcher:async url=>url.includes('/products/esmalte-brigadeirao.js')
+       ?{ok:true,json:async()=>alterado}:{ok:false}});
+   assert.equal(r.imagem,null);
+ }
+});
+
+test('Dailus fabricante é encontrado para outros esmaltes por cor via busca oficial',async()=>{
+ const e='07894222042374';
+ const urls=[];
+ const foto='https://cdn.shopify.com/s/files/1/0936/1702/9411/files/800x915_PUDIM_01_jpg.webp';
+ const fetcher=async url=>{
+   urls.push(url);
+   if(url.includes('/search/suggest.json')){
+     const p=new URL(url).searchParams;
+     assert.equal(p.get('q'),'chocolate');
+     return {ok:true,json:async()=>({resources:{results:{products:[
+       {vendor:'DAILUS',type:'Esmaltes',handle:'esmalte-pudim-de-chocolate'},
+       {vendor:'DAILUS',type:'Brilhos labiais',handle:'gloss-pudim-de-chocolate'},
+     ]}}})};
+   }
+   if(url.includes('/products/esmalte-pudim-de-chocolate.js'))
+     return {ok:true,json:async()=>({vendor:'DAILUS',type:'Esmaltes',
+       handle:'esmalte-pudim-de-chocolate',variants:[{barcode:'7894222042374'}],
+       media:[{media_type:'image',width:800,height:915,src:foto}]})};
+   return {ok:false};
+ };
+ const r=await buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'',googleCx:'',
+   nomeProduto:'Esmalte Choco Cherry Pudim de Chocolate 8ml',marcaProduto:'DAILUS',fetcher});
+ assert.equal(r.imagem.fonteEAN.fonte,'Dailus (fabricante)');
+ assert.equal(r.imagem.url,foto);
+ assert.ok(urls.some(u=>u.includes('/search/suggest.json')));
+});
+
+test('Crédito de fotos oficiais Dailus presente na página e sem falsa licença CC BY-SA',()=>{
+ const root=new URL('../',import.meta.url);
+ const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
+ const route=readFileSync(new URL('src/routes/admin.js',root),'utf8');
+ const publicView=readFileSync(new URL('src/views/public.js',root),'utf8');
+ const partial=readFileSync(new URL('src/views/partials.js',root),'utf8');
+ assert.ok(js.includes("fonte==='Dailus (fabricante)'"));
+ assert.ok(route.includes("fonte==='Dailus (fabricante)'"));
+ assert.match(route,/direitos reservados da fabricante/);
+ assert.match(partial,/export function creditoFotoDailus/);
+ assert.match(publicView,/creditoFotoDailus\(produto\)/);
+});
