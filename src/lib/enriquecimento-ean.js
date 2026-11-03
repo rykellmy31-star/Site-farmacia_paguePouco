@@ -6,6 +6,7 @@
  * Google Custom Search JSON API requer conta previamente habilitada.
  */
 import { eanValido, normalizarEAN } from './busca-medidas-ean.js';
+import {consultaFabricante,mesmoProdutoDoFabricante} from './busca-fotos-fabricantes.js';
 import {gtinVarejoDaEmbalagem,mesmaFraldaDeEmbalagem} from './gtin-embalagem-foto.js';
 import { config } from '../config.js';
 
@@ -352,15 +353,17 @@ function extrairDimensaoGoogle(s){
 }
 export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     googleKey=config.googleEan?.key,googleCx=config.googleEan?.cx,force=false,
-    somente='ambos',nomeProduto='',marcaProduto=''}={}){
+    somente='ambos',nomeProduto='',marcaProduto='',fabricanteProduto=''}={}){
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
   const referencia=somente==='dimensoes'?null:referenciaEsmalte(nomeProduto,marcaProduto);
+  const fabricanteRef=somente==='dimensoes'?null:consultaFabricante(nomeProduto,fabricanteProduto);
   // GTIN14 pode ser de caixa: identidade da apresentação muda com nome/marca.
   const contextoGTIN14=/^[1-8]\d{13}$/.test(ean)
     ?(String(nomeProduto||'')+'|'+String(marcaProduto||'')).toUpperCase().slice(0,160)
     :'';
-  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'')+':'+contextoGTIN14;
+  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'')+
+    ':'+contextoGTIN14+':'+(fabricanteRef?fabricanteRef.fabricante+'|'+fabricanteRef.nome:'');
   if(fetcher===globalThis.fetch&&!force){
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
@@ -435,6 +438,34 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         imagem.fonteEAN.codigoNaFonte=String(produto.code||'');
         imagem.legenda+='; correspondência por nome, marca, cor e volume.';
         adicionar(imagem);
+      }
+    }
+  }
+  // Busca por nome + fabricante em índices com licença aberta.
+  // Abrange qualquer fabricante presente no cadastro sem lista fixa:
+  // Prati, EMS, Eurofarma, Impala etc. Só aceita foto se a própria
+  // fonte confirmar o EAN EXATO e a mesma apresentação. Sem chutes.
+  if(somente!=='dimensoes'&&!resultado.imagem&&fabricanteRef){
+    const bases=FACTS.slice(0,3);
+    const respostas=await Promise.all(bases.map(async ([fonte,base])=>{
+      const u=new URL(base+'/cgi/search.pl');
+      for(const [k,v] of Object.entries({
+        search_terms:fabricanteRef.termo,search_simple:'1',
+        action:'process',json:'1',page_size:'15',
+        fields:'code,product_name,product_name_pt,brands,manufacturers,manufacturing_places,quantity,image_front_url,image_url,selected_images',
+      }))u.searchParams.set(k,v);
+      return {fonte,lista:await lerJson(u.href,{fetcher,timeoutMs:3300})};
+    }));
+    for(const {fonte,lista} of respostas){
+      resultado.consultadas.push(fonte+' — busca por fabricante e apresentação');
+      for(const produto of (Array.isArray(lista?.products)?lista.products:[]).slice(0,15)){
+        if(!eanIgual(produto.code,ean)||
+           !mesmoProdutoDoFabricante(produto,fabricanteRef))continue;
+        const urls=[produto.image_front_url,produto.selected_images?.front?.display?.pt,
+          produto.selected_images?.front?.display?.en,produto.image_url]
+          .filter(validarFoto);
+        for(const url of [...new Set(urls)].slice(0,3))
+          adicionar(registroImagem(url,fonte,ean));
       }
     }
   }

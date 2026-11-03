@@ -1433,9 +1433,11 @@ function registrarApi(app, db) {
       return {nomeProduto:String(cadastrado.nome||'').slice(0,130),
         // A importação de estoque costuma preencher "fabricante" quando
         // "marca" vem vazio. Isso não altera nenhum dado no banco.
-        marcaProduto:String(cadastrado.marca||cadastrado.fabricante||'').slice(0,80)};
+        marcaProduto:String(cadastrado.marca||cadastrado.fabricante||'').slice(0,80),
+        fabricanteProduto:String(cadastrado.fabricante||cadastrado.marca||'').slice(0,80)};
     return {nomeProduto:cleanText(entrada?.nome,130),
-      marcaProduto:cleanText(entrada?.marca||entrada?.fabricante,80)};
+      marcaProduto:cleanText(entrada?.marca||entrada?.fabricante,80),
+      fabricanteProduto:cleanText(entrada?.fabricante||entrada?.marca,80)};
   };
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador
@@ -1471,7 +1473,7 @@ function registrarApi(app, db) {
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem',
       ...contextoImagemEsmalte(p.ean,{produtoId:p.id})});
-    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,imagem:dados.imagem,
+    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,fabricante:p.fabricante,imagem:dados.imagem,
       fontes:(dados.imagensCandidatas||[]).map(img=>({
         fonte:img.fonteEAN?.fonte||'Catálogo',
         atribuicao:img.fonteEAN?.urlAtribuicao||null,
@@ -1492,7 +1494,8 @@ function registrarApi(app, db) {
       return void res.text('Índice de imagem inválido.',400);
     const dados=await buscarDadosExternosEAN(ean,{somente:'imagem',
       ...contextoImagemEsmalte(ean,{
-        produtoId:req.query.get('produtoId'),nome:req.query.get('nome'),marca:req.query.get('marca'),
+        produtoId:req.query.get('produtoId'),nome:req.query.get('nome'),
+        marca:req.query.get('marca'),fabricante:req.query.get('fabricante'),
       })});
     const candidata=(dados.imagensCandidatas||[])[indice];
     if(!candidata)return void res.text('Nenhuma foto disponível nesta fonte.',404);
