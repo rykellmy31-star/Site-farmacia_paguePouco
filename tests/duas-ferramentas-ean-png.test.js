@@ -348,8 +348,8 @@ test('Openverse: atribuição e foto são vinculadas automaticamente no produto 
  const route=readFileSync(new URL('src/routes/admin.js',root),'utf8');
  const cards=readFileSync(new URL('src/views/partials.js',root),'utf8');
  const publicPage=readFileSync(new URL('src/views/public.js',root),'utf8');
- assert.match(js,/fonte==='Openverse \\(Flickr\\)'/);
- assert.match(route,/fonte==='Openverse \\(Flickr\\)'/);
+ assert.ok(js.includes("fonte==='Openverse (Flickr)'"));
+ assert.ok(route.includes("fonte==='Openverse (Flickr)'"));
  assert.match(cards,/function creditoFotoOpenverse/);
  assert.match(publicPage,/creditoFotoOpenverse\\(produto\\)/);
  assert.match(js,/salvaNoProduto/);
