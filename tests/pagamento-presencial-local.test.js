@@ -121,5 +121,5 @@ test('separador de pedidos vê troco calculado e WhatsApp informa valor a separa
  assert.match(painel,/money\(local\.trocoCentavos\)/);
  assert.match(painel,/Cliente vai entregar:/);
  assert.match(evo,/TROCO A SEPARAR: R\$/);
- assert.match(evo,/pagamentoPresencial\.trocoCentavos/);
+ assert.match(evo,/trocoCalculado/);
 });
