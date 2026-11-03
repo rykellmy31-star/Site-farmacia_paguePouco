@@ -50,7 +50,7 @@ import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
-import { buscarMedidasPorEAN, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
+import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1265,7 +1265,8 @@ function registrarApi(app, db) {
     const ean=String(req.body?.ean||'');
     if(!eanValido(ean))
       return void res.json({ok:false,erro:'EAN inválido. Confira o código de barras.'},400);
-    const resultado=await buscarMedidasPorEAN(ean);
+    const resultado=buscarMedidasNoCatalogo(db,ean,req.body?.produtoId||null)||
+      await buscarMedidasPorEAN(ean,{forcar:req.body?.forcar===true});
     res.set('Cache-Control','no-store');
     res.json(resultado);
   });
@@ -1281,7 +1282,8 @@ function registrarApi(app, db) {
     if([p.peso,p.dimensoes?.altura,p.dimensoes?.largura,p.dimensoes?.comprimento]
       .every(x=>Number(x)>0))
       return void res.json({ok:true,encontrado:false,mensagem:'Medidas já cadastradas; nenhuma alteração.'});
-    const r=await buscarMedidasPorEAN(p.ean);
+    const r=buscarMedidasNoCatalogo(db,p.ean,p.id)||
+      await buscarMedidasPorEAN(p.ean);
     const patch=aplicarMedidasAusentes(p,r);
     if(Object.keys(patch).length){
       db.collection('products').update(p.id,patch);
