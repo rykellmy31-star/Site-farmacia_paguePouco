@@ -113,7 +113,7 @@ function resumoItensWhatsapp(pedido,{paraResponsavel=false}={}){
 export function enfileirarEvolution(db,pedido,tipo){
   const cfg=evolutionConfig(db);
   if(!cfg.ativo||!cfg.instancia)return {ok:false,motivo:'desativado'};
-  if(!pedido?.id||!pedido.codigo||!['cliente_recebido','cliente_pago','responsavel_pago'].includes(tipo))
+  if(!pedido?.id||!pedido.codigo||!['cliente_recebido','cliente_pago','responsavel_pago','responsavel_local'].includes(tipo))
     return {ok:false,motivo:'pedido_invalido'};
   if(['cliente_recebido','cliente_pago'].includes(tipo)&&(!cfg.avisarCliente||pedido.receberWhatsappPedido!==true))
     return {ok:false,motivo:'sem_optin'};
@@ -121,14 +121,24 @@ export function enfileirarEvolution(db,pedido,tipo){
     return {ok:false,motivo:'ainda_nao_pago'};
   if(tipo==='responsavel_pago'&&(!cfg.avisarResponsavel||pedido.statusFinanceiro!=='aprovado'))
     return {ok:false,motivo:'ainda_nao_pago'};
-  const numero=tipo==='responsavel_pago'?numeroWhatsapp(cfg.numeroResponsavel):
+  if(tipo==='responsavel_local'&&(!cfg.avisarResponsavel||!pedido.pagamentoPresencial))
+    return {ok:false,motivo:'nao_local'};
+  const numero=['responsavel_pago','responsavel_local'].includes(tipo)?numeroWhatsapp(cfg.numeroResponsavel):
     numeroWhatsapp(pedido.cliente?.telefone);
   if(!numero)return {ok:false,motivo:'sem_numero'};
   const id='evo:'+String(pedido.id)+':'+tipo,col=db.collection(COL);
   if(col.get(id))return {ok:true,duplicado:true};
   const codigo=codigoSeguro(pedido.codigo);
-  const itens=resumoItensWhatsapp(pedido,{paraResponsavel:tipo==='responsavel_pago'});
-  const texto=tipo==='responsavel_pago'
+  const itens=resumoItensWhatsapp(pedido,{paraResponsavel:['responsavel_pago','responsavel_local'].includes(tipo)});
+  const texto=tipo==='responsavel_local'
+    ? '🔔 NOVO PEDIDO LOCAL — FARMÁCIA PAGUE POUCO\n📦 Pedido: #'+codigo+
+      (itens ? ' :'+itens : '\n')+
+      'PAGAMENTO NA ENTREGA/RETIRADA: '+
+      ({pix:'Pix',credit_card:'Crédito',debit_card:'Débito',cash:'Dinheiro'}[pedido.metodoPagamento]||'')+
+      (pedido.pagamentoPresencial?.precisaTroco
+        ? '\nTroco para: R$ '+(pedido.pagamentoPresencial.trocoParaCentavos/100).toFixed(2)
+        : '')+'\nPagamento pendente. Consulte endereço e detalhes no painel.'
+    : tipo==='responsavel_pago'
     ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+
       (itens ? ' :'+itens : '\n')+
       'O pagamento foi confirmado. Acesse o painel para separar o pedido.'
@@ -141,7 +151,9 @@ export function enfileirarEvolution(db,pedido,tipo){
     : 'Olá, '+nomeSeguro(pedido.cliente?.nome)+'! 👋\n'+
       'A Farmácia Pague Pouco recebeu seu pedido #'+codigo+
       (itens ? ' :'+itens : '.\n')+
-      'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!\n'+
+      (pedido.pagamentoPresencial
+        ? 'O pedido foi registrado. Pague na entrega ou retirada com a forma escolhida. Nenhuma cobrança foi gerada pelo site.\n'
+        : 'Quando o pagamento for confirmado pelo site (até 10 minutos), seu pedido será enviado para separação!\n')+
       'Acompanhe seu pedido pelo site. Esta mensagem é automática.';
   col.insert({id,pedidoId:pedido.id,tipo,numero,texto,status:'fila',
     criadoEm:nowISO(),tentativas:0});
