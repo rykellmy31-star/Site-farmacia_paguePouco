@@ -362,7 +362,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   // Produto com EAN + foto verificados no catálogo oficial: não aguardar
   // sete serviços externos (ou sofrer bloqueio de origem na Cloudflare).
   // O arquivo real é verificado pelo proxy e no navegador antes de gravar.
-  if(somente==='imagem'){
+  if(somente==='imagem'&&fetcher===globalThis.fetch){
     const confirmada=fotoDailusConfirmada(ean);
     if(confirmada){
       resultado.imagem=confirmada;
