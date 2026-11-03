@@ -655,6 +655,58 @@
     }
     return true;
   }
+  async function pesquisarGoogleImagensEAN(){
+    const ean=eanAtual();
+    const botao=$('#botaoGoogleImagensEAN'),status=$('#resultadoGoogleImagensEAN');
+    const lista=$('#listaGoogleImagensEAN');
+    if(!formatoEAN(ean)){
+      if(status)status.textContent='Informe primeiro um EAN válido.';
+      return;
+    }
+    if(botao?.disabled)return;
+    if(botao)botao.disabled=true;
+    if(lista)lista.replaceChildren();
+    if(status)status.textContent='Consultando o Google Imagens pelo EAN...';
+    try{
+      const resultado=await post('/admin/api/produtos/google-imagens',{ean});
+      if(ean!==eanAtual())return;
+      const imagens=Array.isArray(resultado.imagens)?resultado.imagens:[];
+      if(status)status.textContent=resultado.mensagem||'Pesquisa concluída.';
+      for(const item of imagens){
+        if(!lista)break;
+        const card=document.createElement('div');
+        card.className='item-midia';
+        card.style.maxWidth='210px';
+        const foto=document.createElement('img');
+        foto.loading='lazy';
+        foto.referrerPolicy='no-referrer';
+        foto.alt=String(item.titulo||'Resultado do Google Imagens');
+        foto.src=item.miniatura;
+        foto.style.width='160px';
+        foto.style.height='150px';
+        foto.style.objectFit='contain';
+        card.appendChild(foto);
+        const detalhes=document.createElement('p');
+        detalhes.className='texto-pequeno';
+        detalhes.textContent=String(item.titulo||item.origem||'Foto encontrada').slice(0,120);
+        card.appendChild(detalhes);
+        const aviso=document.createElement('p');
+        aviso.className='texto-pequeno';
+        aviso.textContent='Conferir embalagem e licença antes de utilizar.';
+        card.appendChild(aviso);
+        const link=document.createElement('a');
+        link.href=item.pagina||item.url;
+        link.target='_blank';
+        link.rel='noopener noreferrer';
+        link.textContent='Ver origem';
+        link.className='botao pequeno secundario';
+        card.appendChild(link);
+        lista.appendChild(card);
+      }
+    }catch(err){
+      if(status)status.textContent=err.message||'Pesquisa Google Imagens indisponível.';
+    }finally{if(botao)botao.disabled=false;}
+  }
   async function buscarFotoEAN({silencioso=false,forcar=false}={}){
     if(!podeAtualizarFotoEAN())return;
     const ean=eanAtual();
@@ -799,6 +851,7 @@
     buscaImagemAntesDeSalvar=buscarFotoEAN;
     buscaMedidasAntesDeSalvar=consultarMedidasEAN;
     $('#botaoBuscarImagemEAN')?.addEventListener('click',()=>buscarFotoEAN({forcar:true}));
+    $('#botaoGoogleImagensEAN')?.addEventListener('click',pesquisarGoogleImagensEAN);
     btn?.addEventListener('click',()=>consultarMedidasEAN({forcar:true}));
     campo('ean')?.addEventListener('change',()=>{
       codigoConsultado='';
