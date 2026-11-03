@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {buscarDadosExternosEAN} from '../src/lib/enriquecimento-ean.js';
+import {origemImagemPermitida,candidatosImagemEAN,buscarImagemDisponivel} from '../src/lib/ean-image-download.js';
 import {can} from '../src/lib/permissions.js';
 const ean='7891000100103';
 const jpg='https://images.openfoodfacts.org/images/products/789/100/010/0103/front_pt.32.400.jpg';
@@ -116,4 +117,76 @@ test('foto EAN: formulário sem imagens não lança erro e permite buscar',()=>{
   const duas=montar([jpg,'/uploads/outra.png'],'Fonte Open Facts (CC BY-SA 3.0)');
   assert.equal(duas.fotoEANLegadaFormulario(),false);
   assert.equal(duas.podeAtualizarFotoEAN(),false);
+});
+
+test('PreçoMelhor é fallback via API por EAN quando Open Facts não traz foto',async()=>{
+  const e='7896006716112';
+  const cdn='https://pub-251da151f43b454d9e192d38bf5e6d71.r2.dev/';
+  const urls=[];
+  const fetcher=async url=>{
+    urls.push(url);
+    if(url.includes('precomelhor.com.br/api/product/'))
+      return {ok:true,json:async()=>({
+        product:{ean:e,image_url:cdn+e+'_w200.webp'},
+        details:{media_high_res_url:cdn+e+'.webp',image_url_main:cdn+e+'.webp'},
+      })};
+    return {ok:false};
+  };
+  const r=await buscarDadosExternosEAN(e,{fetcher,somente:'imagem',googleKey:'',googleCx:''});
+  assert.equal(r.imagem.url,cdn+e+'.webp');
+  assert.equal(r.imagem.fonteEAN.fonte,'PreçoMelhor');
+  assert.match(r.imagem.fonteEAN.licenca,/atribuição/);
+  assert.equal(r.imagem.fonteEAN.urlAtribuicao,'https://www.precomelhor.com.br/p/'+e);
+  assert.ok(r.imagem.alternativas.includes(cdn+e+'_w200.webp'));
+  assert.equal(urls.filter(u=>u.includes('precomelhor.com.br/api/product/')).length,1);
+  assert.deepEqual(candidatosImagemEAN(r.imagem),[cdn+e+'.webp',cdn+e+'_w200.webp']);
+});
+
+test('PreçoMelhor: impedir EAN divergente, host malicioso e URLs de outros códigos',async()=>{
+  const e='7896006716112';
+  const cdn='https://pub-251da151f43b454d9e192d38bf5e6d71.r2.dev/';
+  for(const [code,url] of [
+    ['7891000100103',cdn+e+'.webp'],
+    [e,'https://malicioso.example/'+e+'.webp'],
+    [e,cdn+'7891000100103.webp'],
+  ]){
+    const r=await buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'',googleCx:'',
+      fetcher:async req=>req.includes('precomelhor.com.br/api/product/')?
+        {ok:true,json:async()=>({product:{ean:code,image_url:url},details:{media_high_res_url:url}})}:
+        {ok:false}});
+    assert.equal(r.imagem,null);
+  }
+  assert.equal(origemImagemPermitida(cdn+e+'.webp',e),true);
+  assert.equal(origemImagemPermitida(cdn+e+'.webp','7891000100103'),false);
+  assert.equal(origemImagemPermitida(cdn+e+'.webp?redirect=foo',e),false);
+  assert.equal(origemImagemPermitida('http://pub-251da151f43b454d9e192d38bf5e6d71.r2.dev/'+e+'.webp',e),false);
+});
+
+test('proxy de foto PreçoMelhor aceita WEBP da CDN autorizada e recusa redirect externo',async()=>{
+  const e='7896006716112';
+  const url='https://pub-251da151f43b454d9e192d38bf5e6d71.r2.dev/'+e+'.webp';
+  const imagem={url,fonteEAN:{ean:e,fonte:'PreçoMelhor'}};
+  const bytes=Buffer.concat([Buffer.from('RIFF'),Buffer.alloc(4),Buffer.from('WEBP'),Buffer.alloc(32)]);
+  const ok=await buscarImagemDisponivel(imagem,{fetcher:async()=>({
+    ok:true,status:200,headers:{get:()=>''},arrayBuffer:async()=>bytes,
+  })});
+  assert.equal(ok.ok,true);
+  assert.equal(ok.mime,'image/webp');
+  const denied=await buscarImagemDisponivel(imagem,{fetcher:async()=>({
+    status:302,headers:{get:()=>('https://malicioso.example/redirect.webp')},
+  })});
+  assert.equal(denied.ok,false);
+});
+
+test('foto PreçoMelhor exibe crédito público e não assume licença Open Facts',()=>{
+  const base=new URL('../',import.meta.url);
+  const cliente=readFileSync(new URL('public/js/admin.js',base),'utf8');
+  const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
+  const pagina=readFileSync(new URL('src/views/public.js',base),'utf8');
+  const cartoes=readFileSync(new URL('src/views/partials.js',base),'utf8');
+  assert.match(cliente,/fonte==='PreçoMelhor'/);
+  assert.match(route,/fonte==='PreçoMelhor'/);
+  assert.match(pagina,/creditoPrecoMelhor/);
+  assert.match(cartoes,/creditoImagemPrecoMelhor/);
+  assert.match(pagina,/precomelhor\.com\.br\/p\//);
 });
