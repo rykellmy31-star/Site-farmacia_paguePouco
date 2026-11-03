@@ -13,6 +13,10 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
   const promo = temPromocao(produto);
   const disponivel = estoqueDisponivel(produto);
   const img = imagemPrincipal(produto);
+  const creditoImagemPrecoMelhor=(produto.imagens||[]).some(f=>String(f.legenda||'').includes('PreçoMelhor'))
+    ?'<a href="https://www.precomelhor.com.br/p/'+encodeURIComponent(String(produto.ean||''))+
+      '" target="_blank" rel="noopener noreferrer" class="texto-pequeno" style="font-size:10px;text-align:center;display:block">Foto: PreçoMelhor</a>'
+    :'';
   const parcelamentoSemJuros = mostrarParcela ? melhorParcelamentoSemJuros(db, preco) : null;
   const bloqueio = venda.bloqueioSanitario ? venda.motivo : null;
 
@@ -22,6 +26,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
     <a class="foto" href="${e(productUrl(produto))}" aria-label="${e(produto.nome)}">
       <img src="${e(img)}" alt="${e(produto.nome)}" loading="lazy" width="300" height="300">
     </a>
+    ${creditoImagemPrecoMelhor}
     ${produto.marca ? `<span class="marca">${e(produto.marca)}</span>` : ''}
     <h3 class="nome"><a href="${e(productUrl(produto))}">${e(produto.nome)}</a></h3>
     ${promo ? `<span class="preco-antigo">${money(original)}</span>` : ''}
