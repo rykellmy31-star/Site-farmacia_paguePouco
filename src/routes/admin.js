@@ -1367,6 +1367,17 @@ function registrarApi(app, db) {
       mensagem:result.imagem?'Imagem frontal localizada; verificando resolução e qualidade para gerar PNG.':
         'Nenhuma imagem frontal licenciada localizada para este EAN. Nenhuma foto foi adicionada.'});
   });
+  // Pesquisa separada para ativação pela listagem: devolve somente
+  // o candidato (não grava JPEG e não tenta preencher medidas).
+  app.post('/admin/api/produtos/:id/imagem-ean',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível'},404);
+    if((p.imagens||[]).length)return void res.json({ok:true,imagem:null,jaPossui:true});
+    if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
+    const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem'});
+    res.json({ok:true,ean:p.ean,imagem:dados.imagem});
+  });
   // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
   // informado. Não aceita URL externa ou redirecionamento para outros hosts.
   app.get('/admin/api/produtos/imagem-ean/arquivo',async(req,res)=>{
