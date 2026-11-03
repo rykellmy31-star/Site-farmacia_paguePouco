@@ -704,6 +704,7 @@
       const ean=eanAtual();
       if(!googleImagens)return;
       googleImagens.hidden=!formatoEAN(ean);
+      googleImagens.style.display=formatoEAN(ean)?'inline-flex':'none';
       if(formatoEAN(ean))
         googleImagens.href='https://www.google.com/search?tbm=isch&q='+
           encodeURIComponent('"'+ean+'" embalagem produto foto frontal');
