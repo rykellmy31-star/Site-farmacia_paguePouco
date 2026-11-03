@@ -111,7 +111,9 @@ export function registrarRotasApi(app, db) {
     const cidade = String(req.body.cidade || '');
     const uf = String(req.body.uf || '');
     if (!isValidCep(cep)) return void res.json({ ok: false, erro: 'Informe um CEP válido com 8 dígitos.' }, 400);
-    const cart = getCart(db, req);
+    // Cesta contém produtoId/quantidade até ser normalizada. Para cotação
+    // são necessários pesos, dimensões e preços atuais do catálogo.
+    const cart = normalizeCart(db, getCart(db, req)).cart;
     const calc = await calcularFreteIntegrado({
       config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep, uf, cidade,
