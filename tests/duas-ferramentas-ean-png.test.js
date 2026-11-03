@@ -21,7 +21,7 @@ test('imagem EAN isolada seleciona a frente em resolução full (não miniatura)
  assert.equal(r.imagem.url,jpg);
  assert.equal(r.imagem.urlAltaResolucao,jpg.replace('.400.jpg','.full.jpg'));
  assert.equal(r.dimensoes,null);
- assert.equal(urls.length,1);
+ assert.equal(urls.length,3);
 });
 test('dimensões EAN isoladas não consultam catálogo de imagens',async()=>{
  const urls=[];
