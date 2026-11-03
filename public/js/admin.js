@@ -330,7 +330,7 @@
       try {
         // Mesmo que o operador tenha marcado Ativo/Aprovar sem tirar o
         // foco do EAN, consultar dados antes de montar o FormData.
-        if(buscaImagemAntesDeSalvar&&!form.querySelector('[name="imagens[]"]'))
+        if(buscaImagemAntesDeSalvar&&podeAtualizarFotoEAN())
           await buscaImagemAntesDeSalvar({silencioso:true});
         if(buscaMedidasAntesDeSalvar&&
           ['peso','altura','largura','comprimento'].some(nome=>
@@ -449,6 +449,17 @@
   let buscaImagemAntesDeSalvar=null, buscaMedidasAntesDeSalvar=null;
   const formEAN=$('#formProduto');
   const eanAtual=()=>String(formEAN?.querySelector('[name="ean"]')?.value||'').replace(/[\s.-]/g,'');
+  function fotoEANLegadaFormulario(){
+    if(!formEAN)return false;
+    const imgs=$('[name="imagens[]"]',formEAN);
+    if(imgs.length!==1)return false;
+    const legenda=formEAN.querySelector('[name="imagemLegenda[]"]')?.value||'';
+    return /^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(imgs[0].value) &&
+      /CC BY-SA/i.test(legenda);
+  }
+  function podeAtualizarFotoEAN(){
+    return !!formEAN&&(!formEAN.querySelector('[name="imagens[]"]')||fotoEANLegadaFormulario());
+  }
   const formatoEAN=ean=>/^\d{8}$|^\d{12,14}$/.test(ean);
   function atualizarStatusFoto(msg){
     const el=$('#resultadoBuscaImagemEAN');
@@ -524,7 +535,15 @@
     return resultado;
   }
   function anexarFotoFormulario(midia,fonte){
-    if(!formEAN||formEAN.querySelector('[name="imagens[]"]'))return false;
+    if(!podeAtualizarFotoEAN())return false;
+    if(fotoEANLegadaFormulario()){
+      const antiga=formEAN.querySelector('[name="imagens[]"]');
+      const galeriaAntiga=antiga?.closest('.item-midia');
+      if(galeriaAntiga)galeriaAntiga.remove();
+      else antiga?.remove();
+      const leg=formEAN.querySelector('[name="imagemLegenda[]"]');
+      if(leg)leg.remove();
+    }
     const inp=document.createElement('input');
     inp.type='hidden';inp.name='imagens[]';inp.value=midia.url;
     const leg=document.createElement('input');
@@ -544,7 +563,7 @@
     return true;
   }
   async function buscarFotoEAN({silencioso=false,forcar=false}={}){
-    if(!formEAN||formEAN.querySelector('[name="imagens[]"]'))return;
+    if(!podeAtualizarFotoEAN())return;
     const ean=eanAtual();
     if(!formatoEAN(ean)){
       if(!silencioso)notificar('Informe um EAN válido antes de buscar imagem.','erro');
@@ -633,7 +652,7 @@
     btn?.addEventListener('click',()=>consultarMedidasEAN({forcar:true}));
     campo('ean')?.addEventListener('change',()=>{
       codigoConsultado='';
-      if(!formEAN.querySelector('[name="imagens[]"]'))buscarFotoEAN({silencioso:true});
+      if(podeAtualizarFotoEAN())buscarFotoEAN({silencioso:true});
       if(['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
         consultarMedidasEAN({silencioso:true});
     });
