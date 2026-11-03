@@ -330,6 +330,9 @@
       try {
         // Mesmo que o operador tenha marcado Ativo/Aprovar sem tirar o
         // foco do EAN, consultar dados antes de montar o FormData.
+        if(buscaDescricaoAntesDeSalvar&&
+          !($('#editorDescricao')?.textContent||'').trim())
+          await buscaDescricaoAntesDeSalvar({silencioso:true});
         if(buscaImagemAntesDeSalvar&&podeAtualizarFotoEAN())
           await buscaImagemAntesDeSalvar({silencioso:true});
         if(buscaMedidasAntesDeSalvar&&
@@ -446,7 +449,8 @@
   renderCaracteristicas();
 
   /* --- Ferramentas EAN independentes: imagem PNG e medidas logísticas --- */
-  let buscaImagemAntesDeSalvar=null, buscaMedidasAntesDeSalvar=null;
+  let buscaImagemAntesDeSalvar=null, buscaMedidasAntesDeSalvar=null,
+    buscaDescricaoAntesDeSalvar=null;
   const formEAN=$('#formProduto');
   const eanAtual=()=>String(formEAN?.querySelector('[name="ean"]')?.value||'').replace(/[\s.-]/g,'');
   function fotoEANLegadaFormulario(){
@@ -461,6 +465,36 @@
     return !!formEAN&&(!formEAN.querySelector('[name="imagens[]"]')||fotoEANLegadaFormulario());
   }
   const formatoEAN=ean=>/^\d{8}$|^\d{12,14}$/.test(ean);
+  async function buscarDescricaoEAN({silencioso=false,forcar=false}={}){
+    const ean=eanAtual();
+    const editor=$('#editorDescricao'),hidden=$('#campoDescricao');
+    if(!formEAN||!formatoEAN(ean)||!editor)return;
+    // A busca nunca substitui texto revisado pelo administrador.
+    if((editor.textContent||'').trim()||(hidden?.value||'').replace(/<[^>]+>/g,'').trim())return;
+    const botao=$('#botaoBuscarDescricaoEAN'),status=$('#resultadoDescricaoEAN');
+    if(botao?.disabled)return;
+    if(botao)botao.disabled=true;
+    if(status)status.textContent='Consultando descrição de produto pelo EAN...';
+    try{
+      const dados=await post('/admin/api/produtos/descricao-ean',{ean,forcar});
+      if(ean!==eanAtual())return;
+      if(!dados.encontrado||!dados.descricao){
+        if(status)status.textContent=dados.mensagem||'Descrição não encontrada para esse EAN.';
+        return;
+      }
+      if((editor.textContent||'').trim())return;
+      editor.innerHTML=dados.descricao;
+      if(hidden)hidden.value=dados.descricao;
+      const marca=formEAN.querySelector('[name="marca"]');
+      if(marca&&!marca.value.trim()&&dados.marca)marca.value=dados.marca;
+      if(status)status.textContent='Descrição inserida pelo EAN. Fonte: '+dados.origem+
+        '. Confira o rótulo antes de salvar.';
+      if(!silencioso)notificar('Descrição encontrada e incluída no formulário.');
+    }catch(err){
+      if(status)status.textContent=err.message||'Consulta de descrição indisponível.';
+      if(!silencioso)notificar(err.message||'Falha na descrição EAN.','erro');
+    }finally{if(botao)botao.disabled=false;}
+  }
   function atualizarStatusFoto(msg){
     const el=$('#resultadoBuscaImagemEAN');
     if(el)el.textContent=msg;
@@ -650,12 +684,17 @@
         if(!silencioso)notificar(err.message||'Falha na consulta de dimensões.','erro');
       }finally{emConsulta=false;if(btn)btn.disabled=false;}
     }
+    buscaDescricaoAntesDeSalvar=buscarDescricaoEAN;
+    $('#botaoBuscarDescricaoEAN')?.addEventListener('click',()=>
+      buscarDescricaoEAN({forcar:true}));
     buscaImagemAntesDeSalvar=buscarFotoEAN;
     buscaMedidasAntesDeSalvar=consultarMedidasEAN;
     $('#botaoBuscarImagemEAN')?.addEventListener('click',()=>buscarFotoEAN({forcar:true}));
     btn?.addEventListener('click',()=>consultarMedidasEAN({forcar:true}));
     campo('ean')?.addEventListener('change',()=>{
       codigoConsultado='';
+      if(!($('#editorDescricao')?.textContent||'').trim())
+        buscarDescricaoEAN({silencioso:true});
       if(podeAtualizarFotoEAN())buscarFotoEAN({silencioso:true});
       if(['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
         consultarMedidasEAN({silencioso:true});
@@ -686,6 +725,8 @@
         // Busca opcional e limitada, não pode impedir ativação se
         // nenhum catálogo público tiver informações para o EAN.
         if(altProd.textContent.trim()==='Ativar'){
+          try { await post('/admin/api/produtos/'+encodeURIComponent(id)+'/buscar-descricao-ean'); }
+          catch { /* ausência de descrição não impede ativação */ }
           try { await imagemNaAtivacao(id); }
           catch(err) { notificar('Foto PNG não adicionada: '+err.message, 'erro'); }
           try { await post('/admin/api/produtos/'+encodeURIComponent(id)+'/buscar-medidas-ean'); }
