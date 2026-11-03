@@ -9,7 +9,7 @@ import { calcularFrete, resolverFreteEscolhido } from '../lib/freight.js';
 import { criarPedido, cancelarCriacaoComRecusaDefinitiva } from '../lib/orders.js';
 import { createPayment, installmentOptions, enabledMethods, providerPublicInfo } from '../lib/payments/index.js';
 import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '../lib/security.js';
-import { lookupCep, UF_LIST } from '../lib/cep.js';
+import { lookupCep, UF_LIST, ufFromCep } from '../lib/cep.js';
 import { logCustomer } from '../lib/audit.js';
 import { sendMail } from '../lib/mailer.js';
 import { enfileirarEvolution, autorizouWhatsappPedidos, autorizouWhatsappProdutos, numeroWhatsapp, decidirAvisosWhatsappPedido } from '../lib/evolution-whatsapp.js';
@@ -105,7 +105,7 @@ export function registrarRotasCheckout(app, db) {
     }));
   });
 
-  app.post('/checkout/endereco', (req, res) => {
+  app.post('/checkout/endereco', async (req, res) => {
     if (!exigirLoginCompra(req, res, db)) return;
     const ctx = criarContexto(req, db);
     let cart = normalizeCart(db, ctx.cart).cart;
@@ -144,6 +144,17 @@ export function registrarRotasCheckout(app, db) {
       if (Object.keys(erros).length) {
         return void res.html(telaEndereco(ctx, { totais, enderecos: req.user?.enderecos || [], erros }), 400);
       }
+      // Nunca aceitar UF ou município do endereço anterior. A fonte de CEP
+      // é verificada também no servidor, mesmo se o JavaScript falhar.
+      const cepIdentificado = await lookupCep(endereco.cep,{consultarEndereco:true});
+      if (!cepIdentificado.valido || !cepIdentificado.uf || !ufFromCep(endereco.cep))
+        return void res.redirect('/checkout/endereco?erroFrete='+encodeURIComponent('CEP inválido.'));
+      endereco.uf = cepIdentificado.uf;
+      if (cepIdentificado.cidade) endereco.cidade=cepIdentificado.cidade;
+      else if (!endereco.cidade)
+        return void res.redirect('/checkout/endereco?erroFrete='+encodeURIComponent('Informe a cidade para este CEP.'));
+      // Rua/número são informados pelo cliente; não substituir o endereço
+      // completo nem alterar o registro salvo sem autorização.
     }
 
     // frete sempre recalculado no servidor
@@ -433,7 +444,7 @@ export function registrarRotasCheckout(app, db) {
 
   /* ------------------------- FRETE (API CEP) ----------------------- */
   app.get('/checkout/cep/:cep', async (req, res) => {
-    const info = await lookupCep(req.params.cep);
+    const info = await lookupCep(req.params.cep, {consultarEndereco:true});
     res.json(info);
   });
 }
