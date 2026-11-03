@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {buscarDadosExternosEAN} from '../src/lib/enriquecimento-ean.js';
+import {can} from '../src/lib/permissions.js';
 const ean='7891000100103';
 const jpg='https://images.openfoodfacts.org/images/products/789/100/010/0103/front_pt.32.400.jpg';
 function factory(respostas,urls=[]){
@@ -62,4 +63,24 @@ test('método de foto por EAN impede imagens ruins em vez de ampliar baixa resol
  assert.match(js,/arestas<95/);
  assert.match(js,/escala=Math\.min\(1,1400/);
  assert.match(js,/Foto com resolução insuficiente/);
+});
+
+test('editor farmacêutico consegue salvar PNG por EAN sem permissão geral de mídia',()=>{
+  // Regressão: a busca por EAN funcionava, mas /admin/api/upload retornava 403
+  // para quem tinha produtos.editar e não midia.criar.
+  const usuario={role:'farmaceutico'};
+  assert.equal(can(usuario,'produtos.editar'),true);
+  assert.equal(can(usuario,'midia.criar'),false);
+  const base=new URL('../',import.meta.url);
+  const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
+  const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
+  assert.match(route,/app\.post\('\/admin\/api\/produtos\/imagem-ean\/png', async \(req, res\)/);
+  assert.match(route,/if \(!guardApi\(req, res, 'produtos\.editar'\)\) return/);
+  assert.match(route,/foto\.filename !== `ean-\$\{ean\}\.png`/);
+  assert.match(route,/detectFileType\(foto\.data\)/);
+  assert.match(route,/imageSize\(foto\.data, 'png'\)/);
+  assert.match(route,/await saveUpload\(db, foto/);
+  assert.match(js,/api\('\/admin\/api\/produtos\/imagem-ean\/png'/);
+  assert.doesNotMatch(js,/const dados=await api\('\/admin\/api\/upload'[^\n]*fd/);
+  assert.match(js,/Foto encontrada, mas não foi possível salvá-la/);
 });
