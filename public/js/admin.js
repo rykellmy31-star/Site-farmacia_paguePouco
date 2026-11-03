@@ -455,6 +455,8 @@
   const eanAtual=()=>String(formEAN?.querySelector('[name="ean"]')?.value||'').replace(/[\s.-]/g,'');
   function fotoEANLegadaFormulario(){
     if(!formEAN)return false;
+    // querySelector retorna null quando não existe foto; precisamos de uma lista.
+    // Sem imagens cadastradas, o botão deve permitir a busca EAN normalmente.
     const imgs=$('[name="imagens[]"]',formEAN);
     if(imgs.length!==1)return false;
     const legenda=formEAN.querySelector('[name="imagemLegenda[]"]')?.value||'';
