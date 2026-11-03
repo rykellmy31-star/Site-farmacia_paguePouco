@@ -108,7 +108,14 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
 
     ${painel({
       corpo: `<form class="barra-ferramentas" method="get" action="/admin/produtos" style="margin:0">
-        <input type="text" name="q" placeholder="Buscar por nome, SKU, EAN ou marca" value="${e(busca)}">
+        <div class="linha centro" style="gap:6px;flex:1;min-width:min(100%,260px)">
+          <input type="search" name="q" placeholder="Nome, SKU ou EAN" value="${e(busca)}"
+            style="min-width:0;flex:1" autocomplete="off" enterkeyhint="search">
+          <button type="button" class="botao pequeno secundario botao-leitor-codigo"
+            data-leitor-codigo='form[action="/admin/produtos"] input[name="q"]'
+            aria-label="Abrir câmera para pesquisar produto pelo código de barras"
+            title="Ler EAN com a câmera do celular">📷 Ler EAN</button>
+        </div>
         <select name="categoria">
           <option value="">Todas as categorias</option>
           ${categorias.map((c) => `<option value="${e(c.id)}" ${filtros.categoria === c.id ? 'selected' : ''}>${e(c.nome)}</option>`).join('')}
@@ -223,7 +230,13 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               ${campoAdmin({ nome: 'sku', rotulo: 'SKU', valor: p.sku || '' })}
             </div>
             <div class="campo-linha">
-              ${campoAdmin({ nome: 'ean', rotulo: 'Código de barras (EAN)', valor: p.ean || '' })}
+              <div>
+                ${campoAdmin({ nome: 'ean', rotulo: 'Código de barras (EAN)', valor: p.ean || '' })}
+                <button type="button" class="botao pequeno secundario botao-leitor-codigo mt-1"
+                  data-leitor-codigo="#formProduto input[name=ean]"
+                  aria-label="Abrir câmera para preencher o EAN deste produto"
+                  title="Ler código de barras e preencher o EAN">📷 Bipar com a câmera</button>
+              </div>
               ${campoAdmin({ nome: 'marca', rotulo: 'Marca', valor: p.marca || '', atributos: `list="listaMarcas"`, dica: 'Digite uma nova marca ou escolha uma existente.' })}
             </div>
             <datalist id="listaMarcas">${marcas.map((m) => `<option value="${e(m.nome)}">`).join('')}</datalist>
