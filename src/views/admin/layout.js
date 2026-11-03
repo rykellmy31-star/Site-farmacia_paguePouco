@@ -91,7 +91,7 @@ ${headExtra}
 <div class="notificacao" id="notificacaoAdmin" role="status"></div>
 <script>window.PP_ADMIN=${JSON.stringify({ csrf: ctx.csrf, role: usuario.role })};</script>
 <script src="/js/admin.js?v=estornos-pendentes-v4" defer></script>
-<script src="/js/barcode-scanner.js?v=20261103" defer></script>
+<script src="/js/barcode-scanner.js?v=20261103-foco-v2" defer></script>
 ${can(usuario, 'pedidos.ver') ? '<script src="/js/avisos-vendas.js?v=20261025" defer></script>' : ''}
 ${corpoExtra}
 </body>
