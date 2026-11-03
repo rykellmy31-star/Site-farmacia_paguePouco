@@ -91,6 +91,56 @@ export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoque
 }
 
 /* ============================= PRODUTOS ============================= */
+export function telaFontesImagemFabricante(ctx, inventario){
+  const lista=inventario.fabricantes||[];
+  const dados=tabelaAdmin({
+    colunas:['Fabricante / marca','Origem no cadastro','Produtos','Sem foto','EAN válido','Marcas','Fonte oficial'],
+    linhas:lista.map(grupo=>`<tr>
+      <td><strong>${e(grupo.fabricante)}</strong></td>
+      <td>${e(grupo.tipoOrigem)}</td>
+      <td>${grupo.produtos}</td>
+      <td><strong>${grupo.semFoto}</strong></td>
+      <td>${grupo.eanValidos}</td>
+      <td>${e(grupo.marcas.join(', ')||'—')}</td>
+      <td>${grupo.integracaoOficial
+        ?'<span class="etiqueta azul">Dailus (parcial)</span>'
+        :'<span class="texto-pequeno texto-suave">Sem conector oficial validado</span>'}</td>
+    </tr>`),
+    vazio:'Não há fabricantes cadastrados neste catálogo.',
+  });
+  return paginaAdmin(ctx,{
+    titulo:'Fabricantes e fontes de fotos',
+    ativo:'produtos',
+    conteudo:`
+    <div class="linha centro entre mb-2" style="gap:10px;flex-wrap:wrap">
+      <h1 class="mt-0 mb-0">Fabricantes e fontes de fotos</h1>
+      <a class="botao secundario" href="/admin/produtos">Voltar aos produtos</a>
+    </div>
+    <div class="alerta info">
+      <strong>Inventário atualizado diretamente do seu catálogo.</strong>
+      <p class="texto-pequeno mt-1 mb-0">
+        Este relatório não altera fotos, estoque ou preços. Cada fabricante listado
+        ainda precisa de fonte oficial e permissão de uso verificadas para ser integrado.
+        Os catálogos abertos já são consultados por EAN para todas as marcas.
+        “Dailus (parcial)” indica que existe integração oficial, não que todas as fotos sejam encontradas.
+      </p>
+    </div>
+    <div class="cartoes">
+      ${cartaoMetrica('Fabricantes / marcas',inventario.quantidadeFabricantes)}
+      ${cartaoMetrica('Produtos no cadastro',inventario.total)}
+      ${cartaoMetrica('Produtos sem foto',inventario.semFoto)}
+      ${cartaoMetrica('EANs válidos',inventario.comEan)}
+    </div>
+    ${painel({
+      titulo:'Fontes genéricas já integradas',
+      corpo:`<p class="texto-pequeno">${inventario.fontesGenericas.map(e).join(' · ')}</p>
+        <p class="texto-pequeno texto-suave">Uma fonte genérica não garante foto de todos os fabricantes.</p>`,
+    })}
+    ${painel({titulo:'Fabricantes identificados (ordenados por produtos sem foto)',semPadding:true,corpo:dados})}
+    `,
+  });
+}
+
 export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias, filtros }) {
   return paginaAdmin(ctx, {
     titulo: 'Produtos',
@@ -101,6 +151,7 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       <div class="linha" style="gap:6px">
         <a class="botao" href="/admin/produtos/novo">+ Novo produto</a>
         <a class="botao secundario" href="/admin/produtos/importar">Importar/exportar</a>
+        <a class="botao secundario" href="/admin/produtos/fontes-de-imagens">Fabricantes e fontes de fotos</a>
         ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/produtos/substituir-catalogo">Zerar e importar novo catálogo InovaFarma</a>' : ''}
         ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/produtos/inovafarma">Importar da InovaFarma</a>' : ''}
       </div>
