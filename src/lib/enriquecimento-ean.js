@@ -92,7 +92,7 @@ function urlFlickrValida(url){
     const u=new URL(url);
     return u.protocol==='https:'&&u.hostname==='live.staticflickr.com'&&
       !u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&
-      /^\\/\\d{2,6}\\/\\d{5,15}_[a-z0-9]{6,50}_(?:b|c|h|k|o)\\.jpe?g$/i.test(u.pathname);
+      /^\/\d{2,6}\/\d{5,15}_[a-z0-9]{6,50}_(?:b|c|h|k|o)\.jpe?g$/i.test(u.pathname);
   }catch{return false;}
 }
 function paginaFlickrValida(url){
@@ -101,7 +101,7 @@ function paginaFlickrValida(url){
     const u=new URL(url);
     return u.protocol==='https:'&&['flickr.com','www.flickr.com'].includes(u.hostname)&&
       !u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&
-      /^\\/photos\\/[^/]+\\/\\d{5,15}\\/?$/i.test(u.pathname);
+      /^\/photos\/[^/]+\/\d{5,15}\/?$/i.test(u.pathname);
   }catch{return false;}
 }
 function registroOpenverseFlickr(item,ean){
