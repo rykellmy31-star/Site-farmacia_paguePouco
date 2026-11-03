@@ -104,6 +104,7 @@ function ctxAdmin(req, db) {
       podeEditarPedidos: can(req.adminUser, 'pedidos.editar'),
       podeOcultarPedidos: req.adminUser?.role === 'super_admin',
       podeEstornar: can(req.adminUser, 'pagamentos.estornar'),
+      podeConfirmarPagamentoLocal: can(req.adminUser, 'pagamentos.estornar'),
       podeSimularPagamento: can(req.adminUser, 'pagamentos.estornar') || req.adminUser?.role === 'super_admin',
       podeEditarVendedores: can(req.adminUser, 'vendedores.editar'),
     },
@@ -933,6 +934,31 @@ export function registrarRotasAdmin(app, db) {
     res.redirect('/admin/pedidos?visibilidade=ocultos&aviso=' + encodeURIComponent('Pedido restaurado para a conta do cliente.'));
   });
 
+  app.post('/admin/pedidos/:id/confirmar-pagamento-presencial', (req,res) => {
+    // Somente administrador financeiro após VERIFICAR dinheiro, Pix ou cartão
+    // presencial recebido. Não aprova nem consulta Mercado Pago.
+    if(!guard(req,res,'pagamentos.estornar'))return;
+    const p=db.collection('orders').get(req.params.id);
+    if(!p||!p.pagamentoPresencial||p.pagamentoId)
+      return void res.status(409).html('Este pedido não é um pagamento presencial pendente.');
+    if(p.statusFinanceiro!=='pendente'||p.statusOperacional==='cancelado')
+      return void res.status(409).html('Pagamento já confirmado ou pedido cancelado.');
+    if(String(req.body.confirmouRecebimento||'')!=='1')
+      return void res.status(400).html('Confirme que o pagamento realmente foi recebido.');
+    const r=atualizarStatusFinanceiro(db,p.id,'aprovado',{
+      por:req.adminUser.nome,obs:'Pagamento presencial recebido e conferido pela equipe.'
+    });
+    if(!r.ok)return void res.status(409).html('Não foi possível confirmar: '+e(r.erro));
+    db.collection('orders').update(p.id,{pagamentoPresencial:{...p.pagamentoPresencial,
+      status:'recebido',confirmadoEm:new Date().toISOString(),
+      confirmadoPor:req.adminUser.nome}});
+    logAdmin(db,req.adminUser,'confirmou_pagamento_presencial','pedido',p.id,
+      {codigo:p.codigo,metodo:p.metodoPagamento,valorCentavos:p.totalCentavos},req);
+    const atualizado=db.collection('orders').get(p.id);
+    enfileirarEvolution(db,atualizado,'cliente_pago');
+    enfileirarEvolution(db,atualizado,'responsavel_pago');
+    res.redirect('/admin/pedidos/'+encodeURIComponent(p.id));
+  });
   app.post('/admin/pedidos/:id/recebido', (req, res) => {
     if (!guard(req, res, 'pedidos.editar')) return;
     const pedido = db.collection('orders').get(req.params.id);
