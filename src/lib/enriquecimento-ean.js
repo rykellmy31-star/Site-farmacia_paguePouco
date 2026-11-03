@@ -27,7 +27,10 @@ function validarFoto(url){
   }catch{return false;}
 }
 function registroImagem(url,fonte,ean){
-  return {url,principal:true,ordem:1,
+  // OFF fornece o original em .full.jpg; .400.jpg é versão reduzida
+  // e nunca deve ser convertida/esticada para parecer alta resolução.
+  const urlAltaResolucao=url.replace(/\.(?:100|200|400)\.(jpe?g)$/i,'.full.$1');
+  return {url, urlAltaResolucao,principal:true,ordem:1,
     legenda:'Imagem do produto — '+fonte+' (CC BY-SA 3.0; fonte: '+fonte+')',
     fonteEAN:{ean,fonte,licenca:'CC BY-SA 3.0',
       atribuicao:'Contribuidores de '+fonte,atribuidoEm:new Date().toISOString(),
@@ -54,16 +57,18 @@ function extrairDimensaoGoogle(s){
   return {comprimento:nums[0],largura:nums[1],altura:nums[2]};
 }
 export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
-    googleKey=config.googleEan?.key,googleCx=config.googleEan?.cx,force=false}={}){
+    googleKey=config.googleEan?.key,googleCx=config.googleEan?.cx,force=false,
+    somente='ambos'}={}){
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
+  const cacheKey=ean+':'+somente;
   if(fetcher===globalThis.fetch&&!force){
-    const c=CACHE.get(ean);if(c&&c.expira>Date.now())return c.resultado;
+    const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
   const resultado={ok:true,imagem:null,dimensoes:null,consultadas:[],origemDimensoes:''};
   // Fontes estruturadas com EAN exato e imagens reutilizáveis. Nunca
   // atribuir imagem de código parecido ou variante distinta.
-  for(const [nome,base] of FACTS){
+  if(somente!=='dimensoes')for(const [nome,base] of FACTS){
     resultado.consultadas.push(nome);
     const url=base+'/api/v2/product/'+encodeURIComponent(ean)+
       '.json?fields=code,product_name,image_front_url,image_url,selected_images';
@@ -80,6 +85,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   // em janeiro de 2027, portanto não depende dela para operar.
   if(googleKey&&googleCx){
     resultado.consultadas.push('Google Custom Search');
+    if(somente!=='imagem'){
     const query=new URL('https://www.googleapis.com/customsearch/v1');
     query.searchParams.set('key',googleKey);
     query.searchParams.set('cx',googleCx);
@@ -92,10 +98,11 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       const d=extrairDimensaoGoogle(texto);
       if(d){resultado.dimensoes=d;resultado.origemDimensoes='Google (medidas de embalagem a revisar)';break;}
     }
+    }
     // Busca opcional no índice de imagens: só reutiliza imagens de base
     // Open Facts (licença conhecida). Resultados de outros sites não
     // podem ser usados automaticamente, mesmo aparecendo no Google.
-    if(!resultado.imagem){
+    if(somente!=='dimensoes'&&!resultado.imagem){
       const im=new URL('https://www.googleapis.com/customsearch/v1');
       im.searchParams.set('key',googleKey);im.searchParams.set('cx',googleCx);
       im.searchParams.set('q','"'+ean+'" embalagem produto');
@@ -115,7 +122,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   }
   if(fetcher===globalThis.fetch){
     if(CACHE.size>300)CACHE.delete(CACHE.keys().next().value);
-    CACHE.set(ean,{expira:Date.now()+(resultado.imagem?86400000:90000),resultado});
+    CACHE.set(cacheKey,{expira:Date.now()+(resultado.imagem?86400000:90000),resultado});
   }
   return resultado;
 }
