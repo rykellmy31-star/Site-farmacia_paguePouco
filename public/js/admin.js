@@ -468,10 +468,14 @@
   async function converterFotoEANparaPNG(ean){
     const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?ean='+encodeURIComponent(ean),{
       credentials:'same-origin',headers:{'X-CSRF-Token':CFG.csrf}});
-    if(!resp.ok)throw new Error('Foto de origem indisponível ou muito grande.');
+    if(!resp.ok){
+      const detalhe=(await resp.text().catch(()=>'' )).slice(0,180).trim();
+      throw new Error(detalhe||'Não foi possível baixar nenhuma foto válida desse EAN.');
+    }
     const blob=await resp.blob();
-    if(blob.size>7*1024*1024||!/^image\/(jpeg|png|webp)$/.test(blob.type))
-      throw new Error('Imagem de origem não permitida.');
+    // A fonte pode ter 12 MB; o PNG final ainda segue o limite do upload.
+    if(blob.size>12*1024*1024||!/^image\/(jpeg|png|webp)$/.test(blob.type))
+      throw new Error('Imagem de origem com formato inválido ou maior que 12 MB.');
     const objetoUrl=URL.createObjectURL(blob);
     let bitmap,imagem;
     try{

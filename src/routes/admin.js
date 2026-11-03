@@ -52,6 +52,7 @@ import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/set
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
+import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1385,27 +1386,17 @@ function registrarApi(app, db) {
     const ean=String(req.query.get('ean')||'');
     if(!eanValido(ean))return void res.text('EAN inválido',400);
     const dados=await buscarDadosExternosEAN(ean,{somente:'imagem'});
-    const url=dados.imagem?.urlAltaResolucao||dados.imagem?.url;
-    if(!url||!/^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(url))
-      return void res.text('Imagem indisponível',404);
-    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),6000);
-    try{
-      const upstream=await fetch(url,{signal:ctrl.signal,redirect:'manual'});
-      if(!upstream.ok||upstream.status>=300)
-        return void res.text('Foto de origem indisponível',404);
-      const size=Number(upstream.headers.get('content-length')||0);
-      if(size>7*1024*1024)return void res.text('Imagem muito grande',413);
-      const mime=String(upstream.headers.get('content-type')||'').split(';')[0];
-      if(!['image/jpeg','image/png','image/webp'].includes(mime))
-        return void res.text('Formato de origem inválido',415);
-      const bytes=Buffer.from(await upstream.arrayBuffer());
-      if(bytes.length>7*1024*1024)return void res.text('Imagem muito grande',413);
-      res.set('Content-Type',mime);
-      res.set('Cache-Control','private, max-age=60');
-      res.set('X-Content-Type-Options','nosniff');
-      res.end(bytes);
-    }catch{return void res.text('Não foi possível acessar a imagem',502);}
-    finally{clearTimeout(timer);}
+    if(!dados.imagem)return void res.text('Nenhuma foto licenciada encontrada para este EAN.',404);
+    const arquivo=await buscarImagemDisponivel(dados.imagem);
+    if(!arquivo.ok){
+      // Erro detalhado e seguro para o usuário, sem URLs de origem.
+      return void res.text(arquivo.motivo,arquivo.erros?.grande?413:404);
+    }
+    res.set('Content-Type',arquivo.mime);
+    res.set('Content-Length',String(arquivo.bytes.length));
+    res.set('Cache-Control','private, max-age=60');
+    res.set('X-Content-Type-Options','nosniff');
+    res.end(arquivo.bytes);
   });
   // Vincula PNG previamente validado/salvo no storage do próprio site,
   // sem alterar foto existente e sem reativar produto.
