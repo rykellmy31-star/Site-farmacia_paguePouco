@@ -87,7 +87,7 @@ test('fluxo de câmera inicia sem crop, lê EAN e encerra stream antes de sair',
  };
  elems.leitorCameraControle={hidden:true};
  elems.leitorCodigoStatus={textContent:''};
- for(const id of ['fecharLeitorCodigo','leitorEscolherFoto','leitorFotoArquivo']){
+ for(const id of ['fecharLeitorCodigo','leitorEscolherFoto','leitorFotoArquivo','leitorGaleriaFoto','leitorGaleriaArquivo']){
    elems[id]={addEventListener(){},click(){}};
  }
  const document={
@@ -140,4 +140,84 @@ test('fluxo de câmera inicia sem crop, lê EAN e encerra stream antes de sair',
  assert.equal(enviado,1);
  assert.equal(modal.open,false);
  assert.equal(instances[0].stopped,true);
+});
+
+test('foto ilegível não congela câmera do iPhone e permite outra leitura',async()=>{
+ const handlers={},elems={},instancias=[];
+ let clicks=0;
+ const modal={open:false,listeners:{},innerHTML:'',setAttribute(){},
+  addEventListener(name,fn){this.listeners[name]=fn;},
+  showModal(){this.open=true;},
+  close(){this.open=false;this.listeners.close?.();}
+ };
+ const source=documento=>({
+  head:{appendChild(){}},body:{append(){}},hidden:false,
+  querySelector(q){return q==='[data-leitor-codigo]'?{}:q.includes('input[name="q"]')
+    ?documento.destino:null;},
+  getElementById(id){return elems[id]||null;},
+  createElement(tag){
+   if(tag==='dialog')return modal;
+   if(tag==='style')return {textContent:''};
+   return {value:'',textContent:''};
+  },
+  addEventListener(name,fn){handlers[name]=fn;}
+ });
+ elems.leitorCodigoCamera={value:'',replaceChildren(){},append(){},
+   addEventListener(name,fn){handlers['select-'+name]=fn;}};
+ elems.leitorCameraControle={hidden:true};
+ elems.leitorCodigoStatus={textContent:''};
+ for(const id of ['fecharLeitorCodigo','leitorEscolherFoto','leitorFotoArquivo','leitorGaleriaFoto','leitorGaleriaArquivo'])
+   elems[id]={value:'',listeners:{},
+     addEventListener(name,fn){this.listeners[name]=fn;},
+     click(){clicks++;}};
+ class Scanner{
+  constructor(){this.running=false;instancias.push(this);}
+  static async getCameras(){return [{id:'back',label:'Câmera Traseira'}];}
+  async start(camera,config,cb){this.running=true;this.onSuccess=cb;}
+  getState(){return this.running?2:0;}
+  async stop(){this.running=false;this.stopped=true;}
+  async scanFile(){throw new Error('NotFoundException: No MultiFormat Readers');}
+  clear(){this.cleared=true;}
+ }
+ const documento={destino:{value:'',dispatchEvent(){},focus(){},
+   closest(){return {matches:()=>true,requestSubmit(){}};}}};
+ const doc=source(documento);
+ const contexto={
+  document:doc,window:{Html5Qrcode:Scanner,isSecureContext:true,
+    Html5QrcodeSupportedFormats:{EAN_13:1,EAN_8:2,UPC_A:3},addEventListener(){}},
+  navigator:{mediaDevices:{getUserMedia(){}}},
+  Event:class Event{constructor(name){this.type=name;}},
+  setTimeout,clearTimeout,Promise,console
+ };
+ vm.runInNewContext(scanner,contexto);
+ const botao={disabled:false,dataset:{leitorCodigo:'form[action="/admin/produtos"] input[name="q"]'}};
+ handlers.click({target:{closest(){return botao;}},preventDefault(){}});
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(instancias.length,1);
+ assert.equal(instancias[0].running,true);
+ elems.leitorEscolherFoto.listeners.click();
+ assert.equal(clicks,1);
+ // Ao abrir a câmera nativa o Safari pode ocultar a página: o diálogo fica aberto.
+ doc.hidden=true;handlers.visibilitychange();
+ assert.equal(modal.open,true);
+ doc.hidden=false;
+ await elems.leitorFotoArquivo.listeners.change({target:{files:[{name:'codigo.jpg',type:'image/jpeg'}],value:'codigo.jpg'}});
+ assert.equal(instancias[0].stopped,true);
+ assert.equal(instancias[0].cleared,true);
+ assert.equal(instancias.length,2,'deve iniciar NOVA instância, sem frame congelado');
+ assert.equal(instancias[1].running,true);
+ assert.match(elems.leitorCodigoStatus.textContent,/Câmera reativada/);
+ await instancias[1].onSuccess('7894222042381');
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(documento.destino.value,'7894222042381');
+ assert.equal(modal.open,false);
+});
+test('alternativa de foto oferece captura nativa e galeria, sem upload ao servidor',()=>{
+ assert.match(scanner,/id="leitorGaleriaArquivo"/);
+ assert.match(scanner,/id="leitorGaleriaFoto"/);
+ assert.match(scanner,/capture="environment"/);
+ assert.match(scanner,/const codigoNativo=await lerFotoNativa\(arquivo\)/);
+ assert.match(scanner,/const codigo=await leitor.scanFile\(arquivo,false\)/);
+ assert.match(scanner,/if\(document.hidden&&modal\?\.open&&!fotoSolicitada&&!lendoFoto\)modal.close\(\)/);
+ assert.doesNotMatch(scanner,/fetch\(/);
 });
