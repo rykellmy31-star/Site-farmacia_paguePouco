@@ -47,11 +47,11 @@ export function candidatosGoogleImagens(json,ean){
     vistos.add(imagem);
     const pagina=httpsUrl(item.source_url||item.context_link||item.page_url||
       item.source?.link||item.source?.url||item.source_link||item.link);
-    const titulo=String(item.title||item.alt||item.description||'').slice(0,180);
+    const titulo=String(item.title||item.image_alt||item.alt||item.description||'').slice(0,180);
     const dominio=pagina?new URL(pagina).hostname:new URL(imagem).hostname;
     encontrados.push({
       url:imagem,
-      miniatura:httpsUrl(item.thumbnail||item.thumbnail_url||item.image?.thumbnail)||imagem,
+      miniatura:httpsUrl(item.thumbnail||item.thumbnail_url||item.thumbnail_image||item.image?.thumbnail)||imagem,
       titulo,origem:dominio,pagina,
       eanMencionado:(titulo+' '+pagina).includes(ean),
       // Identidade, licença e apresentação exigem conferência independente.
