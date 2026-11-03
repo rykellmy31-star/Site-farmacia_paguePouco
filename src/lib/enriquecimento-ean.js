@@ -158,6 +158,66 @@ function registroImagem(url,fonte,ean,alternativas=[]){
       atribuicao:'Contribuidores de '+fonte,atribuidoEm:new Date().toISOString(),
       licencaUrl:'https://creativecommons.org/licenses/by-sa/3.0/'}};
 }
+
+// Busca complementar de esmaltes em catálogo ESPECÍFICO de cosméticos.
+// O nome sozinho não basta: exigir marca, tonalidade completa e volume,
+// para não trocar, por exemplo, "Renda" por "Renda Paetê".
+const MARCAS_ESMALTE=['RISQUE','RISQUE','IMPALA','COLORAMA','DAILUS','VULT',
+  'AVON','HITS','BLANT','MOHDA','LUDURANA','NATI','REVLON','TOP BEAUTY',
+  'BEAUTY COLOR','STUDIO 35','ANA HICKMANN','SALLY HANSEN','OCEANE'];
+const GENERICOS_ESMALTE=new Set(['ESMALTE','ESM','VERNIZ','UNHAS','UNHA','PARA',
+  'DE','DA','DO','DAS','DOS','COR','CORES','CREMOSO','CREM','CINTILANTE',
+  'PEROLADO','PEROL','EXTRA','BRILHO','FOSCO','GEL','LONGA','DURACAO',
+  'BASE','ESPECIAL','LINHA','NOVA','FRASCO','EDICAO','ED','ML','ESMALTACAO',
+  'UNIDADE','UN','COLECAO','NUDE','VERNIS','NAIL','POLISH','NAGELLACK']);
+function textoComparavel(v){
+  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+}
+function tokensComparaveis(v){return textoComparavel(v).split(' ').filter(Boolean);}
+function contemSequencia(texto,expressao){
+  const a=' '+textoComparavel(texto)+' ',b=' '+textoComparavel(expressao)+' ';
+  return b.trim().length>=3&&a.includes(b);
+}
+function referenciaEsmalte(nome,marca){
+  const n=textoComparavel(nome);
+  if(!/\b(?:ESMALTE|ESM|VERNIZ|NAIL POLISH)\b/.test(n)||n.length<13||n.length>130)return null;
+  let fabricante=textoComparavel(marca);
+  if(!fabricante){
+    fabricante=MARCAS_ESMALTE.find(m=>contemSequencia(n,m))||'';
+  }
+  if(!fabricante||fabricante.length<4||!contemSequencia(n,fabricante))return null;
+  const volume=n.match(/\b(\d{1,2})\s*ML\b/)?.[1]||'';
+  // Sem volume, a chance de confundir apresentações é maior.
+  if(!volume)return null;
+  const marcaTokens=new Set(tokensComparaveis(fabricante));
+  const especificos=tokensComparaveis(n).filter((t,i,tokens)=>
+    !GENERICOS_ESMALTE.has(t)&&!marcaTokens.has(t)&&
+    !(t===volume&&tokens[i+1]==='ML'));
+  if(!especificos.length||especificos.length>7)return null;
+  return {marca:fabricante,volume,especificos:[...new Set(especificos)],
+    query:[fabricante,...especificos].join(' ').slice(0,90)};
+}
+function esmalteMesmaVariante(produto,referencia){
+  if(!produto||!referencia)return false;
+  const nome=[produto.product_name_pt,produto.product_name].find(Boolean)||'';
+  if(!nome||!/\b(?:ESMALTE|ESM|VERNIZ|NAIL POLISH)\b/.test(textoComparavel(nome)))return false;
+  const texto=textoComparavel(nome);
+  const marcas=textoComparavel(produto.brands||'');
+  if(!contemSequencia(marcas,referencia.marca)&&!contemSequencia(texto,referencia.marca))return false;
+  const volumes=[texto, textoComparavel(produto.quantity)].map(t=>t.match(/\b(\d{1,2})\s*ML\b/)?.[1]).filter(Boolean);
+  if(!volumes.includes(referencia.volume))return false;
+  const marcaTokens=new Set(tokensComparaveis(referencia.marca));
+  const itens=tokensComparaveis(nome).filter((t,i,tokens)=>
+    !GENERICOS_ESMALTE.has(t)&&!marcaTokens.has(t)&&
+    !(t===referencia.volume&&tokens[i+1]==='ML'));
+  const detalhe=[...new Set(itens)];
+  // Exigir mesma tonalidade completa, sem aceitar tons parecidos ou versões
+  // diferentes com palavras adicionais ("Renda Paetê" ≠ "Renda").
+  return detalhe.length===referencia.especificos.length&&
+    detalhe.every(t=>referencia.especificos.includes(t));
+}
+
 async function lerJson(url,{fetcher,timeoutMs=2400}){
   const ctrl=new AbortController(),t=setTimeout(()=>ctrl.abort(),timeoutMs);
   try{
@@ -180,10 +240,11 @@ function extrairDimensaoGoogle(s){
 }
 export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     googleKey=config.googleEan?.key,googleCx=config.googleEan?.cx,force=false,
-    somente='ambos'}={}){
+    somente='ambos',nomeProduto='',marcaProduto=''}={}){
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
-  const cacheKey=ean+':'+somente;
+  const referencia=somente==='dimensoes'?null:referenciaEsmalte(nomeProduto,marcaProduto);
+  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'');
   if(fetcher===globalThis.fetch&&!force){
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
@@ -218,6 +279,33 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         // Uma imagem da mesma base pode ter várias fotos frontais.
         // Se a primeira for de resolução baixa, tentar também as outras.
         for(const url of urls.slice(1))adicionar(registroImagem(url,nome,ean));
+      }
+    }
+  }
+  // ESMALTES: se a marca/cor/volume são conhecidos, procurar também por
+  // nome no índice de cosméticos Open Beauty Facts, mesmo sem o EAN indexado.
+  // Não aceitar tons similares; manter a origem do código diferente visível.
+  if(somente!=='dimensoes'&&referencia){
+    resultado.consultadas.push('Open Beauty Facts — esmaltes por nome, cor e marca');
+    const query=new URL('https://world.openbeautyfacts.org/cgi/search.pl');
+    for(const [k,v] of Object.entries({search_terms:referencia.query,
+      search_simple:'1',action:'process',json:'1',page_size:'24',
+      fields:'code,product_name,product_name_pt,brands,quantity,image_front_url,image_url,selected_images'}))
+      query.searchParams.set(k,v);
+    const lista=await lerJson(query.href,{fetcher,timeoutMs:4100});
+    for(const produto of (Array.isArray(lista?.products)?lista.products:[]).slice(0,24)){
+      if(!esmalteMesmaVariante(produto,referencia))continue;
+      // Se veio um EAN diferente, a correspondência é pela ficha: não
+      // atribuir falsamente que o catálogo confirmou o EAN pesquisado.
+      const urls=[produto.image_front_url,produto.selected_images?.front?.display?.pt,
+        produto.selected_images?.front?.display?.en,produto.image_url]
+        .filter(validarFoto);
+      for(const url of [...new Set(urls)].slice(0,3)){
+        const imagem=registroImagem(url,'Open Beauty Facts',ean);
+        imagem.fonteEAN.correspondencia='marca-cor-volume';
+        imagem.fonteEAN.codigoNaFonte=String(produto.code||'');
+        imagem.legenda+='; correspondência por nome, marca, cor e volume.';
+        adicionar(imagem);
       }
     }
   }
