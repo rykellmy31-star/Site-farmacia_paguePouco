@@ -513,16 +513,23 @@
     const objetoUrl=URL.createObjectURL(blob);
     let bitmap,imagem;
     try{
+      const carregarImagem=()=>new Promise((resolve,reject)=>{
+        const img=new Image();
+        img.onload=()=>resolve(img);
+        img.onerror=()=>reject(Error('Não foi possível analisar a foto.'));
+        img.src=objetoUrl;
+      });
       if(typeof createImageBitmap==='function'){
-        bitmap=await createImageBitmap(blob);
-        imagem=bitmap;
+        try{
+          bitmap=await createImageBitmap(blob);
+          imagem=bitmap;
+        }catch{
+          // Alguns JPGs de catálogo não são decodificados pelo
+          // createImageBitmap no Safari/iPhone: tentar imagem HTML.
+          imagem=await carregarImagem();
+        }
       }else{
-        imagem=await new Promise((resolve,reject)=>{
-          const img=new Image();
-          img.onload=()=>resolve(img);
-          img.onerror=()=>reject(Error('Não foi possível analisar a foto.'));
-          img.src=objetoUrl;
-        });
+        imagem=await carregarImagem();
       }
       const w=imagem.width||imagem.naturalWidth,h=imagem.height||imagem.naturalHeight;
       if(!w||!h||Math.min(w,h)<600||Math.max(w,h)/Math.min(w,h)>3.2)
@@ -546,17 +553,28 @@
       }
       if(maior-menor<45||arestas<95)
         throw new Error('Foto muito apagada ou com poucos detalhes; não será adicionada.');
-      const escala=Math.min(1,1400/Math.max(w,h));
+      // Gerar na melhor resolução cabível. PNGs grandes podem exceder
+      // o limite de upload mesmo quando a foto de origem é pequena.
+      // Reduzir progressivamente, sem ampliar ou baixar de 600 pixels.
+      let escala=Math.min(1,1400/Math.max(w,h));
       const tela=document.createElement('canvas');
-      tela.width=Math.round(w*escala);tela.height=Math.round(h*escala);
       const ctx=tela.getContext('2d');
       if(!ctx)throw new Error('Não foi possível converter para PNG.');
-      ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-      ctx.drawImage(imagem,0,0,tela.width,tela.height);
-      const png=await new Promise(resolve=>tela.toBlob(resolve,'image/png'));
-      if(!png||png.type!=='image/png'||png.size>7.5*1024*1024)
-        throw new Error('PNG gerado muito grande. Foto não adicionada.');
-      return new File([png],'ean-'+ean+'.png',{type:'image/png'});
+      let tamanhoAnterior='';
+      for(const limite of [1400,1200,1000,800]){
+        escala=Math.min(1,limite/Math.max(w,h));
+        const largura=Math.round(w*escala),altura=Math.round(h*escala);
+        if(largura<600||altura<600)break;
+        if(tamanhoAnterior===largura+'x'+altura)continue;
+        tamanhoAnterior=largura+'x'+altura;
+        tela.width=largura;tela.height=altura;
+        ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+        ctx.drawImage(imagem,0,0,largura,altura);
+        const png=await new Promise(resolve=>tela.toBlob(resolve,'image/png'));
+        if(png?.type==='image/png'&&png.size<=7.5*1024*1024)
+          return new File([png],'ean-'+ean+'.png',{type:'image/png'});
+      }
+      throw new Error('PNG muito grande para gravar sem perder qualidade. Tente outra foto.');
     }finally{
       bitmap?.close?.();
       URL.revokeObjectURL(objetoUrl);
