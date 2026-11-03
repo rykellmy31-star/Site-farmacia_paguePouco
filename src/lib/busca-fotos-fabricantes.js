@@ -17,7 +17,7 @@ export function normalizarNomeCatalogo(v){
 }
 export function consultaFabricante(nome,fabricante){
   const n=normalizarNomeCatalogo(nome),f=normalizarNomeCatalogo(fabricante);
-  if(n.length<10||n.length>150||f.length<4||f.length>80||
+  if(n.length<10||n.length>150||f.length<3||f.length>80||
     GENERICOS.has(f)||n.split(' ').length<2)return null;
   return {nome:n,fabricante:f,termo:(nome+' '+fabricante).trim().slice(0,150)};
 }
