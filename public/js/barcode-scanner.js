@@ -8,7 +8,8 @@
   'use strict';
   if(!document.querySelector('[data-leitor-codigo]'))return;
   let scanner=null,abrindo=false,finalizando=false,modal=null;
-  let alvoAtual=null,resultadoFechado=false;
+  let alvoAtual=null,aberturaId=0,trocandoCamera=false;
+  let camerasDisponiveis=[];
   const estilos=`
     #leitorCodigoDialog{max-width:min(94vw,510px);width:calc(100% - 24px);
       max-height:94dvh;overflow:auto;border:0;border-radius:14px;padding:18px;
@@ -17,9 +18,18 @@
     #leitorCodigoDialog .leitor-cabecalho{display:flex;align-items:center;
       justify-content:space-between;gap:10px}
     #leitorCodigoDialog .leitor-cabecalho h2{font-size:1.12rem;margin:0}
-    #leitorCodigoDialog #leitorCodigoArea{width:100%;min-height:210px;
-      overflow:hidden;border-radius:10px;margin:14px 0 6px}
-    #leitorCodigoDialog #leitorCodigoArea video{max-width:100%;border-radius:8px}
+    #leitorCodigoDialog #leitorCodigoArea{width:100%;min-height:200px;
+      overflow:hidden;border-radius:10px;margin:10px 0 6px;background:#161c22}
+    #leitorCodigoDialog #leitorCodigoArea video{
+      display:block!important;width:100%!important;height:auto!important;
+      max-height:50dvh;object-fit:contain;border-radius:8px}
+    #leitorCodigoDialog .leitor-camera-label{
+      display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.9rem;
+      margin:10px 0;color:#293d4b}
+    #leitorCodigoDialog #leitorCodigoCamera{min-height:42px;max-width:100%;
+      flex:1;min-width:175px}
+    #leitorCodigoDialog .leitor-dica{font-size:.88rem;line-height:1.4;
+      color:#314851;margin:8px 0}
     #leitorCodigoDialog .leitor-acoes{display:flex;gap:9px;flex-wrap:wrap;
       align-items:center;margin-top:12px}
     #leitorCodigoDialog button{min-height:42px;touch-action:manipulation}
@@ -50,6 +60,13 @@
       </div>
       <p class="leitor-status" id="leitorCodigoStatus" role="status"
         aria-live="polite">Aponte a câmera traseira para o código de barras do produto.</p>
+      <p class="leitor-dica" id="leitorCodigoDica">
+        Mantenha o celular a 15–25 cm do produto, com boa luz.
+        Enquadre todas as barras; não é necessário aproximar demais.
+      </p>
+      <label class="leitor-camera-label" for="leitorCodigoCamera" id="leitorCameraControle" hidden>
+        Câmera <select id="leitorCodigoCamera" aria-label="Escolher câmera traseira"></select>
+      </label>
       <div id="leitorCodigoArea"></div>
       <div class="leitor-acoes">
         <button class="botao secundario" type="button" id="leitorEscolherFoto">
@@ -64,6 +81,9 @@
     modal.addEventListener('cancel',event=>{event.preventDefault();modal.close();});
     modal.addEventListener('close',()=>{void encerrar();});
     el('leitorEscolherFoto').addEventListener('click',()=>el('leitorFotoArquivo').click());
+    el('leitorCodigoCamera').addEventListener('change',ev=>{
+      void trocarCamera(ev.target.value);
+    });
     el('leitorFotoArquivo').addEventListener('change',async ev=>{
       const arquivo=ev.target.files?.[0];ev.target.value='';
       if(!arquivo||!scanner||finalizando)return;
@@ -92,14 +112,14 @@
     });
   }
   async function encerrar(){
-    const antigo=scanner;scanner=null;abrindo=false;
+    const antigo=scanner;scanner=null;abrindo=false;aberturaId++;
     if(!antigo)return;
     try{if(antigo.getState()===2)await antigo.stop();}catch{}
     try{antigo.clear();}catch{}
   }
   async function receber(raw){
     if(finalizando||!modal?.open)return;
-    const code=String(raw||'').replace(/\D/g,'');
+    const code=String(raw||'').trim();
     if(!validoEAN(code)){
       status('Código detectado, mas com dígito verificador inválido. Aponte de novo.');
       return;
@@ -114,47 +134,111 @@
     modal.close();
     destino.focus({preventScroll:true});
     if(busca){destino.closest('form').requestSubmit?.();}
-    finalizando=false;
+    // Não desbloquear enquanto callbacks de frames antigos ainda chegam.
+  }
+  // Escolher a câmera traseira principal, em vez da ultra-wide/macro.
+  // Em iPhones multi-câmera, a ultra-wide pode alternar foco e distorcer barras.
+  function escolherCamera(cameras){
+    const tras=cameras.filter(c=>/back|rear|traseir|environment|wide|externa/i.test(c.label||''));
+    const opcoes=tras.length?tras:cameras;
+    const comuns=opcoes.filter(c=>!/ultra|macro|tele|0\.5x|0,5x|front|frontal/i.test(c.label||''));
+    const prioridade=comuns.find(c=>/wide|principal|main|1x|traseir|back/i.test(c.label||''));
+    return (prioridade||comuns[0]||opcoes[0])?.id||'';
+  }
+  function atualizarCameras(cameras,selecionada){
+    const select=el('leitorCodigoCamera');
+    const label=el('leitorCameraControle');
+    if(!select||!label)return;
+    select.replaceChildren();
+    for(let i=0;i<cameras.length;i++){
+      const camera=cameras[i];const option=document.createElement('option');
+      option.value=camera.id;
+      option.textContent=camera.label||('Câmera '+(i+1));
+      select.append(option);
+    }
+    select.value=selecionada;
+    label.hidden=cameras.length<=1;
+  }
+  function configuracaoVideo(deviceId){
+    // Não forçar aspecto 16:9 nem qrbox de 260×130: o leitor varre
+    // a imagem inteira, sem cortar o EAN nas extremidades.
+    const constraints={
+      width:{ideal:1280},height:{ideal:720},
+      frameRate:{ideal:24,max:30},
+    };
+    if(deviceId)constraints.deviceId={exact:deviceId};
+    else constraints.facingMode={ideal:'environment'};
+    return constraints;
+  }
+  async function iniciarCamera(idCamera='',pedido=aberturaId){
+    const fmt=window.Html5QrcodeSupportedFormats||{};
+    const types=[fmt.EAN_13,fmt.EAN_8,fmt.UPC_A,fmt.UPC_E,fmt.ITF,fmt.CODE_128]
+      .filter(x=>x!==undefined);
+    scanner=new window.Html5Qrcode('leitorCodigoArea',{
+      formatsToSupport:types,verbose:false,
+      experimentalFeatures:{useBarCodeDetectorIfSupported:true},
+    });
+    const iniciado=scanner;
+    const onSuccess=async code=>{await receber(code);};
+    const config={fps:8,disableFlip:true,videoConstraints:configuracaoVideo(idCamera)};
+    try{
+      await iniciado.start(idCamera||{facingMode:'environment'},config,onSuccess,()=>{});
+    }catch(error){
+      // Safari de certos aparelhos rejeita restrições de resolução: tentar
+      // uma única vez sem resoluções forçadas, preservando a câmera.
+      if(!modal?.open||pedido!==aberturaId)throw error;
+      await iniciado.start(idCamera||{facingMode:'environment'},
+        {fps:7,disableFlip:true},onSuccess,()=>{});
+    }
+    if(!modal?.open||pedido!==aberturaId||scanner!==iniciado){
+      try{if(iniciado.getState()===2)await iniciado.stop();}catch{}
+      try{iniciado.clear();}catch{}
+      return;
+    }
+    status('Câmera pronta. Mantenha o código inteiro visível, a 15–25 cm, sem aproximar demais.');
+  }
+  async function trocarCamera(id){
+    if(!modal?.open||trocandoCamera||abrindo||!id)return;
+    trocandoCamera=true;
+    status('Trocando para a câmera selecionada...');
+    try{
+      await encerrar();
+      if(modal.open)await iniciarCamera(id,aberturaId);
+    }catch{
+      status('Não foi possível abrir essa câmera. Selecione outra ou use uma foto.');
+    }finally{trocandoCamera=false;}
   }
   async function abrir(botao){
-    if(abrindo)return;
-    alvoAtual=botao;
+    if(abrindo||trocandoCamera||modal?.open)return;
+    alvoAtual=botao;finalizando=false;
     criarModal();
+    const pedido=++aberturaId;
+    modal.showModal();
     if(!window.isSecureContext){
-      modal.showModal();status('A câmera exige acesso HTTPS. Você pode digitar o EAN normalmente.');
+      status('A câmera exige HTTPS. Você ainda pode digitar o EAN normalmente.');
       return;
     }
     if(!navigator.mediaDevices?.getUserMedia){
-      modal.showModal();status('Câmera indisponível neste navegador. Tente ler por uma foto.');
+      status('Câmera indisponível neste navegador. Tente ler por uma foto.');
       return;
     }
     abrindo=true;
-    modal.showModal();
-    status('Solicitando permissão para usar a câmera...');
+    status('Preparando câmera traseira para ler as barras...');
     try{
       await carregarBiblioteca();
-      if(!modal.open)return;
-      const fmt=window.Html5QrcodeSupportedFormats;
-      const types=[fmt.EAN_13,fmt.EAN_8,fmt.UPC_A,fmt.ITF,fmt.CODE_128]
-        .filter(x=>x!==undefined);
-      scanner=new window.Html5Qrcode('leitorCodigoArea',
-        {formatsToSupport:types,verbose:false});
-      const iniciado=scanner;
-      await iniciado.start({facingMode:'environment'},
-        {fps:10,qrbox:{width:260,height:130},aspectRatio:1.777},
-        async code=>{await receber(code);},
-        ()=>{});
-      if(!modal.open||scanner!==iniciado){
-        try{if(iniciado.getState()===2)await iniciado.stop();}catch{}
-        try{iniciado.clear();}catch{}
-        return;
+      if(!modal.open||pedido!==aberturaId)return;
+      try{camerasDisponiveis=await window.Html5Qrcode.getCameras();}
+      catch{camerasDisponiveis=[];}
+      if(!modal.open||pedido!==aberturaId)return;
+      const id=escolherCamera(camerasDisponiveis);
+      atualizarCameras(camerasDisponiveis,id);
+      await iniciarCamera(id,pedido);
+    }catch{
+      if(modal.open&&pedido===aberturaId){
+        status('Não consegui estabilizar a câmera. Tente outra câmera ou “Ler de uma foto”.');
+        if(!scanner&&typeof window.Html5Qrcode==='function')
+          scanner=new window.Html5Qrcode('leitorCodigoArea',{verbose:false});
       }
-      status('Aponte a câmera para as barras e mantenha o aparelho firme.');
-    }catch(err){
-      status('Não foi possível abrir a câmera. Verifique a permissão ou use “Ler de uma foto”.');
-      // Permite o fallback scanFile mesmo sem stream de vídeo.
-      if(!scanner&&typeof window.Html5Qrcode==='function')
-        scanner=new window.Html5Qrcode('leitorCodigoArea',{verbose:false});
     }finally{abrindo=false;}
   }
   document.addEventListener('click',event=>{
