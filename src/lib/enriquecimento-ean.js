@@ -132,3 +132,14 @@ export function anexarImagemAusente(produto,imagem){
     return {};
   return {imagens:[{...imagem,principal:true,ordem:1}]};
 }
+
+/** Somente substitui a foto automaticamente adicionada pelo buscador ANTIGO.
+ * Fotos enviadas/editadas manualmente nunca são substituídas.
+ */
+export function imagemAutomaticaAntiga(produto){
+  const arr=produto?.imagens||[];
+  if(arr.length!==1)return false;
+  const img=arr[0];
+  return /^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(String(img.url||'')) &&
+    /CC BY-SA/i.test(String(img.legenda||''));
+}
