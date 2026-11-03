@@ -40,7 +40,8 @@ export function candidatosGoogleImagens(json,ean){
     if(!item||typeof item!=='object')continue;
     // thumb é apenas prévia. Link da página de origem não é imagem.
     const imagem=httpsUrl(item.original||item.original_image||item.original_image_url||
-      item.image_url||item.image?.original||item.image?.url||item.image||item.url||
+      item.image_url||item.image?.original||item.image?.url||
+      (typeof item.image==='string'?item.image:'')||item.url||
       item.link);
     if(!imagem||vistos.has(imagem))continue;
     vistos.add(imagem);
