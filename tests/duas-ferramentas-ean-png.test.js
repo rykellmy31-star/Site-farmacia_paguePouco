@@ -84,3 +84,36 @@ test('editor farmacêutico consegue salvar PNG por EAN sem permissão geral de m
   assert.doesNotMatch(js,/const dados=await api\('\/admin\/api\/upload'[^\n]*fd/);
   assert.match(js,/Foto encontrada, mas não foi possível salvá-la/);
 });
+
+test('foto EAN: formulário sem imagens não lança erro e permite buscar',()=>{
+  const js=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
+  const inicio=js.indexOf('  function fotoEANLegadaFormulario(){');
+  const fim=js.indexOf('  const formatoEAN=',inicio);
+  assert.ok(inicio>0&&fim>inicio);
+  const funcoes=js.slice(inicio,fim);
+  const montar=(imagens,legenda='')=>{
+    const nodes=imagens.map(value=>({value}));
+    const formEAN={
+      querySelectorAll:(seletor)=>seletor==='[name="imagens[]"]'?nodes:[],
+      querySelector:(seletor)=>seletor==='[name="imagens[]"]'?(nodes[0]||null):
+        seletor==='[name="imagemLegenda[]"]'?{value:legenda}:null,
+    };
+    return Function('formEAN','$$','$',funcoes+
+      ';return {fotoEANLegadaFormulario,podeAtualizarFotoEAN};')(
+      formEAN,
+      (seletor,contexto)=>Array.from(contexto.querySelectorAll(seletor)),
+      (seletor,contexto)=>contexto.querySelector(seletor));
+  };
+  const vazio=montar([]);
+  assert.equal(vazio.fotoEANLegadaFormulario(),false);
+  assert.equal(vazio.podeAtualizarFotoEAN(),true);
+  const legado=montar([jpg],'Fonte Open Facts (CC BY-SA 3.0)');
+  assert.equal(legado.fotoEANLegadaFormulario(),true);
+  assert.equal(legado.podeAtualizarFotoEAN(),true);
+  const manual=montar(['/uploads/2026/11/manual.png'],'Foto cadastrada');
+  assert.equal(manual.fotoEANLegadaFormulario(),false);
+  assert.equal(manual.podeAtualizarFotoEAN(),false);
+  const duas=montar([jpg,'/uploads/outra.png'],'Fonte Open Facts (CC BY-SA 3.0)');
+  assert.equal(duas.fotoEANLegadaFormulario(),false);
+  assert.equal(duas.podeAtualizarFotoEAN(),false);
+});
