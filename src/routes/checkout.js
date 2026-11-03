@@ -5,7 +5,7 @@ import { telaCarrinho, telaEndereco, telaPagamento, telaConfirmacao, telaCheckou
 import {
   getCart, calcularTotais, normalizeCart, aplicarCupom, removerCupom, clearCart, attachCartCookie,
 } from '../lib/cart.js';
-import { calcularFrete, resolverFreteEscolhido } from '../lib/freight.js';
+import { calcularFreteIntegrado, resolverFreteIntegrado } from '../lib/melhor-envio.js';
 import { criarPedido, cancelarCriacaoComRecusaDefinitiva } from '../lib/orders.js';
 import { createPayment, installmentOptions, enabledMethods, providerPublicInfo } from '../lib/payments/index.js';
 import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '../lib/security.js';
@@ -82,7 +82,7 @@ export function registrarRotasCheckout(app, db) {
     res.redirect('/checkout/endereco');
   });
 
-  app.get('/checkout/endereco', (req, res) => {
+  app.get('/checkout/endereco', async (req, res) => {
     if (!exigirLoginCompra(req, res, db)) return;
     const ctx = criarContexto(req, db);
     const cart = normalizeCart(db, ctx.cart).cart;
@@ -92,7 +92,7 @@ export function registrarRotasCheckout(app, db) {
     const enderecos=req.user?.enderecos || [];
     const salvo=enderecos.find(en=>en.padrao)||enderecos[0]||null;
     // Ao abrir o checkout com um endereço salvo, já mostra cotação atual.
-    const calculo=salvo ? calcularFrete({
+    const calculo=salvo ? await calcularFreteIntegrado({
       config:ctx.settings.frete,cepFarmacia:ctx.settings.empresa?.endereco?.cep,
       cep:salvo.cep,uf:salvo.uf,cidade:salvo.cidade,
       items:cart.itens,subtotalCents:totais.subtotalCentavos,
@@ -158,7 +158,7 @@ export function registrarRotasCheckout(app, db) {
     }
 
     // frete sempre recalculado no servidor
-    const calc = calcularFrete({
+    const calc = await calcularFreteIntegrado({
       config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep: endereco.cep, uf: endereco.uf, cidade: endereco.cidade,
       items: cart.itens, subtotalCents: totais.subtotalCentavos,
@@ -202,14 +202,14 @@ export function registrarRotasCheckout(app, db) {
     res.redirect('/checkout/pagamento');
   });
 
-  app.post('/checkout/frete', (req, res) => {
+  app.post('/checkout/frete', async (req, res) => {
     const ctx = criarContexto(req, db);
     const cart = getCart(db, req);
     const cep = onlyDigits(req.body.cep);
     const cidade = cleanText(req.body.cidade, 80);
     const uf = String(req.body.uf || '').toUpperCase();
     const totais = calcularTotais(db, cart, {});
-    const calc = calcularFrete({
+    const calc = await calcularFreteIntegrado({
       config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep, cep, uf, cidade,
       items: cart.itens || [], subtotalCents: totais.subtotalCentavos,
       cupomFreteGratis: !!cart.cupom?.freteGratis,
@@ -218,7 +218,7 @@ export function registrarRotasCheckout(app, db) {
   });
 
   /* --------------------------- PAGAMENTO --------------------------- */
-  app.get('/checkout/pagamento', (req, res) => {
+  app.get('/checkout/pagamento', async (req, res) => {
     if (!exigirLoginCompra(req, res, db)) return;
     const ctx = criarContexto(req, db);
     const cart = normalizeCart(db, ctx.cart).cart;
@@ -227,7 +227,7 @@ export function registrarRotasCheckout(app, db) {
     if (!cart.frete?.endereco) return void res.redirect('/checkout/endereco');
 
     // revalida o frete no servidor (preços/estoque podem ter mudado)
-    const revalidado = resolverFreteEscolhido({
+    const revalidado = await resolverFreteIntegrado({
       config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep: cart.frete.endereco.cep, uf: cart.frete.endereco.uf, cidade: cart.frete.endereco.cidade,
       items: cart.itens, subtotalCents: calcularTotais(db, cart, {}).subtotalCentavos,
@@ -236,6 +236,10 @@ export function registrarRotasCheckout(app, db) {
     if (!revalidado.ok) {
       return void res.redirect('/checkout/endereco?erroFrete=' + encodeURIComponent(revalidado.erro));
     }
+    if (String(cart.frete.opcaoId).startsWith('me_') &&
+        Number(cart.frete.valor)!==Number(revalidado.valor))
+      return void res.redirect('/checkout/endereco?erroFrete='+encodeURIComponent(
+        'O preço do frete mudou. Confira a nova cotação antes de continuar.'));
     db.collection('carts').update(cart.id, {
       frete: { ...cart.frete, valor: revalidado.valor, label: revalidado.opcao.label, prazo: revalidado.opcao.prazo, opcaoId: revalidado.opcao.id },
     });
@@ -306,6 +310,7 @@ export function registrarRotasCheckout(app, db) {
       cart, cliente: req.user, endereco: cart.frete.endereco,
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
       freteConfig: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
+      freteOriginalCentavos:cart.frete.valor,
       cupomCodigo: cart.cupom?.codigo || null,
       vendedorId: req.body.vendedorId || null,
       receberWhatsappPedido: avisosWhatsapp, enviarItensWhatsappPedido: permiteItensWhatsapp, req,
