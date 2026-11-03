@@ -1473,7 +1473,7 @@ function registrarApi(app, db) {
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem',
       ...contextoImagemEsmalte(p.ean,{produtoId:p.id})});
-    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,imagem:dados.imagem,
+    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,fabricante:p.fabricante,imagem:dados.imagem,
       fontes:(dados.imagensCandidatas||[]).map(img=>({
         fonte:img.fonteEAN?.fonte||'Catálogo',
         atribuicao:img.fonteEAN?.urlAtribuicao||null,
