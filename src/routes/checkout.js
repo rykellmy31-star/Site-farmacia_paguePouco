@@ -158,6 +158,12 @@ export function registrarRotasCheckout(app, db) {
         totais, enderecos: req.user?.enderecos || [], erroFrete: calc.motivo || 'Entrega indisponível.',
       }), 400);
     }
+    if (req.body.freteOpcao && !calc.opcoes.some(o=>o.id===req.body.freteOpcao)) {
+      return void res.html(telaEndereco(ctx, {
+        totais, enderecos:req.user?.enderecos||[],
+        erroFrete:'A opção selecionada não atende ao CEP informado. Confira as opções atualizadas.',
+      }),400);
+    }
     const escolhida = calc.opcoes.find((o) => o.id === req.body.freteOpcao) || calc.opcoes[0];
 
     db.collection('carts').update(cart.id, {
