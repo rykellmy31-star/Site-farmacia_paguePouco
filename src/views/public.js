@@ -306,11 +306,16 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
   const venda = podeVender(produto);
   const imagens = produto.imagens || [];
   const imagemPrecoMelhor=imagens.some(img=>String(img.legenda||'').includes('PreçoMelhor'));
+  const commonsLegenda=imagens.find(img=>String(img.legenda||'').includes('Wikimedia Commons'))?.legenda||'';
+  const commonsURL=commonsLegenda.match(/https:\/\/commons\.wikimedia\.org\/wiki\/File:[^\s;]+/)?.[0];
   const creditoPrecoMelhor=imagemPrecoMelhor
     ?'<p class="texto-pequeno texto-suave mt-1">Foto: <a href="https://www.precomelhor.com.br/p/'+
       encodeURIComponent(String(produto.ean||''))+
       '" target="_blank" rel="noopener noreferrer">PreçoMelhor</a></p>'
-    :'';
+    :commonsURL
+      ?'<p class="texto-pequeno texto-suave mt-1">Foto licenciada: <a href="'+e(commonsURL)+
+       '" target="_blank" rel="noopener noreferrer">Wikimedia Commons — ver autor e licença</a></p>'
+      :'';
   const videos = produto.videos || [];
   const preco = precoVigenteCentavos(produto);
   const parcelamentoSemJuros = melhorParcelamentoSemJuros(ctx.db, preco);
