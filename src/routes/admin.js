@@ -1506,7 +1506,7 @@ function registrarApi(app, db) {
       try{url=new URL(origem)}catch{return void res.json({ok:false,erro:'Origem da licença inválida.'},400)}
       if(url.protocol!=='https:'||url.hostname!=='commons.wikimedia.org'||
          !url.pathname.startsWith('/wiki/File:')||url.search||url.hash||
-         !/^(?:CC BY(?:-SA)? (?:2\\.0|2\\.5|3\\.0|4\\.0)|CC0(?: 1\\.0)?|Public domain)$/i.test(licenca))
+         !/^(?:CC BY(?:-SA)? (?:2\.0|2\.5|3\.0|4\.0)|CC0(?: 1\.0)?|Public domain)$/i.test(licenca))
         return void res.json({ok:false,erro:'Atribuição ou licença da foto inválida.'},400);
       legenda='Foto frontal — Wikimedia Commons; '+licenca+'; autor: '+autor+
         '; origem: '+origem+'; convertida em PNG.';
