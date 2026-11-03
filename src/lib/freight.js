@@ -298,6 +298,9 @@ export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidad
 export function resolverFreteEscolhido({ config, cep, cepFarmacia = '', uf, cidade, items, subtotalCents, opcaoId, cupomFreteGratis }) {
   const calc = calcularFrete({ config, cep, cepFarmacia, uf, cidade, items, subtotalCents, cupomFreteGratis });
   if (!calc.disponivel) return { ok: false, erro: calc.motivo || 'Entrega indisponível para o destino informado.' };
+  // Impede pedido de retirada com CEP diferente por opção antiga/injetada.
+  if (opcaoId && !calc.opcoes.some((o) => o.id === opcaoId))
+    return { ok: false, erro: 'A forma de entrega escolhida não está disponível para este CEP. Confira o frete novamente.' };
   const escolhida = calc.opcoes.find((o) => o.id === opcaoId) || calc.opcoes[0];
   if (!escolhida) return { ok: false, erro: 'Selecione uma forma de entrega.' };
   return {
