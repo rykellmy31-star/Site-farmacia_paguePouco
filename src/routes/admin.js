@@ -41,7 +41,7 @@ import {
 import {
   montarArvore, slugUnicoProduto, slugUnicoCategoria, marcasDisponiveis, podeVender, podeAtivarAposAprovacao, filtrarProdutosPorEstoque,
 } from '../lib/catalog.js';
-import { saveUpload, deleteUpload, uploadStats, countUsages } from '../lib/uploads.js';
+import { saveUpload, deleteUpload, uploadStats, countUsages, detectFileType, imageSize } from '../lib/uploads.js';
 import {
   registrarMovimentoEstoque, atualizarStatusOperacional, atualizarStatusFinanceiro, concluirDevolucaoEstornada,
   cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, produtoComEstoqueParaPainel, validarReservaParaAprovacao,
@@ -1352,6 +1352,42 @@ function registrarApi(app, db) {
     }
     logAdmin(db, req.adminUser, 'upload_midia', 'midia', null, { quantidade: resultados.length }, req);
     res.json({ ok: true, arquivos: resultados });
+  });
+
+  // Upload exclusivo das fotos PNG já convertidas pelo buscador EAN.
+  // Usa a permissão do editor de produto, não a permissão de gerenciar mídia.
+  // Ex.: o farmacêutico pode editar fotos dos seus produtos, mas não tem
+  // acesso ao upload genérico /admin/api/upload.
+  app.post('/admin/api/produtos/imagem-ean/png', async (req, res) => {
+    if (!guardApi(req, res, 'produtos.editar')) return;
+    const ean = String(req.body?.ean || '').trim();
+    if (!eanValido(ean)) return void res.json({ ok: false, erro: 'EAN inválido para gravar a foto.' }, 400);
+    const arquivos = req.files || [];
+    const foto = arquivos[0];
+    if (arquivos.length !== 1 || !foto) {
+      return void res.json({ ok: false, erro: 'Nenhum PNG recebido para o EAN informado.' }, 400);
+    }
+    if (foto.filename !== `ean-${ean}.png` || foto.contentType !== 'image/png' ||
+        detectFileType(foto.data)?.mime !== 'image/png' ||
+        foto.data.length < 32 || foto.data.subarray(12, 16).toString('ascii') !== 'IHDR') {
+      return void res.json({ ok: false, erro: 'Arquivo PNG inválido ou não corresponde ao EAN informado.' }, 400);
+    }
+    const { largura, altura } = imageSize(foto.data, 'png');
+    if (!(largura >= 600 && altura >= 600 && largura <= 8000 && altura <= 8000) ||
+        Math.max(largura, altura) / Math.min(largura, altura) > 3.2) {
+      return void res.json({ ok: false, erro: 'A foto precisa ter no mínimo 600 × 600 pixels e proporções válidas.' }, 400);
+    }
+    try {
+      const media = await saveUpload(db, foto, {
+        kind: 'image', userId: req.adminUser.id, userType: 'admin',
+        legenda: 'PNG convertido de foto de catálogo pelo EAN ' + ean,
+      });
+      logAdmin(db, req.adminUser, 'upload_png_ean', 'midia', media.id, { ean, tamanho: media.tamanho }, req);
+      res.json({ ok: true, arquivo: media });
+    } catch (err) {
+      res.json({ ok: false, erro: err.status === 400 ? err.message :
+        'Não foi possível gravar a imagem no armazenamento da farmácia.' }, err.status === 400 ? 400 : 500);
+    }
   });
 
   /* ------------------------------ PRODUTOS ------------------------------ */
