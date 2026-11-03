@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buscarDadosExternosEAN, anexarImagemAusente } from '../src/lib/enriquecimento-ean.js';
+import { buscarDadosExternosEAN, anexarImagemAusente, imagemAutomaticaAntiga } from '../src/lib/enriquecimento-ean.js';
 import { selecionarVendedorPedido } from '../src/lib/sellers.js';
 
 const ean='7891000100103';
@@ -78,5 +78,12 @@ test('cliente não vê seletor; as rotas mantêm registro interno sem exigir ven
  assert.match(route,/vendedorId: null/);
  assert.match(admin,/vincular-imagem-ean/);
  assert.match(js,/anexarFotoFormulario/);
- assert.match(js,/const precisaFoto=/);
+ assert.match(js,/podeAtualizarFotoEAN/);
+});
+
+test('somente imagem automática antiga pode ser substituída',()=>{
+ const p={ean,imagens:[{url:imagem,legenda:'Imagem por Open Food Facts (CC BY-SA 3.0)'}]};
+ assert.equal(imagemAutomaticaAntiga(p),true);
+ assert.equal(imagemAutomaticaAntiga({ean,imagens:[{url:'/uploads/manual.png'}]}),false);
+ assert.equal(imagemAutomaticaAntiga({ean,imagens:[]}),false);
 });
