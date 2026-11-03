@@ -501,8 +501,10 @@
       try {
         // Busca opcional e limitada, não pode impedir ativação se
         // nenhum catálogo público tiver informações para o EAN.
-        try { await post(`/admin/api/produtos/${id}/buscar-medidas-ean`); }
-        catch { /* cotação requer dados reais; não bloquear cadastro */ }
+        if(altProd.textContent.trim()==='Ativar'){
+          try { await post(`/admin/api/produtos/${id}/buscar-medidas-ean`); }
+          catch { /* busca não impede ativação */ }
+        }
         await post(`/admin/api/produtos/${id}/ativar`);
         location.reload();
       } catch (err) { notificar(err.message, 'erro'); }
