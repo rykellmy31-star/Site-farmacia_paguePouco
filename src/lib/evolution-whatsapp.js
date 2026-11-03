@@ -148,8 +148,12 @@ export function enfileirarEvolution(db,pedido,tipo){
       (itens ? ' :'+itens : '\n')+
       quantidadeMsg+formaEscolhida+
       (pedido.pagamentoPresencial?.precisaTroco
-        ? '\nTroco para: R$ '+(pedido.pagamentoPresencial.trocoParaCentavos/100).toFixed(2)
-        : '')+'\nPagamento pendente. Consulte endereço e detalhes no painel.'
+        ? '\n💵 CLIENTE VAI ENTREGAR: R$ '+
+            (pedido.pagamentoPresencial.trocoParaCentavos/100).toFixed(2).replace('.',',')+
+          '\n💰 *TROCO A SEPARAR: R$ '+
+            (pedido.pagamentoPresencial.trocoCentavos/100).toFixed(2).replace('.',',')+'*'
+        : '\nTroco: não solicitado.')+
+      '\nPagamento pendente. Consulte endereço e detalhes no painel.'
     : tipo==='responsavel_pago'
     ? '🔔 FARMÁCIA PAGUE POUCO\n✅ Pedido PAGO!\n📦 Pedido: #'+codigo+
       (itens ? ' :'+itens : '\n')+
