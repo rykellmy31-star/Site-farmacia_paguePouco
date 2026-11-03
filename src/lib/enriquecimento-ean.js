@@ -12,8 +12,9 @@ const FACTS=[
   ['Open Food Facts','https://world.openfoodfacts.org'],
   ['Open Beauty Facts','https://world.openbeautyfacts.org'],
   ['Open Products Facts','https://world.openproductsfacts.org'],
+  ['Open Pet Food Facts','https://world.openpetfoodfacts.org'],
 ];
-const URL_IMAGEM=/^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i;
+const URL_IMAGEM=/^https:\/\/images\.open(?:food|beauty|products|petfood)facts\.org\/images\/products\//i;
 const PRECOMELHOR_API='https://www.precomelhor.com.br';
 const PRECOMELHOR_CDN='pub-251da151f43b454d9e192d38bf5e6d71.r2.dev';
 // Nunca importar links arbitrários da API como URL de download.
@@ -88,7 +89,12 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   if(fetcher===globalThis.fetch&&!force){
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
-  const resultado={ok:true,imagem:null,dimensoes:null,consultadas:[],origemDimensoes:''};
+  const resultado={ok:true,imagem:null,imagensCandidatas:[],dimensoes:null,consultadas:[],origemDimensoes:''};
+  const adicionar=imagem=>{
+    if(!imagem||resultado.imagensCandidatas.some(i=>i.url===imagem.url))return;
+    resultado.imagensCandidatas.push(imagem);
+    resultado.imagem??=imagem;
+  };
   // Fontes estruturadas com EAN exato e imagens reutilizáveis. Nunca
   // atribuir imagem de código parecido ou variante distinta.
   if(somente!=='dimensoes'){
@@ -101,24 +107,20 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       const json=await lerJson(url,{fetcher,timeoutMs:3500});
       return {nome,produto:json?.product};
     }));
-    const urls=[];
     for(const {nome,produto:p} of respostas){
       resultado.consultadas.push(nome);
       if(!p||!eanIgual(p.code,ean))continue;
       const fotos=[p.image_front_url,p.selected_images?.front?.display?.pt,
         p.selected_images?.front?.display?.en,p.image_url]
         .filter(validarFoto);
-      for(const url of fotos)if(!urls.some(x=>x.url===url))urls.push({url,nome});
-    }
-    if(urls.length){
-      resultado.imagem=registroImagem(urls[0].url,urls[0].nome,ean,
-        urls.slice(1).map(f=>f.url));
+      const urls=[...new Set(fotos)];
+      if(urls.length)adicionar(registroImagem(urls[0],nome,ean,urls.slice(1)));
     }
   }
   // Fallback pela API pública oficial do PreçoMelhor, quando Open Facts
   // não oferece imagem. Uso comercial permitido com crédito visível.
   // Nunca usar fotos de URLs desconhecidas, nem aceitar EAN divergente.
-  if(somente!=='dimensoes'&&!resultado.imagem){
+  if(somente!=='dimensoes'){
     resultado.consultadas.push('PreçoMelhor');
     const api=PRECOMELHOR_API+'/api/product/'+encodeURIComponent(ean);
     const dados=await lerJson(api,{fetcher,timeoutMs:3800});
@@ -130,7 +132,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
         produto.image_url,
       ].filter(url=>fotoPrecoMelhorValida(url,ean));
       const unicas=[...new Set(opcoes)];
-      if(unicas.length)resultado.imagem=registroImagemPrecoMelhor(unicas,ean);
+      if(unicas.length)adicionar(registroImagemPrecoMelhor(unicas,ean));
     }
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
@@ -151,24 +153,26 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       if(d){resultado.dimensoes=d;resultado.origemDimensoes='Google (medidas de embalagem a revisar)';break;}
     }
     }
-    // Busca opcional no índice de imagens: só reutiliza imagens de base
-    // Open Facts (licença conhecida). Resultados de outros sites não
-    // podem ser usados automaticamente, mesmo aparecendo no Google.
-    if(somente!=='dimensoes'&&!resultado.imagem){
+    // Google Custom Search (somente contas já habilitadas) procura outras
+    // imagens de catálogos com licença conhecida, mesmo se a primeira
+    // fonte tiver foto pequena. Não copia URLs de lojas indiscriminadamente.
+    if(somente!=='dimensoes'){
       const im=new URL('https://www.googleapis.com/customsearch/v1');
       im.searchParams.set('key',googleKey);im.searchParams.set('cx',googleCx);
       im.searchParams.set('q','"'+ean+'" embalagem produto');
       im.searchParams.set('searchType','image');
       im.searchParams.set('rights','cc_attribute|cc_sharealike');
-      im.searchParams.set('num','5');
+      im.searchParams.set('num','10');
       const images=await lerJson(im.href,{fetcher});
       for(const item of images?.items||[]){
-        if(!validarFoto(item.link))continue;
         const identidade=String(item.title||'')+' '+String(item.snippet||'')+
           ' '+String(item.image?.contextLink||'');
         if(!identidade.includes(ean))continue;
-        resultado.imagem=registroImagem(item.link,'Open Facts (indexação Google)',ean);
-        break;
+        if(validarFoto(item.link)){
+          adicionar(registroImagem(item.link,'Open Facts (Google)',ean));
+        }else if(fotoPrecoMelhorValida(item.link,ean)){
+          adicionar(registroImagemPrecoMelhor([item.link],ean));
+        }
       }
     }
   }
