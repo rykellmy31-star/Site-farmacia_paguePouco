@@ -53,6 +53,7 @@ import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
+import { consultarGoogleImagensEAN } from '../lib/brightdata-google-imagens.js';
 import {gtinVarejoDaEmbalagem} from '../lib/gtin-embalagem-foto.js';
 import { consultarDescricaoEAN, preencherDescricaoAusente } from '../lib/busca-descricao-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
@@ -1439,6 +1440,18 @@ function registrarApi(app, db) {
       marcaProduto:cleanText(entrada?.marca||entrada?.fabricante,80),
       fabricanteProduto:cleanText(entrada?.fabricante||entrada?.marca,80)};
   };
+  // Pesquisa separada e SOMENTE LEITURA no Google Imagens via Bright Data.
+  // Nunca grava resultados automaticamente: Google não concede licença da foto.
+  // Somente o editor autenticado pode gastar uma consulta da API.
+  app.post('/admin/api/produtos/google-imagens',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    res.set('Cache-Control','no-store');
+    const resultado=await consultarGoogleImagensEAN(String(req.body?.ean||''),{
+      apiToken:config.brightDataGoogle?.token,
+      zone:config.brightDataGoogle?.zone,
+    });
+    res.json(resultado,resultado.ok?200:(resultado.status||502));
+  });
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador
   // antes de gravar a imagem na mídia local/R2.

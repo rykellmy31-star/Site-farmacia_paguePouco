@@ -279,6 +279,11 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               Não amplia imagens pequenas nem substitui fotos manuais.</p>
               <button class="botao pequeno secundario" type="button" id="botaoBuscarImagemEAN">🖼️ Buscar e salvar foto automaticamente</button>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaImagemEAN" role="status" aria-live="polite">Ainda não pesquisado.</p>
+              <button class="botao pequeno secundario mt-1" type="button" id="botaoGoogleImagensEAN">🔎 Pesquisar Google Imagens pelo EAN</button>
+              <p class="texto-pequeno mt-1" id="resultadoGoogleImagensEAN" role="status" aria-live="polite">
+                Busca separada pela Bright Data. As imagens devem ser conferidas e ter uso autorizado antes de publicação.
+              </p>
+              <div id="listaGoogleImagensEAN" class="campo-linha" aria-label="Resultados do Google Imagens"></div>
             </div>
             <div class="alerta info" id="painelBuscaEAN">
               <strong>📦 Ferramenta de dimensões — EAN</strong>

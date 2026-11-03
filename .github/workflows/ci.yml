@@ -46,6 +46,8 @@ jobs:
         run: node --test tests/evolution-whatsapp.test.js tests/evolution-connection.test.js
       - name: Validar descricao automatica por EAN Cosmos e Open Facts
         run: node --test tests/busca-descricao-ean.test.js
+      - name: Validar Google Imagens via Bright Data sem chamadas pagas
+        run: node --test tests/brightdata-google-imagens.test.js
       - name: Validar fallback das origens de imagem por EAN
         run: node --test tests/fallback-origem-ean.test.js
       - name: Validar pesquisa de fotos por fabricante em catálogos abertos
