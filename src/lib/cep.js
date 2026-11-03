@@ -96,21 +96,45 @@ export function ufFromCep(cep) {
 }
 
 /**
- * Consulta completa de CEP. Nunca inventa dados: se a UF não for identificada
- * ou o ViaCEP não responder, devolve apenas o que foi possível apurar.
+ * CEP: UF pela tabela local dos Correios, cidade via ViaCEP e, se necessário,
+ * BrasilAPI. Não é viável embutir milhões de CEPs com atualização contínua;
+ * o fallback offline nunca inventa município, bairro ou rua.
+ *
+ * O checkout solicita consultarEndereco:true mesmo quando o enriquecimento
+ * opcional das outras páginas estiver desligado por configuração.
  */
-export async function lookupCep(cep) {
+const CEP_CACHE = new Map();
+const CEP_CACHE_MS = 24 * 60 * 60 * 1000;
+const CEP_CACHE_MAX = 250;
+const textoSeguro = valor => String(valor || '').replace(/[\x00-\x1f\x7f<>]/g, ' ').trim().slice(0, 160);
+
+async function consultarProvedor(url, cep, expectedUF, fetcher, timeoutMs, tipo) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Math.min(4500, Math.max(500, Number(timeoutMs) || 3000)));
+  try {
+    const resp = await fetcher(url, { signal: ctrl.signal, headers:{Accept:'application/json'} });
+    if (!resp.ok) return null;
+    const raw = await resp.json();
+    if (!raw || raw.erro || raw.errors || typeof raw !== 'object') return null;
+    const uf = String(tipo === 'viacep' ? raw.uf : raw.state || '').toUpperCase();
+    const cidade = textoSeguro(tipo === 'viacep' ? raw.localidade : raw.city);
+    if (uf !== expectedUF || !cidade) return null;
+    return {
+      cidade, bairro: textoSeguro(tipo === 'viacep' ? raw.bairro : raw.neighborhood) || null,
+      logradouro: textoSeguro(tipo === 'viacep' ? raw.logradouro : raw.street) || null,
+      fonte: tipo+'+faixa-cep-offline',
+    };
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
+
+export async function lookupCep(cep, { consultarEndereco = false,
+  fetcher = globalThis.fetch, timeoutMs = config.cep.timeoutMs } = {}) {
   const d = normalizeCep(cep);
   const result = {
-    cep: d,
-    valido: isValidCep(d),
-    uf: null,
-    ufNome: null,
-    cidade: null,
-    bairro: null,
-    logradouro: null,
-    fonte: 'faixa-cep-offline',
-    erro: null,
+    cep: d, valido: isValidCep(d), uf: null, ufNome: null,
+    cidade: null, bairro: null, logradouro: null,
+    encontrado: false, fonte: 'faixa-cep-offline', erro: null,
   };
   if (!result.valido) {
     result.erro = 'CEP inválido. Digite os 8 dígitos.';
@@ -122,33 +146,34 @@ export async function lookupCep(cep) {
     result.erro = 'Não foi possível identificar o estado (UF) deste CEP.';
     return result;
   }
-  if (config.cep.viacep) {
-    const extra = await viaCep(d);
-    if (extra) {
-      result.cidade = extra.localidade || null;
-      result.bairro = extra.bairro || null;
-      result.logradouro = extra.logradouro || null;
-      result.fonte = 'viacep+faixa-cep-offline';
-      if (extra.uf && extra.uf !== result.uf) result.fonte += ' (divergência de UF conferida pela faixa)';
-    } else {
-      result.fonte = 'faixa-cep-offline (consulta de endereço indisponível)';
-    }
-  }
-  return result;
-}
 
-async function viaCep(cep) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), config.cep.timeoutMs);
-  try {
-    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: ctrl.signal });
-    if (!r.ok) return null;
-    const data = await r.json();
-    if (data && data.erro) return null;
-    return data;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+  if (!consultarEndereco && !config.cep.viacep) return result;
+  // Cache local apenas em consultas reais: testes injetam fetchers independentes.
+  const cachePermitido = fetcher === globalThis.fetch;
+  const hit = cachePermitido ? CEP_CACHE.get(d) : null;
+  if (hit && hit.expires > Date.now()) return {...result,...hit.extra};
+  const fontes = [
+    ['viacep', 'https://viacep.com.br/ws/'+d+'/json/'],
+    ['brasilapi', 'https://brasilapi.com.br/api/cep/v1/'+d],
+  ];
+  let extra = null;
+  for (const [tipo, url] of fontes) {
+    extra = await consultarProvedor(url,d,result.uf,fetcher,timeoutMs,tipo);
+    if (extra) break;
   }
+  if (extra) {
+    extra.encontrado = true;
+  } else {
+    extra = {
+      encontrado: false,
+      erro: 'Cidade não localizada automaticamente. Confira o CEP e informe a cidade manualmente.',
+      fonte: 'faixa-cep-offline (consulta de município indisponível)',
+    };
+  }
+  if (cachePermitido) {
+    if (CEP_CACHE.size >= CEP_CACHE_MAX) CEP_CACHE.delete(CEP_CACHE.keys().next().value);
+    // Não persistir dados de endereço de cliente: cache efêmero apenas por CEP.
+    CEP_CACHE.set(d, {extra,expires:Date.now()+(extra.encontrado?CEP_CACHE_MS:60_000)});
+  }
+  return {...result,...extra};
 }

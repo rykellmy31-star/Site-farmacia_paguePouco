@@ -66,7 +66,7 @@ export function telaCarrinho(ctx, { totais, avisos = [], erro = '' }) {
 
 export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo = null, freteSelecionado = '', erroFrete = '' }) {
   const padrao = enderecos.find((en) => en.padrao) || enderecos[0] || {};
-  const ufOpcoes = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
+  const ufOpcoes = ['', 'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
   return paginaPublica(ctx, {
     titulo: 'Entrega',
     semIndex: true,
@@ -103,10 +103,11 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
                 ${campoForm({ nome: 'telefone', rotulo: 'Telefone de contato', valor: ctx.usuario?.telefone || '', obrigatorio: true })}
               </div>
               <div class="campo-linha">
-                ${campoForm({ nome: 'cep', rotulo: 'CEP', valor: padrao.cep || ctx.cepSessao || '', obrigatorio: true, atributos: 'inputmode="numeric" id="cepEntrega" data-mascara-cep' })}
-                ${campoForm({ nome: 'uf', rotulo: 'UF', valor: padrao.uf || '', obrigatorio: true, opcoes: ufOpcoes, atributos: 'id="ufEntrega"' })}
-                ${campoForm({ nome: 'cidade', rotulo: 'Cidade', valor: padrao.cidade || '', obrigatorio: true, atributos: 'id="cidadeEntrega"' })}
+                ${campoForm({ nome: 'cep', rotulo: 'CEP', valor: padrao.cep || ctx.cepSessao || '', obrigatorio: true, atributos: 'inputmode="numeric" autocomplete="postal-code" data-mascara-cep' })}
+                ${campoForm({ nome: 'uf', rotulo: 'UF', valor: padrao.uf || '', obrigatorio: true, opcoes: ufOpcoes, atributos: 'autocomplete="address-level1"' })}
+                ${campoForm({ nome: 'cidade', rotulo: 'Cidade', valor: padrao.cidade || '', obrigatorio: true, atributos: 'autocomplete="address-level2"' })}
               </div>
+              <p id="avisoCepAutomatico" class="texto-pequeno texto-suave" role="status">O CEP será consultado automaticamente para preencher cidade e estado.</p>
               <div class="campo-linha">
                 ${campoForm({ nome: 'logradouro', rotulo: 'Endereço (rua/avenida)', valor: padrao.logradouro || '', obrigatorio: true })}
                 ${campoForm({ nome: 'numero', rotulo: 'Número', valor: padrao.numero || '', obrigatorio: true })}

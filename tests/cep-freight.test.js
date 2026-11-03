@@ -126,9 +126,87 @@ test('rotas e frontend não oferecem o velho botão Calcular frete',()=>{
   assert.doesNotMatch(front,/id="botaoCalcularFrete"/);
   assert.match(front,/id="botaoIrPagamento"/);
   assert.match(js,/function iniciarCheckout\(\)/);
-  assert.match(js,/cepInput.addEventListener\('input',agendar\)/);
+  assert.match(js,/cepInput.addEventListener\('input',alterouCep\)/);
   assert.match(js,/input\[name=enderecoSalvo\]/);
   assert.match(checkout,/cepFarmacia: ctx.settings.empresa\?\.endereco\?\.cep/);
   assert.match(api,/cepFarmacia: ctx.settings.empresa\?\.endereco\?\.cep/);
   assert.match(pedidos,/config: freteConfig, cepFarmacia/);
 });
+
+
+test('consulta CEP de outro estado preenche UF ES e cidade pelo ViaCEP', async () => {
+  const consultas=[];
+  const fetcher=async url=>{
+    consultas.push(url);
+    return {ok:true,json:async()=>({cep:'29885-000',uf:'ES',
+      localidade:'Municipio identificado pelo provedor',logradouro:'Rua do Teste',bairro:'Centro'})};
+  };
+  const r=await lookupCep('29885000',{consultarEndereco:true,fetcher});
+  assert.equal(r.uf,'ES');
+  assert.equal(r.cidade,'Municipio identificado pelo provedor');
+  assert.equal(r.logradouro,'Rua do Teste');
+  assert.equal(r.bairro,'Centro');
+  assert.equal(r.encontrado,true);
+  assert.deepEqual(consultas,['https://viacep.com.br/ws/29885000/json/']);
+});
+
+test('fallback BrasilAPI retorna cidade e não reutiliza informação de CEP anterior',async()=>{
+  const consultas=[];
+  const fetcher=async url=>{
+    consultas.push(url);
+    if(url.includes('viacep'))return {ok:false,status:503};
+    return {ok:true,json:async()=>({cep:'29885000',
+      state:'ES',city:'Cidade encontrada pelo fallback',
+      neighborhood:'Bairro Teste',street:'Rua Alternativa'})};
+  };
+  const r=await lookupCep('29885000',{consultarEndereco:true,fetcher});
+  assert.equal(r.uf,'ES');
+  assert.equal(r.cidade,'Cidade encontrada pelo fallback');
+  assert.equal(r.fonte,'brasilapi+faixa-cep-offline');
+  assert.equal(consultas.length,2);
+});
+
+test('se serviços falharem, UF continua correta e cidade fica vazia',async()=>{
+  const fetcher=async()=>{throw Error('offline')};
+  const r=await lookupCep('29885000',{consultarEndereco:true,fetcher,timeoutMs:700});
+  assert.equal(r.valido,true);
+  assert.equal(r.uf,'ES');
+  assert.equal(r.cidade,null);
+  assert.equal(r.encontrado,false);
+  assert.match(r.erro,/informe a cidade manualmente/i);
+});
+
+test('protege UF offline de cidade incompatível e fallback corrige o destino',async()=>{
+  const consultas=[];
+  const fetcher=async url=>{
+    consultas.push(url);
+    if(url.includes('viacep'))return {ok:true,json:async()=>({
+      uf:'BA',localidade:'Itanhém',logradouro:'Rua errada'})};
+    return {ok:true,json:async()=>({state:'ES',city:'Cidade válida no ES'})};
+  };
+  const r=await lookupCep('29885000',{consultarEndereco:true,fetcher});
+  assert.equal(r.uf,'ES');
+  assert.equal(r.cidade,'Cidade válida no ES');
+  assert.equal(r.logradouro,null);
+  assert.equal(consultas.length,2);
+});
+
+test('checkout usa ID real do CEP e limpa localidade antiga antes de cotar frete',()=>{
+  const base=new URL('../',import.meta.url);
+  const form=readFileSync(new URL('src/views/checkout.js',base),'utf8');
+  const script=readFileSync(new URL('public/js/app.js',base),'utf8');
+  const rotas=readFileSync(new URL('src/routes/checkout.js',base),'utf8');
+  const api=readFileSync(new URL('src/routes/api.js',base),'utf8');
+  assert.match(script,/const cepInput = \$\('#campo_cep'\)/);
+  assert.match(script,/cepInput\.addEventListener\('input',alterouCep\)/);
+  assert.match(script,/limparLocalidade\(\)/);
+  assert.match(script,/campoCidade\.value=info\.cidade/);
+  assert.match(script,/campoUF\.value=info\.uf/);
+  assert.match(form,/id="avisoCepAutomatico"/);
+  assert.doesNotMatch(form,/id="cepEntrega"/);
+  assert.doesNotMatch(form,/id="ufEntrega"/);
+  assert.match(api,/lookupCep\(req\.params\.cep, \{consultarEndereco:true\}\)/);
+  assert.match(rotas,/endereco\.uf = cepIdentificado\.uf/);
+  assert.match(rotas,/if \(cepIdentificado\.cidade\) endereco\.cidade=cepIdentificado\.cidade/);
+});
+

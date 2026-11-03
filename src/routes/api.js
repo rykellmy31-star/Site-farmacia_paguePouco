@@ -100,7 +100,7 @@ export function registrarRotasApi(app, db) {
 
   /* ----------------------------- CEP ---------------------------------- */
   app.get('/api/cep/:cep', async (req, res) => {
-    const info = await lookupCep(req.params.cep);
+    const info = await lookupCep(req.params.cep, {consultarEndereco:true});
     res.json(info);
   });
 
