@@ -80,7 +80,8 @@ test('cliente e farmácia recebem quantidade e pagamento escolhido, sem envio du
    cliente:{nome:'Cliente Teste',telefone:'73999998888'},statusFinanceiro:'pendente',
    itens:[{nome:'Dipirona 1g',quantidade:2},{nome:'Sabonete',quantidade:1}],
    receberWhatsappPedido:true,enviarItensWhatsappPedido:true,
-   pagamentoPresencial:{precisaTroco:true,trocoParaCentavos:10000}};
+   totalCentavos:3500,pagamentoPresencial:{
+     precisaTroco:true,trocoParaCentavos:10000,trocoCentavos:6500}};
  const cliente=enfileirarEvolution(db,pedido,'cliente_recebido');
  const responsavel=enfileirarEvolution(db,pedido,'responsavel_local');
  assert.equal(cliente.ok,true);assert.equal(responsavel.ok,true);
@@ -92,7 +93,7 @@ test('cliente e farmácia recebem quantidade e pagamento escolhido, sem envio du
    assert.match(t,/Forma de pagamento escolhida: \*Dinheiro\*/);
    assert.match(t,/2x Dipirona/);
  }
- assert.match(textos.find(x=>x.includes('NOVO PEDIDO')),/Troco para/);
+ assert.match(textos.find(x=>x.includes('NOVO PEDIDO')),/TROCO A SEPARAR: R\$ 65,00/);
  assert.match(textos.find(x=>x.startsWith('Olá')),/Nenhuma cobrança foi gerada/);
  enfileirarEvolution(db,pedido,'responsavel_local');
  assert.equal(db.out.size,2);

@@ -532,22 +532,53 @@
     const radios = $$('input[name=metodoPagamento]', form);
     const detalhe = $('#detalheCredito');
     const dinheiro=$('#detalheDinheiro');
-    const troco=$('#precisaTroco');
-    const campoTroco=$('#campoTroco');
     const valorTroco=$('#trocoPara');
+    const resumoTroco=$('#resumoTroco');
+    const totalCentavos=Number(dinheiro?.dataset.totalCentavos||0);
+    const formatoMoeda=valor=>new Intl.NumberFormat('pt-BR',{
+      style:'currency',currency:'BRL'
+    }).format(valor/100);
+    const atualizarTroco=()=>{
+      if(!valorTroco)return;
+      const dinheiroAtivo=radios.some(r=>r.checked&&r.value==='cash');
+      const digitado=valorTroco.value.trim();
+      valorTroco.disabled=!dinheiroAtivo;
+      valorTroco.required=false;
+      valorTroco.setCustomValidity('');
+      if(!resumoTroco)return;
+      resumoTroco.hidden=!dinheiroAtivo;
+      if(!dinheiroAtivo)return;
+      if(!digitado){
+        resumoTroco.textContent='Sem troco. Valor do pedido: '+formatoMoeda(totalCentavos)+
+          '. Deixe este campo vazio se for pagar o valor exato.';
+        return;
+      }
+      if(!/^\d{1,7}(?:[.,]\d{1,2})?$/.test(digitado)){
+        valorTroco.setCustomValidity('Informe um valor válido, como 100,00.');
+        resumoTroco.textContent='Informe um valor válido, como 100,00.';
+        return;
+      }
+      const entregaCentavos=Math.round(Number(digitado.replace(',','.'))*100);
+      if(entregaCentavos<totalCentavos){
+        valorTroco.setCustomValidity('O valor para troco não pode ser menor que o total do pedido.');
+        resumoTroco.textContent='Valor insuficiente: o pedido custa '+
+          formatoMoeda(totalCentavos)+'. Informe quanto entregará em dinheiro.';
+        return;
+      }
+      resumoTroco.textContent='Total do pedido: '+formatoMoeda(totalCentavos)+
+        ' | Cliente entregará: '+formatoMoeda(entregaCentavos)+
+        ' | Troco a separar: '+formatoMoeda(entregaCentavos-totalCentavos)+'.';
+    };
     const alternar = () => {
       const marcado = radios.find((r) => r.checked);
       if (detalhe) detalhe.classList.toggle('visivel', !!marcado && marcado.value === 'credit_card');
       const usaDinheiro=marcado?.value==='cash';
       if(dinheiro)dinheiro.hidden=!usaDinheiro;
-      if(troco)troco.disabled=!usaDinheiro;
-      const pedirTroco=usaDinheiro&&troco?.value==='1';
-      if(campoTroco)campoTroco.hidden=!pedirTroco;
-      if(valorTroco){valorTroco.disabled=!pedirTroco;valorTroco.required=pedirTroco;}
-      $$('.opcao-pagamento', form).forEach((l) => l.classList.toggle('selecionada', !!marcado && l.contains(marcado)));
+      atualizarTroco();
+      $('.opcao-pagamento', form).forEach((l) => l.classList.toggle('selecionada', !!marcado && l.contains(marcado)));
     };
     radios.forEach((r) => r.addEventListener('change', alternar));
-    troco?.addEventListener('change',alternar);
+    valorTroco?.addEventListener('input',atualizarTroco);
     alternar();
     form.addEventListener('submit', (event) => {
       // Guardar a escolha explicita antes de desabilitar o botao principal:

@@ -249,8 +249,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
   }
   const totalCentavos = baseCentavos - descontoPixCentavos + acrescimoJurosCentavos;
   const presencialValidado=local?validarPagamentoPresencial({
-    metodo:metodoPagamento,precisaTroco:pagamentoLocal?.precisaTroco,
-    trocoPara:pagamentoLocal?.trocoPara,totalCentavos,
+    metodo:metodoPagamento,trocoPara:pagamentoLocal?.trocoPara,totalCentavos,
   }):null;
   if(local&&!presencialValidado?.ok)
     return {ok:false,erro:presencialValidado?.erro||'Pagamento presencial inválido.'};

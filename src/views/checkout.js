@@ -157,7 +157,7 @@ export function telaPagamentoPresencial(ctx,{totais,endereco,frete,vendedores=[]
     ['pix','Pix','Pagar na entrega ou retirada'],
     ['credit_card','Cartão de crédito','Pagar com a equipe da farmácia'],
     ['debit_card','Cartão de débito','Pagar com a equipe da farmácia'],
-    ['cash','Dinheiro','Informar se precisa de troco'],
+    ['cash','Dinheiro','Se precisar de troco, informe o valor abaixo'],
   ];
   const vendedor=vendedores.length?'<div class="cartao"><h3>Selecione seu vendedor</h3>'+
     '<select name="vendedorId" required><option value="">Selecione seu vendedor</option>'+
@@ -185,16 +185,17 @@ export function telaPagamentoPresencial(ctx,{totais,endereco,frete,vendedores=[]
         'id="formPagamento" data-pagamento-presencial="1">'+
         '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+vendedor+
         '<div class="cartao"><h3>Como deseja pagar?</h3>'+escolhas+
-        '<div id="detalheDinheiro" hidden class="mt-2">'+
-          '<label for="precisaTroco">Precisa de troco?</label>'+
-          '<select id="precisaTroco" name="precisaTroco" disabled>'+
-            '<option value="0">Não, vou pagar o valor exato</option>'+
-            '<option value="1">Sim, preciso de troco</option></select>'+
-          '<div id="campoTroco" hidden class="mt-2">'+
-            '<label for="trocoPara">Troco para qual valor? (R$)</label>'+
-            '<input id="trocoPara" name="trocoPara" type="text" inputmode="decimal" '+
-              'placeholder="Ex.: 100,00" maxlength="12" disabled>'+
-            '<small>Informe quanto pretende entregar em dinheiro.</small></div></div></div>'+
+        '<div id="detalheDinheiro" hidden class="mt-2" data-total-centavos="'+
+          String(totais.totalCentavos)+'">'+
+          '<label for="trocoPara">Troco para qual valor? (R$) — opcional</label>'+
+          '<input id="trocoPara" name="trocoPara" type="text" inputmode="decimal" '+
+            'placeholder="Ex.: 100,00" maxlength="12" autocomplete="off" '+
+            'aria-describedby="ajudaTroco resumoTroco" disabled style="display:block;width:100%;max-width:100%">'+
+          '<small id="ajudaTroco" style="display:block;margin-top:8px">'+
+            'Se não precisa de troco, deixe em branco. Se precisar, digite '+
+            'quanto vai entregar em dinheiro.</small>'+
+          '<div id="resumoTroco" class="alerta info mt-2" role="status" aria-live="polite" hidden></div>'+
+        '</div></div>'+
         detalhes+
         '<div class="cartao"><p>O pedido será enviado à farmácia. O pagamento ficará '+
           'pendente até que a equipe confirme o recebimento.</p></div>'+

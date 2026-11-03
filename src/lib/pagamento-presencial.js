@@ -12,16 +12,17 @@ export function pedidoPresencialPorCEP(cepDestino,cepFarmacia){
   const destino=normalizeCep(cepDestino),loja=normalizeCep(cepFarmacia);
   return isValidCep(destino)&&isValidCep(loja)&&destino===loja;
 }
-export function validarPagamentoPresencial({metodo,precisaTroco,trocoPara,totalCentavos}){
+export function validarPagamentoPresencial({metodo,trocoPara,totalCentavos}){
   if(!Object.hasOwn(METODOS_PRESENCIAIS,metodo))
     return {ok:false,erro:'Selecione Pix, crédito, débito ou dinheiro para pagar na entrega ou retirada.'};
-  const troco=precisaTroco==='1'||precisaTroco===true;
-  if(metodo!=='cash'&&troco)
+  const str=String(trocoPara??'').trim();
+  // O cliente não precisa marcar Sim/Não: campo vazio significa sem troco.
+  if(metodo!=='cash'&&str)
     return {ok:false,erro:'Troco é permitido somente para pagamento em dinheiro.'};
-  if(metodo!=='cash'||!troco)return {ok:true,presencial:{
+  if(metodo!=='cash'||!str)return {ok:true,presencial:{
     metodo,precisaTroco:false,trocoParaCentavos:null,trocoCentavos:null,
   }};
-  const str=String(trocoPara??'').trim();
+  // Apenas formato brasileiro, sem separadores de milhar ou números negativos.
   if(!/^(?:\d{1,7})(?:[.,]\d{1,2})?$/.test(str))
     return {ok:false,erro:'Informe um valor válido para o troco, por exemplo 100,00.'};
   const valor=toCents(str);

@@ -322,7 +322,7 @@ export function registrarRotasCheckout(app, db) {
       freteConfig: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       freteOriginalCentavos:cart.frete.valor,
       pagamentoLocal:local?{
-        precisaTroco:String(req.body.precisaTroco||'0'),
+        // Campo opcional: vazio = sem troco; preenchido = calcular na hora.
         trocoPara:String(req.body.trocoPara||''),
       }:null,
       cupomCodigo: cart.cupom?.codigo || null,
