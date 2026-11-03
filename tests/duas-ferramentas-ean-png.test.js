@@ -351,7 +351,7 @@ test('Openverse: atribuição e foto são vinculadas automaticamente no produto 
  assert.ok(js.includes("fonte==='Openverse (Flickr)'"));
  assert.ok(route.includes("fonte==='Openverse (Flickr)'"));
  assert.match(cards,/function creditoFotoOpenverse/);
- assert.match(publicPage,/creditoFotoOpenverse\\(produto\\)/);
+ assert.ok(publicPage.includes('creditoFotoOpenverse(produto)'));
  assert.match(js,/salvaNoProduto/);
  assert.doesNotMatch(js,/Google automático exige API/);
 });
