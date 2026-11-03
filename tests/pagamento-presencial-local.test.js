@@ -112,3 +112,14 @@ test('cliente vê confirmação de modalidade e troco em Meus pedidos',()=>{
  assert.match(conta,/Troco para:/);
  assert.match(conta,/pagamento será realizado presencialmente/);
 });
+
+test('separador de pedidos vê troco calculado e WhatsApp informa valor a separar',()=>{
+ const base=new URL('../',import.meta.url);
+ const painel=readFileSync(new URL('src/views/admin/vendas.js',base),'utf8');
+ const evo=readFileSync(new URL('src/lib/evolution-whatsapp.js',base),'utf8');
+ assert.match(painel,/SEPARAR TROCO:/);
+ assert.match(painel,/money\(local\.trocoCentavos\)/);
+ assert.match(painel,/Cliente vai entregar:/);
+ assert.match(evo,/TROCO A SEPARAR: R\$/);
+ assert.match(evo,/pagamentoPresencial\.trocoCentavos/);
+});
