@@ -1467,12 +1467,13 @@ function registrarApi(app, db) {
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem',
       ...contextoImagemEsmalte(p.ean,{produtoId:p.id})});
-    res.json({ok:true,ean:p.ean,imagem:dados.imagem,
+    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,imagem:dados.imagem,
       fontes:(dados.imagensCandidatas||[]).map(img=>({
         fonte:img.fonteEAN?.fonte||'Catálogo',
         atribuicao:img.fonteEAN?.urlAtribuicao||null,
         licenca:img.fonteEAN?.licenca||null,
         autor:img.fonteEAN?.atribuicao||null,
+        correspondencia:img.fonteEAN?.correspondencia||'ean',
       }))});
   });
   // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
@@ -1545,6 +1546,9 @@ function registrarApi(app, db) {
       legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.';
     }else{
       legenda='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+      if(String(req.body.correspondencia||'')==='marca-cor-volume'&&
+         fonte==='Open Beauty Facts')
+        legenda+=' Correspondência por marca, cor e volume; código da fonte pode diferir.';
     }
     db.collection('products').update(p.id,{imagens:[{url,principal:true,ordem:1,legenda}]});
     logAdmin(db,req.adminUser,'anexou_imagem_png_ean','produto',p.id,{ean:p.ean,imagem:url},req);
