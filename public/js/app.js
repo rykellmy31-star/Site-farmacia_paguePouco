@@ -343,70 +343,131 @@
     if (!jaDecidiu) setTimeout(() => barra.classList.add('visivel'), 900);
   }
 
-  /* --------------------- checkout: cálculo de frete ------------------ */
+  /* --------------------- checkout: frete automático ------------------ */
   function iniciarCheckout() {
-    const botao = $('#botaoCalcularFrete');
-    if (!botao) return;
+    const form = $('#formEndereco');
+    if (!form) return;
     const opcoes = $('#opcoesFrete');
-    const form = botao.closest('form');
-    const pegar = (nome) => {
-      const el = form.querySelector(`[name="${nome}"]`);
-      return el ? el.value : '';
-    };
-    botao.addEventListener('click', async () => {
-      const cep = pegar('cep').replace(/\D/g, '');
-      if (cep.length !== 8) { notificar('Digite um CEP válido com 8 dígitos.', 'erro'); return; }
-      botao.disabled = true;
-      botao.textContent = 'Calculando...';
-      try {
-        const dados = await api('/api/frete', {
-          method: 'POST',
-          body: { cep, cidade: pegar('cidade'), uf: pegar('uf') },
-        });
-        if (!dados.disponivel || !dados.opcoes.length) {
-          opcoes.innerHTML = `<div class="alerta aviso">${dados.motivo || 'Não foi possível calcular o frete para este destino.'}</div>`;
-          return;
-        }
-        opcoes.innerHTML = `
-          <h3>Formas de entrega</h3>
-          ${dados.opcoes.map((o, i) => `<label class="opcao-frete ${i === 0 ? 'selecionada' : ''}">
-            <input type="radio" name="freteOpcao" value="${o.id}" ${i === 0 ? 'checked' : ''}>
-            <span><strong>${o.label}</strong><br><span class="texto-pequeno texto-suave">${o.prazo || ''}${o.detalhe ? ' — ' + o.detalhe : ''}</span></span>
-            <span class="valor">${o.valor === 0 ? 'Grátis' : 'R$ ' + (o.valor / 100).toFixed(2).replace('.', ',')}</span>
-          </label>`).join('')}
-          <p class="texto-pequeno texto-suave">Estado identificado: <strong>${dados.ufNome || ''} (${dados.uf || ''})</strong>.
-          Valor conforme a tabela de fretes fixos configurada pela farmácia.</p>
-          <button class="botao destaque bloquinho mt-2" type="submit">Ir para o pagamento</button>`;
-        $$('.opcao-frete input[type=radio]', opcoes).forEach((r) => r.addEventListener('change', () => {
-          $$('.opcao-frete', opcoes).forEach((l) => l.classList.toggle('selecionada', l.contains(r)));
-        }));
-      } catch (err) {
-        notificar(err.message, 'erro');
-      } finally {
-        botao.disabled = false;
-        botao.textContent = 'Calcular frete';
-      }
-    });
+    const botaoAvancar = $('#botaoIrPagamento');
+    const cepInput = $('#cepEntrega');
+    const enderecoSalvo = $('#usarEnderecoSalvo');
+    const campos = $('#camposEndereco');
+    const radiosEndereco = $$('input[name=enderecoSalvo]', document);
+    let versao = 0;
+    let timer = null;
 
-    // preenche cidade/UF automaticamente a partir do CEP (quando habilitado)
-    const cepInput = form.querySelector('[name="cep"]');
-    if (cepInput) {
-      cepInput.addEventListener('blur', async () => {
-        const cep = cepInput.value.replace(/\D/g, '');
-        if (cep.length !== 8) return;
-        try {
-          const info = await api(`/api/cep/${cep}`);
-          if (info.uf) {
-            const uf = form.querySelector('[name="uf"]');
-            if (uf) uf.value = info.uf;
-            if (info.cidade) {
-              const cidade = form.querySelector('[name="cidade"]');
-              if (cidade && !cidade.value) cidade.value = info.cidade;
-            }
+    // Nunca inserir HTML do cadastro ou da API sem escapar: CEP, cidade e
+    // textos da cotação podem conter dados inseridos pelos clientes.
+    const escapar = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const opcaoAtual = () => radiosEndereco.find(r => r.checked && r.value !== 'novo');
+    const enderecoAtual = () => {
+      const salvo = opcaoAtual();
+      if(salvo) return {cep:salvo.dataset.cep||'',
+        cidade:salvo.dataset.cidade||'',uf:salvo.dataset.uf||'',salvo:true};
+      const pegar = (nome) => form.querySelector('[name="'+nome+'"]')?.value || '';
+      return {cep:pegar('cep'),cidade:pegar('cidade'),uf:pegar('uf'),salvo:false};
+    };
+    const alternarCampos = () => {
+      const salvo = opcaoAtual();
+      if (enderecoSalvo) enderecoSalvo.value = salvo ? '1' : '';
+      if(campos){
+        campos.hidden=!!salvo;
+        $$('input, select, textarea',campos).forEach(campo => campo.disabled=!!salvo);
+      }
+    };
+    const aviso = (mensagem) => {
+      opcoes.innerHTML='<p class="texto-pequeno texto-suave" role="status">'+escapar(mensagem)+'</p>';
+      botaoAvancar.disabled=true;
+    };
+    const desenhar = (dados) => {
+      if(!dados.disponivel||!Array.isArray(dados.opcoes)||!dados.opcoes.length){
+        aviso(dados.motivo||'Entrega indisponível para este CEP.');
+        return;
+      }
+      const forma = (dados.opcoes.length===1)
+        ? 'Entrega disponível' : 'Selecione como deseja receber';
+      opcoes.innerHTML='<h3>'+forma+'</h3>'+
+        dados.opcoes.map((o,i)=>'<label class="opcao-frete '+(i===0?'selecionada':'')+'">'+
+          '<input type="radio" name="freteOpcao" value="'+escapar(o.id)+'" '+(i===0?'checked':'')+'>'+
+          '<span><strong>'+escapar(o.label)+'</strong><br>'+
+          '<span class="texto-pequeno texto-suave">'+escapar(o.prazo||'')+
+            (o.detalhe?' — '+escapar(o.detalhe):'')+'</span></span>'+
+          '<span class="valor">'+(o.valor===0?'Grátis':
+            'R$ '+(Number(o.valor||0)/100).toFixed(2).replace('.',','))+'</span>'+
+        '</label>').join('')+
+        '<p class="texto-pequeno texto-suave">Frete calculado automaticamente para '+
+          escapar(dados.cep||'')+'.</p>';
+      $$('input[name=freteOpcao]',opcoes).forEach(radio=>radio.addEventListener('change',()=>{
+        $$('.opcao-frete',opcoes).forEach(label=>
+          label.classList.toggle('selecionada',label.contains(radio)&&radio.checked));
+      }));
+      botaoAvancar.disabled=false;
+    };
+
+    const calcular = async () => {
+      const atual = ++versao;
+      const destino=enderecoAtual();
+      const cep=destino.cep.replace(/\D/g,'');
+      if(cep.length!==8) { aviso('Informe um CEP válido com 8 dígitos.');return; }
+      aviso('Calculando frete automaticamente...');
+      try {
+        // Resolve a UF e a cidade a partir do CEP digitado para não usar uma
+        // cotação do endereço anterior, especialmente em mudanças de estado.
+        if(!destino.salvo){
+          const info=await api('/api/cep/'+cep);
+          if(atual!==versao)return;
+          if(info.uf) {
+            destino.uf=info.uf;
+            const uf=form.querySelector('[name=uf]');
+            if(uf)uf.value=info.uf;
           }
-        } catch (e) { /* silencioso */ }
+          if(info.cidade){
+            destino.cidade=info.cidade;
+            const cidade=form.querySelector('[name=cidade]');
+            if(cidade)cidade.value=info.cidade;
+          }
+        }
+        if(atual!==versao)return;
+        const dados=await api('/api/frete',{
+          method:'POST',body:{cep,cidade:destino.cidade,uf:destino.uf},
+        });
+        if(atual!==versao)return;
+        desenhar(dados);
+      }catch(e) {
+        if(atual!==versao)return;
+        aviso(e.message||'Não foi possível calcular o frete. Confira o CEP.');
+      }
+    };
+    const agendar = () => {
+      // Descarta imediatamente preços e opções do CEP anterior.
+      versao++;
+      clearTimeout(timer);
+      aviso('Verificando CEP e calculando frete...');
+      timer=setTimeout(calcular,260);
+    };
+    radiosEndereco.forEach(radio=>radio.addEventListener('change',()=>{
+      alternarCampos();agendar();
+    }));
+    if(cepInput){
+      cepInput.addEventListener('input',agendar);
+      cepInput.addEventListener('change',agendar);
+      cepInput.addEventListener('blur',()=>{
+        if(cepInput.value.replace(/\D/g,'').length===8)agendar();
       });
     }
+    for(const campo of [form.querySelector('[name=uf]'),form.querySelector('[name=cidade]')]){
+      campo?.addEventListener('change',agendar);
+    }
+    form.addEventListener('submit',ev=>{
+      if(botaoAvancar.disabled||!opcoes.querySelector('input[name=freteOpcao]:checked')){
+        ev.preventDefault();
+        notificar('Confira o CEP e a forma de entrega.', 'erro');
+      }
+    });
+    alternarCampos();
+    // Mesmo que exista uma cotação anterior, sempre calcula de novo ao entrar.
+    if(radiosEndereco.length||cepInput?.value.replace(/\D/g,'').length===8)agendar();
   }
 
   /* ------------------- checkout: abas de pagamento ------------------- */
