@@ -9,7 +9,7 @@
   if(!document.querySelector('[data-leitor-codigo]'))return;
   let scanner=null,abrindo=false,finalizando=false,modal=null;
   let alvoAtual=null,aberturaId=0,trocandoCamera=false;
-  let camerasDisponiveis=[],lendoFoto=false,ultimaCamera='';
+  let camerasDisponiveis=[],lendoFoto=false,fotoSolicitada=false,ultimaCamera='';
   const estilos=`
     #leitorCodigoDialog{max-width:min(94vw,510px);width:calc(100% - 24px);
       max-height:94dvh;overflow:auto;border:0;border-radius:14px;padding:18px;
@@ -85,15 +85,19 @@
     el('fecharLeitorCodigo').addEventListener('click',()=>modal.close());
     modal.addEventListener('cancel',event=>{event.preventDefault();modal.close();});
     modal.addEventListener('close',()=>{void encerrar();});
-    el('leitorEscolherFoto').addEventListener('click',()=>el('leitorFotoArquivo').click());
+    el('leitorEscolherFoto').addEventListener('click',()=>{
+      fotoSolicitada=true;el('leitorFotoArquivo').click();
+    });
     el('leitorCodigoCamera').addEventListener('change',ev=>{
       void trocarCamera(ev.target.value);
     });
 
-    el('leitorGaleriaFoto').addEventListener('click',()=>el('leitorGaleriaArquivo').click());
+    el('leitorGaleriaFoto').addEventListener('click',()=>{
+      fotoSolicitada=true;el('leitorGaleriaArquivo').click();
+    });
     for(const input of [el('leitorFotoArquivo'),el('leitorGaleriaArquivo')]){
       input.addEventListener('change',async ev=>{
-        const arquivo=ev.target.files?.[0];
+        const arquivo=ev.target.files?.[0];fotoSolicitada=false;
         // iPhone: não esvaziar o file input antes de ler o arquivo.
         if(!arquivo||finalizando||lendoFoto)return;
         try{await analisarFoto(arquivo);}
@@ -183,7 +187,7 @@
   }
   async function encerrar(){
     const antigo=scanner;scanner=null;abrindo=false;aberturaId++;
-    lendoFoto=false;
+    lendoFoto=false;fotoSolicitada=false;
     if(!antigo)return;
     try{if(antigo.getState()===2)await antigo.stop();}catch{}
     try{antigo.clear();}catch{}
@@ -321,7 +325,7 @@
   });
   // Não manter câmera ativa quando a página vai para segundo plano.
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden&&modal?.open)modal.close();
+    if(document.hidden&&modal?.open&&!fotoSolicitada&&!lendoFoto)modal.close();
   });
   window.addEventListener('pagehide',()=>{if(modal?.open)modal.close();});
 })();
