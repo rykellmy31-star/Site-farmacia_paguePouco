@@ -66,6 +66,7 @@ export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, v
           <td>${(p.itens || []).reduce((a, i) => a + i.quantidade, 0)}</td>
           <td>${money(p.totalCentavos)}</td>
           <td>${etiquetaStatus(p.statusFinanceiro)}
+            ${p.pagamentoPresencial ? '<div class="texto-pequeno"><strong>Na entrega/retirada</strong></div>' : ''}
             ${pedidoPrecisaConferencia(p)
               ? '<div class="texto-pequeno"><strong>Conferir cobrança</strong></div>' : ''}
           </td>
@@ -119,6 +120,27 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
         ou nova tentativa. Não aprovar manualmente uma cobrança real.
       </div>` : ''}
 
+    ${pedido.pagamentoPresencial ? painel({
+      titulo:'Pagamento presencial — pedido local',
+      corpo:'<p><strong>Forma escolhida:</strong> '+e({pix:'Pix',credit_card:'Cartão de crédito',
+        debit_card:'Cartão de débito',cash:'Dinheiro'}[pedido.metodoPagamento]||pedido.metodoPagamento)+'</p>'+
+        (pedido.pagamentoPresencial.precisaTroco
+          ? '<p><strong>Troco para:</strong> '+money(pedido.pagamentoPresencial.trocoParaCentavos)+
+            ' — Troco estimado: '+money(pedido.pagamentoPresencial.trocoCentavos)+'</p>' : '')+
+        '<p><strong>Valor a receber:</strong> '+money(pedido.totalCentavos)+'</p>'+
+        (pedido.statusFinanceiro==='pendente' ?
+          (ctx.permissoes?.podeConfirmarPagamentoLocal
+            ? '<form method="post" action="/admin/pedidos/'+e(pedido.id)+
+                '/confirmar-pagamento-presencial" onsubmit="return confirm(&quot;O pagamento foi REALMENTE recebido?&quot;)">'+
+                '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+                '<label><input type="checkbox" name="confirmouRecebimento" value="1" required> ' +
+                'Confirmo que recebi e conferi o pagamento presencial</label>'+
+                '<button class="botao mt-1" type="submit">Confirmar pagamento recebido</button></form>'
+            : '<p>Pagamento ainda não recebido. Apenas administração financeira pode confirmar.</p>')
+          : '<p><strong>Pagamento registrado como recebido.</strong> '+
+            e(pedido.pagamentoPresencial.confirmadoPor||'')+'</p>'),
+    }) : ''}
+
     ${pedido.falhaPagamento && ctx.adminUser?.role === 'super_admin' ? `<div class="alerta aviso" role="status">
       <strong>Diagnóstico da última falha no Mercado Pago:</strong>
       ${e(pedido.falhaPagamento.motivo || 'Falha não classificada')}.
@@ -133,12 +155,12 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
          <p class="texto-pequeno texto-suave">Registro histórico da compra. Não será modificado por edições futuras no vendedor.</p>`
       : '<p>Atendimento geral — nenhum vendedor selecionado no pedido.</p>' })}
 
-    ${pedido.statusFinanceiro === 'aprovado' ? painel({
+    ${(pedido.statusFinanceiro === 'aprovado' || pedido.pagamentoPresencial) ? painel({
       titulo: 'Recebimento do pedido pela equipe',
       corpo: pedido.pedidoRecebidoEm
         ? `<p>✓ <strong>Pedido recebido</strong><br>Funcionário: ${e(pedido.pedidoRecebidoNome || 'Equipe')}<br>Data e hora: ${formatDateTime(pedido.pedidoRecebidoEm)}</p>`
         : ctx.permissoes?.podeEditarPedidos
-          ? `<p>O pagamento foi aprovado. Confirme que a equipe tomou conhecimento deste pedido para encerrar os lembretes.</p>
+          ? `<p>Confirme que a equipe tomou conhecimento deste pedido para organizar a separação.</p>
             <form method="post" action="/admin/pedidos/${e(pedido.id)}/recebido">
               <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
               <button type="submit" class="botao">✓ Pedido Recebido</button>
@@ -155,14 +177,15 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
 
     <div class="grade-form duas-colunas">
       <div>
-        ${pedido.statusFinanceiro === 'aprovado' && ctx.permissoes?.podeEditarPedidos &&
+        ${(pedido.statusFinanceiro === 'aprovado' || pedido.pagamentoPresencial) && ctx.permissoes?.podeEditarPedidos &&
           !['cancelado', 'entregue', 'devolucao_em_analise', 'devolucao_recebida', 'encerrado_sem_devolucao']
             .includes(pedido.statusOperacional) ? painel({
           titulo: 'Atualizar status operacional',
           corpo: `<form method="post" action="/admin/api/pedidos/${e(pedido.id)}/status">
             <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
             ${campoAdmin({ nome: 'status', rotulo: 'Novo status', valor: pedido.statusOperacional,
-              opcoes: Object.values(STATUS_OPERACIONAL).filter(s => !['cancelado','devolucao_em_analise','devolucao_recebida','encerrado_sem_devolucao'].includes(s.id)).map((s) => ({ valor: s.id, texto: s.nome })) })}
+              opcoes: Object.values(STATUS_OPERACIONAL).filter(s => !['cancelado','devolucao_em_analise','devolucao_recebida','encerrado_sem_devolucao'].includes(s.id) &&
+                !(pedido.pagamentoPresencial && pedido.statusFinanceiro==='pendente' && s.id==='entregue')).map((s) => ({ valor: s.id, texto: s.nome })) })}
             ${campoAdmin({ nome: 'obs', rotulo: 'Observação interna' })}
             <button class="botao" type="submit">Atualizar status</button>
             ${pedido.statusFinanceiro === 'aprovado' &&

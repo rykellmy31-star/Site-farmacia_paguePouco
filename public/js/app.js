@@ -531,12 +531,23 @@
     if (!form) return;
     const radios = $$('input[name=metodoPagamento]', form);
     const detalhe = $('#detalheCredito');
+    const dinheiro=$('#detalheDinheiro');
+    const troco=$('#precisaTroco');
+    const campoTroco=$('#campoTroco');
+    const valorTroco=$('#trocoPara');
     const alternar = () => {
       const marcado = radios.find((r) => r.checked);
       if (detalhe) detalhe.classList.toggle('visivel', !!marcado && marcado.value === 'credit_card');
+      const usaDinheiro=marcado?.value==='cash';
+      if(dinheiro)dinheiro.hidden=!usaDinheiro;
+      if(troco)troco.disabled=!usaDinheiro;
+      const pedirTroco=usaDinheiro&&troco?.value==='1';
+      if(campoTroco)campoTroco.hidden=!pedirTroco;
+      if(valorTroco){valorTroco.disabled=!pedirTroco;valorTroco.required=pedirTroco;}
       $$('.opcao-pagamento', form).forEach((l) => l.classList.toggle('selecionada', !!marcado && l.contains(marcado)));
     };
     radios.forEach((r) => r.addEventListener('change', alternar));
+    troco?.addEventListener('change',alternar);
     alternar();
     form.addEventListener('submit', (event) => {
       // Guardar a escolha explicita antes de desabilitar o botao principal:

@@ -152,6 +152,69 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
   });
 }
 
+export function telaPagamentoPresencial(ctx,{totais,endereco,frete,vendedores=[],erros={}}){
+  const opcoes=[
+    ['pix','Pix','Pagar na entrega ou retirada'],
+    ['credit_card','Cartão de crédito','Pagar com a equipe da farmácia'],
+    ['debit_card','Cartão de débito','Pagar com a equipe da farmácia'],
+    ['cash','Dinheiro','Informar se precisa de troco'],
+  ];
+  const vendedor=vendedores.length?'<div class="cartao"><h3>Selecione seu vendedor</h3>'+
+    '<select name="vendedorId" required><option value="">Selecione seu vendedor</option>'+
+    vendedores.map(v=>'<option value="'+e(v.id)+'">'+e(v.nome)+'</option>').join('')+
+    '</select></div>':'';
+  const enderecoHtml='<strong>'+e(endereco.nome||'')+'</strong><br>'+
+    e(endereco.logradouro||'')+', '+e(endereco.numero||'')+
+    (endereco.complemento?' — '+e(endereco.complemento):'')+'<br>'+
+    e(endereco.bairro||'')+' — '+e(endereco.cidade||'')+'/'+e(endereco.uf||'')+
+    '<br>CEP '+formatCep(endereco.cep);
+  const detalhes='<div class="cartao"><h3>Entrega ou retirada</h3><p>'+enderecoHtml+'</p>'+
+    '<p>'+e(frete?.label||'Entrega local')+' — '+e(frete?.prazo||'')+
+    ' <a href="/checkout/endereco">(alterar)</a></p></div>';
+  const escolhas=opcoes.map(([valor,rotulo,descricao],i)=>
+    '<label class="opcao-pagamento '+(i===0?'selecionada':'')+'">'+
+    '<input type="radio" name="metodoPagamento" value="'+valor+'" '+(i===0?'checked':'')+'>'+
+    '<span><strong>'+rotulo+'</strong><br><small>'+descricao+'</small></span></label>').join('');
+  return paginaPublica(ctx,{
+    titulo:'Finalizar pedido — pagamento presencial',semIndex:true,
+    conteudo:'<div class="container">'+
+      passosHtml('pagamento')+listaErros(erros)+
+      '<div class="alerta info"><strong>🏪 Pagamento na entrega ou retirada</strong>'+
+        '<p>Seu CEP é igual ao da farmácia. Nenhuma cobrança será feita pelo site.</p></div>'+
+      '<div class="checkout-grade"><form method="post" action="/checkout/finalizar" '+
+        'id="formPagamento" data-pagamento-presencial="1">'+
+        '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+vendedor+
+        '<div class="cartao"><h3>Como deseja pagar?</h3>'+escolhas+
+        '<div id="detalheDinheiro" hidden class="mt-2">'+
+          '<label for="precisaTroco">Precisa de troco?</label>'+
+          '<select id="precisaTroco" name="precisaTroco" disabled>'+
+            '<option value="0">Não, vou pagar o valor exato</option>'+
+            '<option value="1">Sim, preciso de troco</option></select>'+
+          '<div id="campoTroco" hidden class="mt-2">'+
+            '<label for="trocoPara">Troco para qual valor? (R$)</label>'+
+            '<input id="trocoPara" name="trocoPara" type="text" inputmode="decimal" '+
+              'placeholder="Ex.: 100,00" maxlength="12" disabled>'+
+            '<small>Informe quanto pretende entregar em dinheiro.</small></div></div></div>'+
+        detalhes+
+        '<div class="cartao"><p>O pedido será enviado à farmácia. O pagamento ficará '+
+          'pendente até que a equipe confirme o recebimento.</p></div>'+
+        (ctx.settings.evolutionWhatsapp?.ativo&&ctx.settings.evolutionWhatsapp?.avisarCliente
+          ? '<div class="cartao"><label><input type="checkbox" name="acaoWhatsappPedido" '+
+              'value="autorizar"> Desejo receber avisos sobre o pedido pelo WhatsApp, '+
+              'incluindo nomes dos produtos (inclusive medicamentos). Posso desativar '+
+              'em Minha conta.</label></div>' : '')+
+        '<button class="botao destaque grande bloquinho" id="botaoFinalizar" type="submit">'+
+          'Confirmar pedido sem pagar pelo site</button>'+
+      '</form><aside><div class="resumo-pedido"><h3>Resumo do pedido</h3>'+
+        (ctx.cart.itens||[]).map(i=>'<div class="resumo-linha"><span>'+
+          i.quantidade+'× '+e(i.nome)+'</span><strong>'+
+          money(i.precoUnitarioCentavos*i.quantidade)+'</strong></div>').join('')+
+        htmlResumoCarrinho(ctx.cart,totais,{mostrarFrete:true})+
+        '<div class="resumo-linha total"><span>A pagar na entrega ou retirada</span>'+
+        '<strong>'+money(totais.totalCentavos)+'</strong></div></div></aside></div></div>',
+  });
+}
+
 export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = {}, endereco, frete, vendedores = [] }) {
   const cfg = ctx.settings.pagamentos || {};
   const infoPag = ctx.infoPagamento || {};
@@ -316,7 +379,12 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
         <p>E-mail informado no pedido: <strong>${e(pedido.cliente?.email || '')}</strong>. O envio automático depende de um serviço de e-mail configurado.</p>
       </div>
 
-      ${['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? `
+      ${pedido.pagamentoPresencial ? `<div class='cartao mt-2' role='status'>
+        <h3>Pagamento na entrega ou retirada</h3>
+        <p><strong>Forma escolhida:</strong> ${e({pix:'Pix',credit_card:'Cartão de crédito',debit_card:'Cartão de débito',cash:'Dinheiro'}[pedido.metodoPagamento]||pedido.metodoPagamento)}</p>
+        ${pedido.pagamentoPresencial.precisaTroco ? `<p><strong>Troco para:</strong> ${money(pedido.pagamentoPresencial.trocoParaCentavos)} — Troco: ${money(pedido.pagamentoPresencial.trocoCentavos)}</p>` : ''}
+        <p>${pedido.statusFinanceiro==='aprovado'?'Pagamento recebido pela farmácia.':'Pagamento presencial pendente.'} Nenhuma cobrança foi gerada pelo site.</p>
+      </div>` : ['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? `
       <div class="cartao mt-2" role="status">
         <h3>Pagamento em verificação — não faça outra tentativa agora</h3>
         <p>O provedor não confirmou se recebeu a solicitação. <strong>O pagamento ainda não está confirmado</strong> e o estoque está reservado temporariamente.</p>

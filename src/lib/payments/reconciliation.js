@@ -176,13 +176,13 @@ const LIMITE_INTERRUPCAO_MS = 5 * 60_000;
 
 export function temCheckoutInterrompido(db) {
   return db.collection('orders').all().some(p =>
-    p.statusFinanceiro === 'pendente' && !p.pagamentoId &&
+    p.statusFinanceiro === 'pendente' && !p.pagamentoId && !p.pagamentoPresencial &&
     (p.pendenciaPagamento == null || p.pendenciaPagamento === 'criacao_em_andamento'));
 }
 
 export function reconciliarCheckoutsInterrompidos(db, { limit = 50, agora = Date.now() } = {}) {
   const pedidos = db.collection('orders').find(p =>
-    p.statusFinanceiro === 'pendente' && !p.pagamentoId &&
+    p.statusFinanceiro === 'pendente' && !p.pagamentoId && !p.pagamentoPresencial &&
     (p.pendenciaPagamento == null || p.pendenciaPagamento === 'criacao_em_andamento'))
     .slice(0, Math.max(1, Math.min(100, limit)));
   const resumo = { verificados: 0, recuperados: 0, sinalizados: 0, recentes: 0 };

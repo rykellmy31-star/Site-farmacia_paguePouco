@@ -1,7 +1,7 @@
 /** routes/checkout.js — Carrinho, endereço/frete, pagamento e confirmação do pedido. */
 import { criarContexto } from './context.js';
 import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
-import { telaCarrinho, telaEndereco, telaPagamento, telaConfirmacao, telaCheckoutVazio } from '../views/checkout.js';
+import { telaCarrinho, telaEndereco, telaPagamento, telaPagamentoPresencial, telaConfirmacao, telaCheckoutVazio } from '../views/checkout.js';
 import {
   getCart, calcularTotais, normalizeCart, aplicarCupom, removerCupom, clearCart, attachCartCookie,
 } from '../lib/cart.js';
@@ -17,6 +17,7 @@ import { config } from '../config.js';
 import { uid } from '../lib/store.js';
 import { vendedoresAtivos } from '../lib/sellers.js';
 import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
+import { pedidoPresencialPorCEP } from '../lib/pagamento-presencial.js';
 
 function exigirLoginCompra(req, res, db) {
   if (req.user) return true;
@@ -246,6 +247,13 @@ export function registrarRotasCheckout(app, db) {
     cart.frete = { ...cart.frete, valor: revalidado.valor, label: revalidado.opcao.label, prazo: revalidado.opcao.prazo, opcaoId: revalidado.opcao.id };
 
     const totais = calcularTotais(db, cart, { freteValor: revalidado.valor, freteGratisPorCupom: !!cart.cupom?.freteGratis });
+    const local=pedidoPresencialPorCEP(cart.frete.endereco.cep,ctx.settings.empresa?.endereco?.cep);
+    if(local)return void res.html(telaPagamentoPresencial(ctx,{
+      totais,endereco:cart.frete.endereco,
+      frete:{label:revalidado.opcao.label,prazo:revalidado.opcao.prazo},
+      vendedores:vendedoresAtivos(db),
+      erros:req.query.get('erro')?{pagamento:req.query.get('erro')}:{},
+    }));
     ctx.infoPagamento = providerPublicInfo(db);
     const formas = enabledMethods(db);
     const cfgPag = ctx.settings.pagamentos || {};
@@ -281,9 +289,11 @@ export function registrarRotasCheckout(app, db) {
     }
     if (!cart.frete?.endereco) return void res.redirect('/checkout/endereco');
 
-    const metodo = String(req.body.metodoPagamento || 'pix');
+    const local=pedidoPresencialPorCEP(cart.frete.endereco.cep,ctx.settings.empresa?.endereco?.cep);
+    const metodo = String(req.body.metodoPagamento || '');
     const formas = enabledMethods(db);
-    const permitido = (metodo === 'pix' && formas.pix) || (metodo === 'credit_card' && formas.credit_card) || (metodo === 'debit_card' && formas.debit_card);
+    const permitido = local ? ['pix','credit_card','debit_card','cash'].includes(metodo)
+      : (metodo === 'pix' && formas.pix) || (metodo === 'credit_card' && formas.credit_card) || (metodo === 'debit_card' && formas.debit_card);
     if (!permitido) {
       return void res.redirect('/checkout/pagamento?erro=' + encodeURIComponent('Forma de pagamento indisponível.'));
     }
@@ -291,12 +301,12 @@ export function registrarRotasCheckout(app, db) {
     // O CPF é opcional no cadastro, mas obrigatório na API Pix. Validar ANTES
     // da criação do pedido para não reservar e cancelar estoque desnecessariamente.
     const cpfPix = onlyDigits(req.body.cpfPix || req.user?.cpf || '');
-    if (metodo === 'pix' && formas.real && !v.cpf(cpfPix)) {
+    if (!local && metodo === 'pix' && formas.real && !v.cpf(cpfPix)) {
       return void res.redirect('/checkout/pagamento?erro=' +
         encodeURIComponent('Informe um CPF válido para gerar o Pix com o Mercado Pago.'));
     }
 
-    const parcelas = Math.max(1, Number(req.body.parcelas) || 1);
+    const parcelas = local ? 1 : Math.max(1, Number(req.body.parcelas) || 1);
     // Botao explicito (sem checkbox) ou autorizacao anterior valida para o numero atual.
     const escolhaWhatsapp = String(req.body.acaoWhatsappPedido || req.body.preferenciaWhatsappPedido || '');
     const { autorizouAgora, avisarCliente:avisosWhatsapp } = decidirAvisosWhatsappPedido(
@@ -311,6 +321,10 @@ export function registrarRotasCheckout(app, db) {
       freteOpcaoId: cart.frete.opcaoId, metodoPagamento: metodo, parcelas,
       freteConfig: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       freteOriginalCentavos:cart.frete.valor,
+      pagamentoLocal:local?{
+        precisaTroco:String(req.body.precisaTroco||'0'),
+        trocoPara:String(req.body.trocoPara||''),
+      }:null,
       cupomCodigo: cart.cupom?.codigo || null,
       vendedorId: req.body.vendedorId || null,
       receberWhatsappPedido: avisosWhatsapp, enviarItensWhatsappPedido: permiteItensWhatsapp, req,
@@ -342,6 +356,29 @@ export function registrarRotasCheckout(app, db) {
         logCustomer(db, req.user.id, 'autorizou_whatsapp_pedidos', 'cliente', req.user.id,
           {origem:'checkout'}, req);
       }
+    }
+
+    // Pedido presencial: NÃO chamar createPayment/MP, não gerar PIX,
+    // não registrar quitação, apenas reservar itens e salvar a preferência.
+    if(local){
+      const salvo=db.collection('orders').get(pedido.id);
+      enfileirarEvolution(db,salvo,'cliente_recebido');
+      enfileirarEvolution(db,salvo,'responsavel_local');
+      sendMail(db,{
+        to:pedido.cliente?.email||req.user?.email||'',
+        subject:`Pedido ${pedido.codigo} recebido — pagamento na entrega ou retirada`,
+        html:`<h1>Recebemos seu pedido ${escapeHtml(pedido.codigo)}</h1>
+          <p>O pedido foi registrado. <strong>Nenhuma cobrança foi feita pelo site.</strong></p>
+          <p>Pagamento escolhido: ${escapeHtml(
+            {pix:'Pix',credit_card:'Cartão de crédito',
+              debit_card:'Cartão de débito',cash:'Dinheiro'}[metodo])}
+          na entrega ou retirada.</p>
+          <p><a href="${config.publicBaseUrl}/conta/pedidos/${pedido.codigo}">Acompanhar pedido</a></p>`,
+      }).catch(()=>{});
+      if(req.user)logCustomer(db,req.user.id,'criou_pedido_local','pedido',
+        pedido.id,{codigo:pedido.codigo,total:pedido.totalCentavos,metodo},req);
+      renovarCestaAposPedido(db,res,req.user?.id||null);
+      return void res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
     }
 
     // Cria a cobrança no provedor configurado. Timeout não equivale a recusa.
