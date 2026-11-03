@@ -1434,7 +1434,7 @@ function registrarApi(app, db) {
     res.json({ok:true,imagem:result.imagem,
       consultadas:result.consultadas,
       mensagem:result.imagem?'Imagem frontal localizada; verificando resolução e qualidade para gerar PNG.':
-        'Nenhuma imagem frontal licenciada localizada para este EAN. Nenhuma foto foi adicionada.'});
+        'Nenhuma foto de fonte autorizada localizada para este EAN nas bases consultadas. Nenhuma foto foi adicionada.'});
   });
   // Pesquisa separada para ativação pela listagem: devolve somente
   // o candidato (não grava JPEG e não tenta preencher medidas).
