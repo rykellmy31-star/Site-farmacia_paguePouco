@@ -420,7 +420,8 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       DAILUS_HANDLES_POR_EAN.has(ean.replace(/^0+(?=\d{13}$)/,''))||
       /\bdailus\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||'')))){
     resultado.consultadas.push('Dailus (fabricante)');
-    const oficial=await consultarDailusEAN(ean,nomeProduto||marcaProduto,{fetcher});
+    const oficial=await consultarDailusEAN(ean,
+      (String(nomeProduto||'')+' '+String(marcaProduto||'')).trim(),{fetcher});
     if(oficial){
       adicionar(oficial);
       // Outras fotos do mesmo SKU permanecem alternativas se a primeira
