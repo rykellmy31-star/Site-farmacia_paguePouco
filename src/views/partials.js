@@ -24,6 +24,16 @@ export function creditoFotoOpenverse(produto){
     '" target="_blank" rel="noopener noreferrer">'+e(licenca)+'</a>)</span>';
 }
 
+export function creditoFotoDailus(produto){
+  const legenda=(produto?.imagens||[]).find(f=>
+    String(f.legenda||'').includes('catálogo oficial Dailus'))?.legenda||'';
+  const url=String(legenda).match(/https:\/\/www\.dailus\.com\.br\/products\/[a-z0-9-]{3,100}/)?.[0];
+  if(!url)return '';
+  return '<a href="'+e(url)+'" target="_blank" rel="noopener noreferrer" '+
+    'class="texto-pequeno texto-suave" style="font-size:10px;text-align:center;display:block">'+
+    'Foto oficial: Dailus · direitos da fabricante</a>';
+}
+
 export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}) {
   const venda = podeVender(produto);
   const preco = precoVigenteCentavos(produto);
@@ -50,6 +60,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
     </a>
     ${creditoImagemPrecoMelhor}
     ${creditoFotoOpenverse(produto)}
+    ${creditoFotoDailus(produto)}
     ${produto.marca ? `<span class="marca">${e(produto.marca)}</span>` : ''}
     <h3 class="nome"><a href="${e(productUrl(produto))}">${e(produto.nome)}</a></h3>
     ${promo ? `<span class="preco-antigo">${money(original)}</span>` : ''}

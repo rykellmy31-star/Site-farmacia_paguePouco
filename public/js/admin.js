@@ -624,6 +624,9 @@
     leg.type='hidden';leg.name='imagemLegenda[]';
     leg.value=fonte==='PreçoMelhor'
       ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(eanAtual())+'), convertida em PNG.'
+      :fonte==='Dailus (fabricante)'
+        ?'Foto frontal — catálogo oficial Dailus ('+String(meta.atribuicao||'')+
+          '); direitos reservados da fabricante; convertida em PNG.'
       :fonte==='Wikimedia Commons'||fonte==='Openverse (Flickr)'
         ?'Foto frontal — '+fonte+'; '+String(meta.licenca||'')+
           '; autor: '+String(meta.autor||'')+'; origem: '+String(meta.atribuicao||'')+

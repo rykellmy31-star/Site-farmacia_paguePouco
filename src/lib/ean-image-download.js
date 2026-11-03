@@ -26,6 +26,10 @@ export function origemImagemPermitida(url,ean=null){
     // baixa o arquivo cujo nome corresponde EXATAMENTE ao EAN pesquisado.
     if(u.hostname==='upload.wikimedia.org')
       return /^\/wikipedia\/commons\/[0-9a-f]\/[0-9a-f]{2}\/[a-z0-9_%()'!,+\-.]+\.(?:png|jpe?g|webp)$/i.test(u.pathname);
+    // CDN da loja oficial Dailus (Shopify), restrita ao diretório da marca.
+    // Nenhum endereço arbitrário nem query de redirecionamento é permitido.
+    if(u.hostname==='cdn.shopify.com')
+      return /^\/s\/files\/1\/0936\/1702\/9411\/files\/[a-zA-Z0-9_%.\-]+\.(?:jpe?g|png|webp)$/i.test(u.pathname);
     if(u.hostname==='live.staticflickr.com')
       return /^\/\d{2,6}\/\d{5,15}_[a-z0-9]{6,50}_(?:b|c|h|k|o)\.jpe?g$/i.test(u.pathname);
     return u.hostname===PRECOMELHOR_CDN&&/^\d{8}$|^\d{12,14}$/.test(String(ean||''))&&
