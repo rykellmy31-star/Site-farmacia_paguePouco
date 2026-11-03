@@ -20,7 +20,7 @@ function blocoPagamentoPresencial(ctx,pedido){
     '<option value="'+e(valor)+'" '+(valor===atual?'selected':'')+'>'+e(rotulo)+'</option>').join('');
   let html='<p><strong>Escolhido pelo cliente:</strong> '+e(nomes[pedido.metodoPagamento]||'—')+'</p>'+
     (local.precisaTroco ? '<p>Troco solicitado para '+money(local.trocoParaCentavos)+
-      ' · Troco estimado '+money(local.trocoCentavos)+'</p>':'')+
+      ' · Troco estimado: '+money(local.trocoCentavos)+'</p>':'')+
     '<p><strong>Total do pedido:</strong> '+money(pedido.totalCentavos)+'</p>';
   if(pedido.statusFinanceiro!=='pendente'){
     const recebido=local.recebimento||{};
