@@ -55,6 +55,8 @@ jobs:
         run: node --test tests/evolution-whatsapp.test.js
       - name: Verificar busca automatica de peso e dimensoes via EAN
         run: node --test tests/busca-medidas-ean.test.js
+      - name: Conferir pagamento presencial por CEP com dinheiro e troco
+        run: node --test tests/pagamento-presencial-local.test.js
       - name: Conferir cotação Melhor Envio sem compras nem etiquetas
         run: node --test tests/melhor-envio.test.js
       - name: Conferir correção segura de receita automática Inova
