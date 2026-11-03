@@ -98,9 +98,26 @@ test('foto EAN: formulário sem imagens não lança erro e permite buscar',()=>{
       querySelector:(seletor)=>seletor==='[name="imagens[]"]'?(nodes[0]||null):
         seletor==='[name="imagemLegenda[]"]'?{value:legenda}:null,
     };
-    return Function('formEAN','$$',funcoes+
+    return Function('formEAN','$','
+  };
+  const vazio=montar([]);
+  assert.equal(vazio.fotoEANLegadaFormulario(),false);
+  assert.equal(vazio.podeAtualizarFotoEAN(),true);
+  const legado=montar([jpg],'Fonte Open Facts (CC BY-SA 3.0)');
+  assert.equal(legado.fotoEANLegadaFormulario(),true);
+  assert.equal(legado.podeAtualizarFotoEAN(),true);
+  const manual=montar(['/uploads/2026/11/manual.png'],'Foto cadastrada');
+  assert.equal(manual.fotoEANLegadaFormulario(),false);
+  assert.equal(manual.podeAtualizarFotoEAN(),false);
+  const duas=montar([jpg,'/uploads/outra.png'],'Fonte Open Facts (CC BY-SA 3.0)');
+  assert.equal(duas.fotoEANLegadaFormulario(),false);
+  assert.equal(duas.podeAtualizarFotoEAN(),false);
+});
+,funcoes+
       ';return {fotoEANLegadaFormulario,podeAtualizarFotoEAN};')(
-      formEAN,(seletor,contexto)=>Array.from(contexto.querySelectorAll(seletor)));
+      formEAN,
+      (seletor,contexto)=>Array.from(contexto.querySelectorAll(seletor)),
+      (seletor,contexto)=>contexto.querySelector(seletor));
   };
   const vazio=montar([]);
   assert.equal(vazio.fotoEANLegadaFormulario(),false);
