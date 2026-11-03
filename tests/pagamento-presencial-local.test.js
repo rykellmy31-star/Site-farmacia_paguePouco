@@ -70,7 +70,7 @@ test('pedido local conserva reserva, histórico e pagamento pendente sem cobran�
  assert.match(orders,/registrarMovimentoEstoque\(db/);
  assert.match(checkout,/enfileirarEvolution\(db,salvo,'responsavel_local'\)/);
  assert.match(admin,/confirmar-pagamento-presencial/);
- assert.match(admin,/guard\(req,res,'pagamentos\.estornar'\)/);
+ assert.match(admin,/guard\(req,res,'pedidos\.editar'\)/);
  assert.match(admin,/atualizarStatusFinanceiro\(db,p\.id,'aprovado'/);
  assert.match(view,/Troco estimado:/);
  assert.match(evo,/Nenhuma cobrança foi gerada pelo site/);
