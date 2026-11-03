@@ -94,7 +94,10 @@ export async function saveUpload(db, file, opts = {}) {
   const dims = detected.kind === 'image' ? imageSize(buffer, ext) : { largura: null, altura: null };
 
   // Otimização opcional (requer "sharp" instalado manualmente; falha silenciosa)
-  if (kind === 'image' && config.uploads.imageOptimize) {
+  // PNG gerado pela ferramenta EAN deve permanecer PNG real, inclusive
+  // quando a otimização global para WebP estiver ligada.
+  const pngEAN=detected.ext==='png' && /^ean-\d{8,14}\.png$/i.test(String(file.filename||''));
+  if (kind === 'image' && config.uploads.imageOptimize && !pngEAN) {
     try {
       const optionalModule = 'sharp';
       const sharp = (await import(optionalModule)).default;
