@@ -14,7 +14,7 @@ import { pedidoOcultoDoCliente } from './order-visibility.js';
 import { inovaAtiva } from './inovafarma-stock.js';
 import { selecionarVendedorPedido } from './sellers.js';
 import { podeVender, podeAtivarAposAprovacao, precoVigenteCentavos, estoqueDisponivel } from './catalog.js';
-import { resolverFreteEscolhido } from './freight.js';
+import { resolverFreteIntegrado } from './melhor-envio.js';
 import { calcularTotais, validarCupom, clearCart } from './cart.js';
 import { logSystem } from './audit.js';
 import { enfileirarAvisoPedido } from './order-notifications.js';
@@ -135,7 +135,7 @@ export function registrarMovimentoEstoque(db, { produtoId, tipo, quantidade, ori
  * Cria o pedido a partir do carrinho, REVALIDANDO tudo no servidor.
  * @returns {{ok:boolean, erro?:string, pedido?:object, avisos?:string[]}}
  */
-export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cepFarmacia = '', cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, enviarItensWhatsappPedido = false, req = null }) {
+export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, metodoPagamento, parcelas = 1, freteConfig, cepFarmacia = '', freteOriginalCentavos = null, cupomCodigo = null, vendedorId = null, receberWhatsappPedido = false, enviarItensWhatsappPedido = false, req = null }) {
   const avisos = [];
   const loja = db.collection('settings').get('loja') || {};
   if (loja.lojaAberta === false) return { ok: false, erro: 'A loja está fechada para novos pedidos.' };
@@ -196,7 +196,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
   }
 
   // 3) Frete recalculado no servidor
-  const frete = resolverFreteEscolhido({
+  const frete = await resolverFreteIntegrado({
     config: freteConfig, cepFarmacia,
     cep: endereco.cep,
     uf: endereco.uf,
@@ -207,6 +207,9 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     cupomFreteGratis: freteGratisCupom,
   });
   if (!frete.ok) return { ok: false, erro: frete.erro, codigo: 'FRETE_INDISPONIVEL' };
+  if (String(freteOpcaoId).startsWith('me_') &&
+      Number(freteOriginalCentavos)!==Number(frete.valor))
+    return {ok:false,erro:'A cotação mudou. Confira novamente o frete antes de pagar.',codigo:'FRETE_ALTERADO'};
 
   const freteCentavos = frete.valor;
   const baseCentavos = Math.max(0, subtotalCentavos - descontoCentavos + freteCentavos);

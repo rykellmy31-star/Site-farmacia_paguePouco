@@ -38,7 +38,8 @@ export function defaultFreightConfig() {
   }
   return {
     versao: 1,
-    modo: 'fixo-por-estado', // nunca depende de API externa
+    modo: 'fixo-por-estado', // cotação externa opcional, desativada por padrão
+    melhorEnvio: { ativo: false },
     states,
     freteGratis: {
       ativo: true,
@@ -92,6 +93,7 @@ export function normalizeFreightConfig(cfg) {
     out.states[uf] = { ...base.states[uf], ...(cfg.states?.[uf] || {}) };
     if (!Number.isFinite(out.states[uf].valor)) out.states[uf].valor = 0;
   }
+  out.melhorEnvio = { ...base.melhorEnvio, ...(cfg.melhorEnvio || {}) };
   out.freteGratis = { ...base.freteGratis, ...(cfg.freteGratis || {}) };
   out.entregaLocal = { ...base.entregaLocal, ...(cfg.entregaLocal || {}) };
   out.retirada = { ...base.retirada, ...(cfg.retirada || {}) };
