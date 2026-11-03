@@ -126,7 +126,7 @@ test('rotas e frontend não oferecem o velho botão Calcular frete',()=>{
   assert.doesNotMatch(front,/id="botaoCalcularFrete"/);
   assert.match(front,/id="botaoIrPagamento"/);
   assert.match(js,/function iniciarCheckout\(\)/);
-  assert.match(js,/cepInput.addEventListener\('input',agendar\)/);
+  assert.match(js,/cepInput.addEventListener\('input',alterouCep\)/);
   assert.match(js,/input\[name=enderecoSalvo\]/);
   assert.match(checkout,/cepFarmacia: ctx.settings.empresa\?\.endereco\?\.cep/);
   assert.match(api,/cepFarmacia: ctx.settings.empresa\?\.endereco\?\.cep/);
