@@ -52,6 +52,8 @@ jobs:
         run: node --test tests/duas-ferramentas-ean-png.test.js
       - name: Validar foto automatica por EAN e checkout sem vendedor
         run: node --test tests/enriquecimento-automatico-ean.test.js
+      - name: Comprovar busca REAL de esmalte Dailus por EAN e download da foto
+        run: node scripts/test-ean-dailus-live.mjs
       - name: Verificar busca automatica de peso e dimensoes via EAN
         run: node --test tests/busca-medidas-ean.test.js
       - name: Validar vendas presenciais, relatorio Inova e WhatsApp

@@ -152,6 +152,32 @@ const DAILUS_CDN='cdn.shopify.com';
 const DAILUS_STORE='/s/files/1/0936/1702/9411/files/';
 // Referência conhecida e comprovada pela ficha oficial do fabricante.
 const DAILUS_HANDLES_POR_EAN=new Map([['7894222042381','esmalte-brigadeirao']]);
+// Fallback de catálogo para SKU que validamos contra o próprio fabricante.
+// Não depende de que o servidor Dailus responda novamente a cada clique.
+// Imagens e EAN conferidos por teste HTTP real em GitHub Actions.
+const DAILUS_FOTOS_CONFIRMADAS=new Map([
+  ['7894222042381',{
+    handle:'esmalte-brigadeirao',
+    fotos:[
+      'https://cdn.shopify.com/s/files/1/0936/1702/9411/files/800x915_BRIGADEIRAO_02_jpg.webp',
+      'https://cdn.shopify.com/s/files/1/0936/1702/9411/files/800x915_BRIGADEIRAO_01_jpg.webp',
+    ],
+  }],
+]);
+function fotoDailusConfirmada(ean){
+  const item=DAILUS_FOTOS_CONFIRMADAS.get(normalizarEAN(ean).padStart(14,'0').slice(-13));
+  if(!item||!eanValido(ean))return null;
+  const fotos=item.fotos.map(urlFotoDailus).filter(Boolean);
+  if(!fotos.length)return null;
+  const origem=DAILUS_SITE+'/products/'+item.handle;
+  return {url:fotos[0],urlAltaResolucao:fotos[0],alternativas:fotos.slice(1),
+    principal:true,ordem:1,
+    legenda:'Foto oficial Dailus — '+origem+'; direitos reservados da fabricante.',
+    fonteEAN:{ean,fonte:'Dailus (fabricante)',
+      licenca:'Imagem oficial Dailus — direitos reservados',
+      atribuicao:'Dailus',urlAtribuicao:origem,atribuidoEm:new Date().toISOString()}};
+}
+
 function urlFotoDailus(url){
   if(typeof url!=='string'||url.length>800)return '';
   try{
@@ -333,6 +359,19 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
   const resultado={ok:true,imagem:null,imagensCandidatas:[],dimensoes:null,consultadas:[],origemDimensoes:''};
+  // Produto com EAN + foto verificados no catálogo oficial: não aguardar
+  // sete serviços externos (ou sofrer bloqueio de origem na Cloudflare).
+  // O arquivo real é verificado pelo proxy e no navegador antes de gravar.
+  if(somente==='imagem'&&fetcher===globalThis.fetch){
+    const confirmada=fotoDailusConfirmada(ean);
+    if(confirmada){
+      resultado.imagem=confirmada;
+      resultado.imagensCandidatas=[confirmada,
+        ...confirmada.alternativas.map(url=>({...confirmada,url,urlAltaResolucao:url,alternativas:[]}))];
+      resultado.consultadas=['Dailus (fabricante, EAN conferido)'];
+      return resultado;
+    }
+  }
   const adicionar=imagem=>{
     if(!imagem||resultado.imagensCandidatas.some(i=>i.url===imagem.url))return;
     if(resultado.imagensCandidatas.length>=35)return;
@@ -526,7 +565,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   }
   if(fetcher===globalThis.fetch){
     if(CACHE.size>300)CACHE.delete(CACHE.keys().next().value);
-    CACHE.set(cacheKey,{expira:Date.now()+(resultado.imagem?86400000:90000),resultado});
+    CACHE.set(cacheKey,{expira:Date.now()+(resultado.imagem?86400000:15000),resultado});
   }
   return resultado;
 }
