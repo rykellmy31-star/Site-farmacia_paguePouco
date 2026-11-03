@@ -565,11 +565,19 @@
   async function enviarPNG(ean){
     const arquivo=await converterFotoEANparaPNG(ean);
     const fd=new FormData();
+    fd.append('ean',ean);
     fd.append('arquivo',arquivo);
-    const dados=await api('/admin/api/upload',{method:'POST',body:fd});
-    const resultado=(dados.arquivos||[]).find(a=>a.ok)?.arquivo;
+    let dados;
+    try{
+      // Upload restrito ao editor de produtos; não requer acesso à biblioteca
+      // geral de mídia (permissão ausente no perfil farmacêutico).
+      dados=await api('/admin/api/produtos/imagem-ean/png',{method:'POST',body:fd});
+    }catch(err){
+      throw new Error('Foto encontrada, mas não foi possível salvá-la: '+(err.message||'erro no envio'));
+    }
+    const resultado=dados?.arquivo;
     if(!resultado||resultado.ext!=='png'||!resultado.url)
-      throw new Error('Não foi possível salvar o PNG de qualidade na farmácia.');
+      throw new Error('O armazenamento não confirmou o PNG. Nenhuma foto foi vinculada.');
     return resultado;
   }
   function anexarFotoFormulario(midia,fonte){
