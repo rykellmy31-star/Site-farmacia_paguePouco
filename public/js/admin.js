@@ -505,11 +505,13 @@
     const acao=formEAN?.getAttribute('action')||'';
     const id=acao.match(/^\/admin\/api\/produtos\/([^/]+)$/)?.[1]||'';
     return {produtoId:id,nome:String(formEAN?.querySelector('[name="nome"]')?.value||'').slice(0,130),
-      marca:String(formEAN?.querySelector('[name="marca"]')?.value||'').slice(0,80)};
+      marca:String(formEAN?.querySelector('[name="marca"]')?.value||'').slice(0,80),
+      fabricante:String(formEAN?.querySelector('[name="fabricante"]')?.value||'').slice(0,100)};
   }
   async function converterFotoEANparaPNG(ean,indice=0,contexto=contextoBuscaImagemEAN()){
     const params=new URLSearchParams({ean,indice:String(indice),
-      nome:contexto.nome||'',marca:contexto.marca||'',produtoId:contexto.produtoId||''});
+      nome:contexto.nome||'',marca:contexto.marca||'',
+      fabricante:contexto.fabricante||'',produtoId:contexto.produtoId||''});
     const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?'+params.toString(),{
       credentials:'same-origin',headers:{'X-CSRF-Token':CFG.csrf}});
     if(!resp.ok){
@@ -717,7 +719,8 @@
     const result=await post('/admin/api/produtos/'+encodeURIComponent(id)+'/imagem-ean');
     if(!result.imagem||!formatoEAN(result.ean))return;
     const fontes=Array.isArray(result.fontes)?result.fontes:[];
-    const contexto={produtoId:id,nome:result.nome||'',marca:result.marca||''};
+    const contexto={produtoId:id,nome:result.nome||'',marca:result.marca||'',
+      fabricante:result.fabricante||''};
     for(let indice=0;indice<fontes.length;indice++){
       try{
         const png=await enviarPNG(result.ean,indice,contexto);
