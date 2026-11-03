@@ -1543,10 +1543,17 @@ function registrarApi(app, db) {
       legenda='Foto frontal — Openverse (Flickr); '+licenca+'; autor: '+autor+
         '; origem: '+origem+'; convertida em PNG.';
     }else if(fonte==='Dailus (fabricante)'){
-      // Fotos da marca continuam identificadas como material oficial;
-      // não alegar licença CC sobre conteúdo proprietário.
-      legenda='Foto frontal — catálogo oficial Dailus ('+
-        'https://www.dailus.com.br/products/esmalte-brigadeirao); direitos reservados da fabricante; convertida em PNG.';
+      // Validar URL de atribuição recebida do próprio catálogo da fabricante.
+      const origem=String(req.body.atribuicao||'');
+      let fabricante;
+      try{fabricante=new URL(origem)}catch{return void res.json({ok:false,erro:'Referência Dailus inválida.'},400)}
+      if(fabricante.protocol!=='https:'||fabricante.hostname!=='www.dailus.com.br'||
+         fabricante.port||fabricante.username||fabricante.password||
+         fabricante.search||fabricante.hash||
+         !/^\/products\/[a-z0-9-]{3,100}$/.test(fabricante.pathname))
+        return void res.json({ok:false,erro:'Referência Dailus não autorizada.'},400);
+      legenda='Foto frontal — catálogo oficial Dailus ('+origem+
+        '); direitos reservados da fabricante; convertida em PNG.';
     }else if(fonte==='PreçoMelhor'){
       legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.';
     }else{
