@@ -51,7 +51,7 @@ function fotoCommonsValida(url){
       !u.username&&!u.password&&!u.search&&!u.hash&&COMMONS_FILE.test(u.pathname);
   }catch{return false;}
 }
-function fotoCommonsPorEAN(json,ean){
+function fotoCommonsPorEAN(json,ean,referencia=null){
   const paginas=Object.values(json?.query?.pages||{});
   const imagens=[];
   for(const pagina of paginas){
@@ -60,7 +60,10 @@ function fotoCommonsPorEAN(json,ean){
     const titulo=String(pagina?.title||'');
     const descricao=String(meta.ImageDescription?.value||'').replace(/<[^>]*>/g,' ');
     // A imagem deve mencionar o EAN completo; não aceitar apenas nome semelhante.
-    if(!titulo.includes(ean)&&!descricao.includes(ean))continue;
+    const tituloLimpo=titulo.replace(/^File:/i,'').replace(/\.(?:png|jpe?g|webp)$/i,'').replace(/[_-]+/g,' ');
+    const esmalteIdentico=referencia&&esmalteMesmaVariante({
+      product_name:tituloLimpo,brands:'',quantity:referencia.volume+' ml'},referencia);
+    if(!titulo.includes(ean)&&!descricao.includes(ean)&&!esmalteIdentico)continue;
     if(!Number.isFinite(info?.width)||info.width<600||info.height<600||
       info.width/info.height>3.2||info.height/info.width>3.2||
       info.size>12*1024*1024||!fotoCommonsValida(info.url))continue;
@@ -104,7 +107,7 @@ function paginaFlickrValida(url){
       /^\/photos\/[^/]+\/\d{5,15}\/?$/i.test(u.pathname);
   }catch{return false;}
 }
-function registroOpenverseFlickr(item,ean){
+function registroOpenverseFlickr(item,ean,referencia=null){
   if(String(item?.source||'').toLowerCase()!=='flickr'||!urlFlickrValida(item.url)||
     !paginaFlickrValida(item.foreign_landing_url)||item.mature===true)return null;
   const width=Number(item.width),height=Number(item.height);
@@ -112,7 +115,9 @@ function registroOpenverseFlickr(item,ean){
     width/height>3.2||height/width>3.2)return null;
   const identidade=[item.title,item.description,...(Array.isArray(item.tags)?item.tags.map(t=>t?.name):[])]
     .filter(x=>typeof x==='string').join(' ').replace(/<[^>]*>/g,' ');
-  if(!identidade.includes(ean))return null;
+  const esmalteIdentico=referencia&&esmalteMesmaVariante({
+    product_name:item.title,brands:'',quantity:referencia.volume+' ml'},referencia);
+  if(!identidade.includes(ean)&&!esmalteIdentico)return null;
   const licenca=String(item.license||'').toLowerCase();
   const versao=String(item.license_version||'');
   const urlLicenca=String(item.license_url||'');
@@ -339,6 +344,18 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       consulta.searchParams.set(k,v);
     const json=await lerJson(consulta.href,{fetcher,timeoutMs:3800});
     for(const imagem of fotoCommonsPorEAN(json,ean))adicionar(imagem);
+    // Para esmaltes sem foto indexada pelo código: procurar o tom exato
+    // pelo nome em arquivos de licença livre no Wikimedia.
+    if(referencia){
+      const nomeBusca=new URL(COMMONS_API);
+      for(const [k,v] of Object.entries({action:'query',generator:'search',
+        gsrsearch:'"'+referencia.marca+'" "'+referencia.especificos.join(' ')+
+          '" esmalte '+referencia.volume+'ml',gsrnamespace:'6',gsrlimit:'15',
+        prop:'imageinfo',iiprop:'url|size|extmetadata',format:'json',formatversion:'2'}))
+        nomeBusca.searchParams.set(k,v);
+      const encontrados=await lerJson(nomeBusca.href,{fetcher,timeoutMs:3400});
+      for(const imagem of fotoCommonsPorEAN(encontrados,ean,referencia))adicionar(imagem);
+    }
   }
   // Catálogo Openverse agrega fotos autorizadas de outras fontes, como
   // Flickr. Busca automaticamente sem exigir API key, com rate limit público.
@@ -353,6 +370,20 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     for(const item of (Array.isArray(resposta?.results)?resposta.results:[]).slice(0,15)){
       const foto=registroOpenverseFlickr(item,ean);
       if(foto)adicionar(foto);
+    }
+    // Fotos com marca, tonalidade e volume exatos também podem existir
+    // sem o código EAN nos metadados.
+    if(referencia){
+      const consulta=new URL(OPENVERSE_API);
+      consulta.searchParams.set('q',referencia.query+' esmalte '+referencia.volume+'ml');
+      consulta.searchParams.set('source','flickr');
+      consulta.searchParams.set('license_type','commercial');
+      consulta.searchParams.set('page_size','12');
+      const fotos=await lerJson(consulta.href,{fetcher,timeoutMs:3400});
+      for(const item of (Array.isArray(fotos?.results)?fotos.results:[]).slice(0,12)){
+        const foto=registroOpenverseFlickr(item,ean,referencia);
+        if(foto)adicionar(foto);
+      }
     }
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
