@@ -5,7 +5,7 @@ import {
   calcularTotais, aplicarCupom, removerCupom, normalizeCart,
 } from '../lib/cart.js';
 import { lookupCep, ufFromCep, isValidCep } from '../lib/cep.js';
-import { calcularFrete } from '../lib/freight.js';
+import { calcularFreteIntegrado } from '../lib/melhor-envio.js';
 import { searchProducts } from '../lib/catalog.js';
 import { htmlGavetaCarrinho, htmlRodapeCarrinho, htmlItensCarrinho, htmlResumoCarrinho } from '../views/cart.js';
 import { rateLimitMiddleware } from '../lib/security.js';
@@ -105,14 +105,14 @@ export function registrarRotasApi(app, db) {
   });
 
   /* ----------------------------- FRETE -------------------------------- */
-  app.post('/api/frete', { maxBodyBytes: 64 * 1024 }, (req, res) => {
+  app.post('/api/frete', { maxBodyBytes: 64 * 1024 }, async (req, res) => {
     const ctx = criarContexto(req, db);
     const cep = String(req.body.cep || '').replace(/\D/g, '');
     const cidade = String(req.body.cidade || '');
     const uf = String(req.body.uf || '');
     if (!isValidCep(cep)) return void res.json({ ok: false, erro: 'Informe um CEP válido com 8 dígitos.' }, 400);
     const cart = getCart(db, req);
-    const calc = calcularFrete({
+    const calc = await calcularFreteIntegrado({
       config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep, uf, cidade,
       items: cart.itens || [],
