@@ -89,6 +89,7 @@ test('coleta URLs alternativas apenas para o MESMO EAN em fontes independentes',
  const r=await buscarDadosExternosEAN('7891000100103',{
    fetcher,googleKey:'',googleCx:'',somente:'imagem'});
  assert.equal(r.imagem.url,principal);
- assert.deepEqual(r.imagem.alternativas,[outro]);
- assert.equal(urls.length,3);
+ assert.deepEqual(r.imagensCandidatas.map(i=>i.url),[principal,outro]);
+ assert.equal(r.imagensCandidatas[1].fonteEAN.fonte,'Open Beauty Facts');
+ assert.equal(urls.length,5); // 4 catálogos Open Facts + PreçoMelhor
 });

@@ -1431,9 +1431,14 @@ function registrarApi(app, db) {
     if(!eanValido(ean))return void res.json({ok:false,erro:'EAN inválido.'},400);
     const result=await buscarDadosExternosEAN(ean,{somente:'imagem',force:req.body?.forcar===true});
     res.set('Cache-Control','no-store');
-    res.json({ok:true,imagem:result.imagem,
+    const fontes=(result.imagensCandidatas||[]).map(img=>({
+      fonte:img.fonteEAN?.fonte||'Catálogo',
+      atribuicao:img.fonteEAN?.urlAtribuicao||null,
+    }));
+    res.json({ok:true,imagem:result.imagem,fontes,
       consultadas:result.consultadas,
-      mensagem:result.imagem?'Imagem frontal localizada; verificando resolução e qualidade para gerar PNG.':
+      googleAutomatico:!!(config.googleEan?.key&&config.googleEan?.cx),
+      mensagem:fontes.length?'Encontradas '+fontes.length+' fontes. Verificando as fotos, uma por vez.':
         'Nenhuma foto de fonte autorizada localizada para este EAN nas bases consultadas. Nenhuma foto foi adicionada.'});
   });
   // Pesquisa separada para ativação pela listagem: devolve somente
@@ -1445,7 +1450,8 @@ function registrarApi(app, db) {
     if((p.imagens||[]).length&&!imagemAutomaticaAntiga(p))return void res.json({ok:true,imagem:null,jaPossui:true});
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem'});
-    res.json({ok:true,ean:p.ean,imagem:dados.imagem});
+    res.json({ok:true,ean:p.ean,imagem:dados.imagem,
+      fontes:(dados.imagensCandidatas||[]).map(img=>({fonte:img.fonteEAN?.fonte||'Catálogo'}))});
   });
   // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
   // informado. Não aceita URL externa ou redirecionamento para outros hosts.
@@ -1453,9 +1459,13 @@ function registrarApi(app, db) {
     if(!guardApi(req,res,'produtos.editar'))return;
     const ean=String(req.query.get('ean')||'');
     if(!eanValido(ean))return void res.text('EAN inválido',400);
+    const indice=Number(req.query.get('indice')||0);
+    if(!Number.isInteger(indice)||indice<0||indice>20)
+      return void res.text('Índice de imagem inválido.',400);
     const dados=await buscarDadosExternosEAN(ean,{somente:'imagem'});
-    if(!dados.imagem)return void res.text('Nenhuma foto licenciada encontrada para este EAN.',404);
-    const arquivo=await buscarImagemDisponivel(dados.imagem);
+    const candidata=(dados.imagensCandidatas||[])[indice];
+    if(!candidata)return void res.text('Nenhuma foto disponível nesta fonte.',404);
+    const arquivo=await buscarImagemDisponivel(candidata);
     if(!arquivo.ok){
       // Erro detalhado e seguro para o usuário, sem URLs de origem.
       return void res.text(arquivo.motivo,arquivo.erros?.grande?413:404);

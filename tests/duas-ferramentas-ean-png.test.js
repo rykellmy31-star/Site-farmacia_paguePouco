@@ -23,7 +23,7 @@ test('imagem EAN isolada seleciona a frente em resolução full (não miniatura)
  assert.equal(r.imagem.url,jpg);
  assert.equal(r.imagem.urlAltaResolucao,jpg.replace('.400.jpg','.full.jpg'));
  assert.equal(r.dimensoes,null);
- assert.equal(urls.length,3);
+ assert.equal(urls.length,5); // Quatro catálogos Open Facts + PreçoMelhor
 });
 test('dimensões EAN isoladas não consultam catálogo de imagens',async()=>{
  const urls=[];
@@ -189,4 +189,63 @@ test('foto PreçoMelhor exibe crédito público e não assume licença Open Fact
   assert.match(pagina,/creditoPrecoMelhor/);
   assert.match(cartoes,/creditoImagemPrecoMelhor/);
   assert.match(pagina,/precomelhor\.com\.br\/p\//);
+});
+
+test('múltiplas fontes EAN: foto ruim não impede fontes posteriores de serem tentadas',async()=>{
+  const e='7896006716112';
+  const cdn='https://pub-251da151f43b454d9e192d38bf5e6d71.r2.dev/';
+  const urls=[];
+  const fetcher=async url=>{
+    urls.push(url);
+    if(url.includes('world.openfoodfacts.org'))
+      return {ok:true,json:async()=>({product:{code:e,
+        image_front_url:'https://images.openfoodfacts.org/images/products/789/600/671/6112/front_pt.1.400.jpg'}})};
+    if(url.includes('precomelhor.com.br/api/product/'))
+      return {ok:true,json:async()=>({product:{ean:e},details:{media_high_res_url:cdn+e+'.webp'}})};
+    return {ok:false};
+  };
+  const r=await buscarDadosExternosEAN(e,{fetcher,somente:'imagem',googleKey:'',googleCx:''});
+  assert.equal(r.imagensCandidatas.length,2);
+  assert.equal(r.imagensCandidatas[0].fonteEAN.fonte,'Open Food Facts');
+  assert.equal(r.imagensCandidatas[1].fonteEAN.fonte,'PreçoMelhor');
+  assert.equal(r.imagem,r.imagensCandidatas[0]);
+  assert.equal(r.consultadas.includes('Open Pet Food Facts'),true);
+  assert.equal(urls.length,5);
+});
+
+test('Google API antiga quando configurada amplia candidatos sem baixar imagens de lojas',async()=>{
+  const e='7896006716112';
+  const good='https://images.openbeautyfacts.org/images/products/789/600/671/6112/front_pt.3.full.jpg';
+  const bad='https://loja.example/'+e+'.jpg';
+  const urls=[];
+  const r=await buscarDadosExternosEAN(e,{somente:'imagem',googleKey:'key',googleCx:'cx',
+    fetcher:async url=>{
+      urls.push(url);
+      if(url.includes('googleapis'))return {ok:true,json:async()=>({items:[
+        {link:bad,title:e+' marca'},
+        {link:good,title:e+' embalagem'},
+      ]})};
+      return {ok:false};
+    }});
+  assert.equal(r.imagensCandidatas.length,1);
+  assert.equal(r.imagem.url,good);
+  assert.equal(r.imagem.fonteEAN.fonte,'Open Facts (Google)');
+  const call=urls.find(u=>u.includes('googleapis'));
+  assert.ok(call);
+  assert.equal(new URL(call).searchParams.get('searchType'),'image');
+  assert.ok(new URL(call).searchParams.get('rights').includes('cc_attribute'));
+});
+
+test('painel continua tentando depois de fotos com menos de 600 pixels e mostra Google Imagens',()=>{
+  const base=new URL('../',import.meta.url);
+  const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
+  const html=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
+  const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
+  assert.match(js,/for\(let indice=0;indice<fontes\.length;indice\+\+\)/);
+  assert.match(js,/await enviarPNG\(ean,indice\)/);
+  assert.match(js,/erros\.push\(fonte/);
+  assert.match(js,/google\.com\/search\?tbm=isch/);
+  assert.match(html,/id="linkGoogleImagensEAN"/);
+  assert.match(route,/const indice=Number\(req\.query\.get\('indice'\)/);
+  assert.match(route,/imagensCandidatas\|\|\[\]\)\[indice\]/);
 });

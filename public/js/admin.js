@@ -501,8 +501,9 @@
     const el=$('#resultadoBuscaImagemEAN');
     if(el)el.textContent=msg;
   }
-  async function converterFotoEANparaPNG(ean){
-    const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?ean='+encodeURIComponent(ean),{
+  async function converterFotoEANparaPNG(ean,indice=0){
+    const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?ean='+encodeURIComponent(ean)+
+      '&indice='+encodeURIComponent(indice),{
       credentials:'same-origin',headers:{'X-CSRF-Token':CFG.csrf}});
     if(!resp.ok){
       const detalhe=(await resp.text().catch(()=>'' )).slice(0,180).trim();
@@ -582,8 +583,8 @@
       URL.revokeObjectURL(objetoUrl);
     }
   }
-  async function enviarPNG(ean){
-    const arquivo=await converterFotoEANparaPNG(ean);
+  async function enviarPNG(ean,indice=0){
+    const arquivo=await converterFotoEANparaPNG(ean,indice);
     const fd=new FormData();
     fd.append('ean',ean);
     fd.append('arquivo',arquivo);
@@ -643,14 +644,37 @@
     atualizarStatusFoto('Pesquisando foto frontal de alta qualidade para converter em PNG...');
     try{
       const r=await post('/admin/api/produtos/imagem-ean',{ean,forcar});
-      if(!r.imagem){atualizarStatusFoto(r.mensagem||'Nenhuma foto encontrada para este EAN.');return;}
-      if(ean!==eanAtual())return;
-      const midia=await enviarPNG(ean);
-      if(ean!==eanAtual())return;
-      if(anexarFotoFormulario(midia,r.imagem.fonteEAN?.fonte||'Open Facts')){
-        atualizarStatusFoto('Foto de boa resolução convertida para PNG e adicionada. Salve o produto.');
-        if(!silencioso)notificar('Foto PNG adicionada com sucesso.');
+      const fontes=Array.isArray(r.fontes)?r.fontes:[];
+      if(!fontes.length){
+        atualizarStatusFoto((r.mensagem||'Nenhuma foto encontrada.')+
+          (r.googleAutomatico?'':' Google automático indisponível sem API habilitada.'));
+        return;
       }
+      if(ean!==eanAtual())return;
+      const erros=[];
+      for(let indice=0;indice<fontes.length;indice++){
+        if(ean!==eanAtual())return;
+        const fonte=fontes[indice].fonte||'Catálogo';
+        atualizarStatusFoto('Verificando '+fonte+' ('+(indice+1)+'/'+fontes.length+')...');
+        try{
+          // Decodificação, qualidade e resolução são avaliadas por fonte.
+          // Se a imagem é pequena, tentar a próxima sem efetuar upload.
+          const midia=await enviarPNG(ean,indice);
+          if(ean!==eanAtual())return;
+          if(anexarFotoFormulario(midia,fonte)){
+            atualizarStatusFoto('Foto de '+fonte+' convertida para PNG e adicionada. Salve o produto.');
+            if(!silencioso)notificar('Foto PNG adicionada com sucesso.');
+          }
+          return;
+        }catch(err){
+          erros.push(fonte+': '+(err.message||'não foi possível utilizar a foto'));
+          // Falha no armazenamento é problema global; não gerar novos uploads.
+          if(/não foi possível salvá-la|armazenamento não confirmou/i.test(err.message||''))throw err;
+        }
+      }
+      atualizarStatusFoto('Nenhuma foto adequada nas '+fontes.length+' fontes: '+
+        erros.slice(0,2).join(' | ')+'. Veja outras opções pelo Google Imagens.');
+      if(!silencioso)notificar('Nenhuma fonte forneceu foto com qualidade suficiente.','erro');
     }catch(err){
       atualizarStatusFoto(err.message||'Foto não adicionada. Tente outra imagem.');
       if(!silencioso)notificar(err.message||'Falha na imagem EAN.','erro');
@@ -659,14 +683,35 @@
   async function imagemNaAtivacao(id){
     const result=await post('/admin/api/produtos/'+encodeURIComponent(id)+'/imagem-ean');
     if(!result.imagem||!formatoEAN(result.ean))return;
-    const png=await enviarPNG(result.ean);
-    await post('/admin/api/produtos/'+encodeURIComponent(id)+'/vincular-imagem-ean',{
-      ean:result.ean,imagemUrl:png.url,fonte:result.imagem.fonteEAN?.fonte||'Open Facts',
-    });
+    const fontes=Array.isArray(result.fontes)?result.fontes:[];
+    for(let indice=0;indice<fontes.length;indice++){
+      try{
+        const png=await enviarPNG(result.ean,indice);
+        await post('/admin/api/produtos/'+encodeURIComponent(id)+'/vincular-imagem-ean',{
+          ean:result.ean,imagemUrl:png.url,fonte:fontes[indice].fonte||'Catálogo',
+        });
+        return;
+      }catch(err){
+        if(/não foi possível salvá-la|armazenamento não confirmou/i.test(err.message||''))throw err;
+      }
+    }
   }
   if(formEAN){
     const campo=nome=>formEAN.querySelector('[name="'+nome+'"]');
     const btn=$('#botaoBuscarMedidasEAN');
+    const googleImagens=$('#linkGoogleImagensEAN');
+    function atualizarPesquisaImagensGoogle(){
+      const ean=eanAtual();
+      if(!googleImagens)return;
+      googleImagens.hidden=!formatoEAN(ean);
+      googleImagens.style.display=formatoEAN(ean)?'inline-flex':'none';
+      if(formatoEAN(ean))
+        googleImagens.href='https://www.google.com/search?tbm=isch&q='+
+          encodeURIComponent('"'+ean+'" embalagem produto foto frontal');
+      else googleImagens.removeAttribute('href');
+    }
+    atualizarPesquisaImagensGoogle();
+    campo('ean')?.addEventListener('input',atualizarPesquisaImagensGoogle);
     const status=$('#resultadoBuscaEAN');
     const linkWeb=$('#linkPesquisaEAN');
     const produtoId=formEAN.getAttribute('action')?.split('/').pop()||null;

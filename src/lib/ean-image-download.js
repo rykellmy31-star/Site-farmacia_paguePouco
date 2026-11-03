@@ -9,6 +9,7 @@ const ALLOWED=new Set([
  'images.openfoodfacts.org','static.openfoodfacts.org',
  'images.openbeautyfacts.org','static.openbeautyfacts.org',
  'images.openproductsfacts.org','static.openproductsfacts.org',
+ 'images.openpetfoodfacts.org','static.openpetfoodfacts.org',
 ]);
 const MAX_SOURCE_BYTES=12*1024*1024;
 const PRECOMELHOR_CDN='pub-251da151f43b454d9e192d38bf5e6d71.r2.dev';
