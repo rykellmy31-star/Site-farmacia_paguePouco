@@ -393,7 +393,7 @@
       if (enderecoSalvo) enderecoSalvo.value = salvo ? '1' : '';
       if(campos){
         campos.hidden=!!salvo;
-        $('input, select, textarea',campos).forEach(campo => campo.disabled=!!salvo);
+        $$('input, select, textarea',campos).forEach(campo => campo.disabled=!!salvo);
       }
       const outroEscolhido=radiosEndereco.some(r=>r.checked&&r.value==='novo');
       if(outroEscolhido&&!enderecoNovoInicializado){
