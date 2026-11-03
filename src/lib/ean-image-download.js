@@ -37,7 +37,9 @@ export function origemImagemPermitida(url,ean=null){
   }catch{return false;}
 }
 export function candidatosImagemEAN(imagem){
-  const ean=imagem?.fonteEAN?.ean;
+  // Se a fonte confirmou a mesma embalagem em GTIN13, a URL da foto
+  // referencia esse código, mas o produto conserva o GTIN14 original.
+  const ean=imagem?.fonteEAN?.codigoNaFonte||imagem?.fonteEAN?.ean;
   const urls=[imagem?.urlAltaResolucao,imagem?.url,
     ...(Array.isArray(imagem?.alternativas)?imagem.alternativas:[]),
     ...(Array.isArray(imagem?.candidatos)?imagem.candidatos:[])];
@@ -98,7 +100,8 @@ export async function buscarImagemDisponivel(imagem,{
     const timer=setTimeout(()=>ctrl.abort(),timeoutMs);
     try{
       while(true){
-        if(!origemImagemPermitida(url,imagem?.fonteEAN?.ean))throw new Error('indisponivel');
+        if(!origemImagemPermitida(url,imagem?.fonteEAN?.codigoNaFonte||imagem?.fonteEAN?.ean))
+          throw new Error('indisponivel');
         const resp=await fetcher(url,{
           method:'GET',redirect:'manual',signal:ctrl.signal,
           headers:{Accept:'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
@@ -108,7 +111,8 @@ export async function buscarImagemDisponivel(imagem,{
           const destino=resp.headers?.get?.('location');
           if(!destino||redirects++>=2)throw new Error('indisponivel');
           const novo=new URL(destino,url).href;
-          if(!origemImagemPermitida(novo,imagem?.fonteEAN?.ean))throw new Error('indisponivel');
+          if(!origemImagemPermitida(novo,imagem?.fonteEAN?.codigoNaFonte||imagem?.fonteEAN?.ean))
+            throw new Error('indisponivel');
           url=novo;continue;
         }
         if(!resp.ok)throw new Error('indisponivel');

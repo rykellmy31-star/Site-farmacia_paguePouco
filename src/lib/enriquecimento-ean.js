@@ -6,6 +6,7 @@
  * Google Custom Search JSON API requer conta previamente habilitada.
  */
 import { eanValido, normalizarEAN } from './busca-medidas-ean.js';
+import {gtinVarejoDaEmbalagem,mesmaFraldaDeEmbalagem} from './gtin-embalagem-foto.js';
 import { config } from '../config.js';
 
 const FACTS=[
@@ -28,13 +29,14 @@ function fotoPrecoMelhorValida(url,ean){
       new RegExp('^/'+ean+'(?:_w200)?\\.(?:webp|png|jpe?g)$','i').test(u.pathname);
   }catch{return false;}
 }
-function registroImagemPrecoMelhor(fotos,ean){
+function registroImagemPrecoMelhor(fotos,ean,{codigoNaFonte=ean,correspondencia='ean'}={}){
   const principal=fotos[0];
-  const origem=PRECOMELHOR_API+'/p/'+encodeURIComponent(ean);
+  const origem=PRECOMELHOR_API+'/p/'+encodeURIComponent(codigoNaFonte);
   return {url:principal,urlAltaResolucao:principal,alternativas:fotos.slice(1),
     principal:true,ordem:1,
     legenda:'Foto de produto — PreçoMelhor (uso comercial com atribuição: '+origem+')',
     fonteEAN:{ean,fonte:'PreçoMelhor',licenca:'Uso comercial com atribuição',
+      codigoNaFonte,correspondencia,
       atribuicao:'PreçoMelhor',urlAtribuicao:origem,atribuidoEm:new Date().toISOString()}};
 }
 
@@ -354,7 +356,11 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
   const referencia=somente==='dimensoes'?null:referenciaEsmalte(nomeProduto,marcaProduto);
-  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'');
+  // GTIN14 pode ser de caixa: identidade da apresentação muda com nome/marca.
+  const contextoGTIN14=/^[1-8]\d{13}$/.test(ean)
+    ?(String(nomeProduto||'')+'|'+String(marcaProduto||'')).toUpperCase().slice(0,160)
+    :'';
+  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'')+':'+contextoGTIN14;
   if(fetcher===globalThis.fetch&&!force){
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
@@ -450,6 +456,32 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       if(unicas.length){
         adicionar(registroImagemPrecoMelhor(unicas,ean));
         for(const url of unicas.slice(1))adicionar(registroImagemPrecoMelhor([url],ean));
+      }
+    }
+  }
+  // Fraldas Personal exportadas pelo ERP podem conter GTIN14 de caixa
+  // (ex.: 17896110011209), enquanto a fonte licenciada indexa o varejo
+  // pelo GTIN13 (7896110011202). Essa transformação isolada NÃO
+  // autoriza uma foto: nome, marca, tamanho e unidades devem coincidir.
+  if(somente!=='dimensoes'&&!resultado.imagem){
+    const varejo=gtinVarejoDaEmbalagem(ean);
+    if(varejo&&/\bPERSONAL\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||''))){
+      resultado.consultadas.push('PreçoMelhor — GTIN de embalagem Personal');
+      const referencia13=await lerJson(PRECOMELHOR_API+'/api/product/'+varejo,
+        {fetcher,timeoutMs:3900});
+      const produto13=referencia13?.product;
+      if(produto13&&eanIgual(produto13.ean,varejo)&&
+         mesmaFraldaDeEmbalagem({nomeProduto,marcaProduto,produtoFonte:produto13})){
+        const opcoes13=[referencia13?.details?.media_high_res_url,
+          referencia13?.details?.image_url_main,produto13.image_url]
+          .filter(url=>fotoPrecoMelhorValida(url,varejo));
+        const fotos13=[...new Set(opcoes13)];
+        if(fotos13.length){
+          const conf={codigoNaFonte:varejo,correspondencia:'gtin14-embalagem'};
+          adicionar(registroImagemPrecoMelhor(fotos13,ean,conf));
+          for(const url of fotos13.slice(1))
+            adicionar(registroImagemPrecoMelhor([url],ean,conf));
+        }
       }
     }
   }

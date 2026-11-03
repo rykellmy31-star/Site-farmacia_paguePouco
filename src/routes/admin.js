@@ -53,6 +53,7 @@ import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
+import {gtinVarejoDaEmbalagem} from '../lib/gtin-embalagem-foto.js';
 import { consultarDescricaoEAN, preencherDescricaoAusente } from '../lib/busca-descricao-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
@@ -1430,9 +1431,11 @@ function registrarApi(app, db) {
     const cadastrado=id?db.collection('products').get(id):null;
     if(cadastrado&&String(cadastrado.ean)===String(ean))
       return {nomeProduto:String(cadastrado.nome||'').slice(0,130),
-        marcaProduto:String(cadastrado.marca||'').slice(0,80)};
+        // A importação de estoque costuma preencher "fabricante" quando
+        // "marca" vem vazio. Isso não altera nenhum dado no banco.
+        marcaProduto:String(cadastrado.marca||cadastrado.fabricante||'').slice(0,80)};
     return {nomeProduto:cleanText(entrada?.nome,130),
-      marcaProduto:cleanText(entrada?.marca,80)};
+      marcaProduto:cleanText(entrada?.marca||entrada?.fabricante,80)};
   };
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador
@@ -1450,6 +1453,7 @@ function registrarApi(app, db) {
       licenca:img.fonteEAN?.licenca||null,
       autor:img.fonteEAN?.atribuicao||null,
       correspondencia:img.fonteEAN?.correspondencia||'ean',
+      codigoNaFonte:img.fonteEAN?.codigoNaFonte||null,
     }));
     res.json({ok:true,imagem:result.imagem,fontes,
       consultadas:result.consultadas,
@@ -1474,6 +1478,7 @@ function registrarApi(app, db) {
         licenca:img.fonteEAN?.licenca||null,
         autor:img.fonteEAN?.atribuicao||null,
         correspondencia:img.fonteEAN?.correspondencia||'ean',
+      codigoNaFonte:img.fonteEAN?.codigoNaFonte||null,
       }))});
   });
   // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
@@ -1555,7 +1560,14 @@ function registrarApi(app, db) {
       legenda='Foto frontal — catálogo oficial Dailus ('+origem+
         '); direitos reservados da fabricante; convertida em PNG.';
     }else if(fonte==='PreçoMelhor'){
-      legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(String(p.ean))+'), convertida em PNG.';
+      // A referência da fonte pode ter GTIN13 no caso de embalagem GTIN14,
+      // mas jamais aceitar um código arbitrário enviado do navegador.
+      const consulta=String(req.body.codigoNaFonte||'');
+      const eanFonte=(String(req.body.correspondencia)==='gtin14-embalagem'&&
+        gtinVarejoDaEmbalagem(p.ean)===consulta)?consulta:String(p.ean);
+      legenda='Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+
+        encodeURIComponent(eanFonte)+'), convertida em PNG.'+
+        (eanFonte!==String(p.ean)?' Foto da embalagem de varejo com mesma marca, tamanho e quantidade; conferir embalagem.':'');
     }else{
       legenda='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
       if(String(req.body.correspondencia||'')==='marca-cor-volume'&&
