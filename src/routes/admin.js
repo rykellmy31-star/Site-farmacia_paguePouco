@@ -51,7 +51,7 @@ import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
-import { buscarDadosExternosEAN, anexarImagemAusente } from '../lib/enriquecimento-ean.js';
+import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
 import { simulateApproval } from '../lib/payments/internal.js';
 import { refundPayment, providerPublicInfo, enabledMethods } from '../lib/payments/index.js';
@@ -1353,7 +1353,80 @@ function registrarApi(app, db) {
   });
 
   /* ------------------------------ PRODUTOS ------------------------------ */
-  // Pesquisa por EAN exato: medidas + foto legalmente reutilizável.
+  // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
+  // A conversão para PNG e a aferição de resolução são feitas no navegador
+  // antes de gravar a imagem na mídia local/R2.
+  app.post('/admin/api/produtos/imagem-ean',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const ean=String(req.body?.ean||'');
+    if(!eanValido(ean))return void res.json({ok:false,erro:'EAN inválido.'},400);
+    const result=await buscarDadosExternosEAN(ean,{somente:'imagem',force:req.body?.forcar===true});
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,imagem:result.imagem,
+      consultadas:result.consultadas,
+      mensagem:result.imagem?'Imagem frontal localizada; verificando resolução e qualidade para gerar PNG.':
+        'Nenhuma imagem frontal licenciada localizada para este EAN. Nenhuma foto foi adicionada.'});
+  });
+  // Pesquisa separada para ativação pela listagem: devolve somente
+  // o candidato (não grava JPEG e não tenta preencher medidas).
+  app.post('/admin/api/produtos/:id/imagem-ean',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível'},404);
+    if((p.imagens||[]).length&&!imagemAutomaticaAntiga(p))return void res.json({ok:true,imagem:null,jaPossui:true});
+    if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
+    const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem'});
+    res.json({ok:true,ean:p.ean,imagem:dados.imagem});
+  });
+  // Proxy restrito: apenas o arquivo retornado por Open Facts para o EAN
+  // informado. Não aceita URL externa ou redirecionamento para outros hosts.
+  app.get('/admin/api/produtos/imagem-ean/arquivo',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const ean=String(req.query.get('ean')||'');
+    if(!eanValido(ean))return void res.text('EAN inválido',400);
+    const dados=await buscarDadosExternosEAN(ean,{somente:'imagem'});
+    const url=dados.imagem?.urlAltaResolucao||dados.imagem?.url;
+    if(!url||!/^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(url))
+      return void res.text('Imagem indisponível',404);
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),6000);
+    try{
+      const upstream=await fetch(url,{signal:ctrl.signal,redirect:'manual'});
+      if(!upstream.ok||upstream.status>=300)
+        return void res.text('Foto de origem indisponível',404);
+      const size=Number(upstream.headers.get('content-length')||0);
+      if(size>7*1024*1024)return void res.text('Imagem muito grande',413);
+      const mime=String(upstream.headers.get('content-type')||'').split(';')[0];
+      if(!['image/jpeg','image/png','image/webp'].includes(mime))
+        return void res.text('Formato de origem inválido',415);
+      const bytes=Buffer.from(await upstream.arrayBuffer());
+      if(bytes.length>7*1024*1024)return void res.text('Imagem muito grande',413);
+      res.set('Content-Type',mime);
+      res.set('Cache-Control','private, max-age=60');
+      res.set('X-Content-Type-Options','nosniff');
+      res.end(bytes);
+    }catch{return void res.text('Não foi possível acessar a imagem',502);}
+    finally{clearTimeout(timer);}
+  });
+  // Vincula PNG previamente validado/salvo no storage do próprio site,
+  // sem alterar foto existente e sem reativar produto.
+  app.post('/admin/api/produtos/:id/vincular-imagem-ean',(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível'},404);
+    if((p.imagens||[]).length&&!imagemAutomaticaAntiga(p))return void res.json({ok:true,adicionada:false,mensagem:'Foto manual existente preservada.'});
+    if(!eanValido(p.ean)||String(req.body.ean)!==String(p.ean))
+      return void res.json({ok:false,erro:'EAN não corresponde ao cadastro.'},409);
+    const url=String(req.body.imagemUrl||'');
+    const media=db.collection('midia').findOne(m=>m.url===url&&m.ext==='png'&&m.tipo==='image'&&
+      Number(m.largura)>=600&&Number(m.altura)>=600);
+    if(!media)return void res.json({ok:false,erro:'Imagem PNG de boa resolução não encontrada no armazenamento.'},400);
+    const fonte=String(req.body.fonte||'Open Facts').slice(0,90);
+    const legenda='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+    db.collection('products').update(p.id,{imagens:[{url,principal:true,ordem:1,legenda}]});
+    logAdmin(db,req.adminUser,'anexou_imagem_png_ean','produto',p.id,{ean:p.ean,imagem:url},req);
+    res.json({ok:true,adicionada:true});
+  });
+  // Pesquisa por EAN exato: apenas dados logísticos, sem buscar imagens.
   // Campos do produto não são alterados pela busca do formulário.
   app.post('/admin/api/produtos/dimensoes-ean', async (req,res) => {
     if (!guardApi(req,res,'produtos.editar')) return;
@@ -1363,7 +1436,7 @@ function registrarApi(app, db) {
     const local=buscarMedidasNoCatalogo(db,ean,req.body?.produtoId||null);
     const [medidas,externos]=await Promise.all([
       local?Promise.resolve(local):buscarMedidasPorEAN(ean,{forcar:req.body?.forcar===true}),
-      buscarDadosExternosEAN(ean,{force:req.body?.forcar===true}),
+      buscarDadosExternosEAN(ean,{force:req.body?.forcar===true,somente:'dimensoes'}),
     ]);
     const result={...medidas};
     if(!result.encontrado&&externos.dimensoes){
@@ -1377,7 +1450,6 @@ function registrarApi(app, db) {
       result.dimensoes=externos.dimensoes;
       result.campos=[...(result.campos||[]),'largura','altura','comprimento'];
     }
-    result.imagem=externos.imagem;
     result.consultadas=[...new Set([...(result.consultadas||[]),...(externos.consultadas||[])])];
     res.set('Cache-Control','no-store');
     res.json(result);
@@ -1393,31 +1465,29 @@ function registrarApi(app, db) {
       mensagem:'Produto sem EAN válido. Informe foto e medidas manualmente.'});
     const faltaMedida=[p.peso,p.dimensoes?.altura,p.dimensoes?.largura,
       p.dimensoes?.comprimento].some(v=>!(Number(v)>0));
-    const faltaImagem=!(p.imagens||[]).length;
-    if(!faltaMedida&&!faltaImagem)
-      return void res.json({ok:true,encontrado:false,
-        mensagem:'Produto já possui foto e medidas; nenhum dado sobrescrito.'});
+    if(!faltaMedida)return void res.json({ok:true,encontrado:false,
+      mensagem:'Medidas existentes preservadas.'});
+    const local=buscarMedidasNoCatalogo(db,p.ean,p.id);
     const [medidas,externos]=await Promise.all([
-      faltaMedida?
-        (buscarMedidasNoCatalogo(db,p.ean,p.id)||buscarMedidasPorEAN(p.ean)):
-        Promise.resolve(null),
-      buscarDadosExternosEAN(p.ean),
+      local||buscarMedidasPorEAN(p.ean),
+      buscarDadosExternosEAN(p.ean,{somente:'dimensoes'}),
     ]);
     const encontrados=medidas?.encontrado?medidas:
       externos.dimensoes?{encontrado:true,ean:p.ean,origem:externos.origemDimensoes,
         peso:0,dimensoes:externos.dimensoes}:null;
-    const patch={...aplicarMedidasAusentes(p,encontrados),
-      ...anexarImagemAusente(p,externos.imagem)};
+    if(medidas?.encontrado&&externos.dimensoes&&!Number(encontrados.dimensoes?.largura)){
+      encontrados.dimensoes=externos.dimensoes;
+    }
+    const patch=aplicarMedidasAusentes(p,encontrados);
     if(Object.keys(patch).length){
       db.collection('products').update(p.id,patch);
-      logAdmin(db,req.adminUser,'enriqueceu_produto_por_ean','produto',p.id,
-        {foto:!!patch.imagens,medidas:!!patch.dimensoes,
-          fontes:externos.consultadas},req);
+      logAdmin(db,req.adminUser,'consultou_medidas_ean','produto',p.id,
+        {medidas:!!patch.dimensoes,peso:!!patch.peso},req);
     }
     res.json({ok:true,encontrado:Object.keys(patch).length>0,
-      fotoAdicionada:!!patch.imagens,medidasAdicionadas:!!(patch.dimensoes||patch.peso),
-      mensagem:patch.imagens?'Foto do EAN adicionada automaticamente.': 
-        'Nenhuma foto licenciada encontrada para este EAN.'});
+      medidasAdicionadas:!!(patch.dimensoes||patch.peso),
+      mensagem:Object.keys(patch).length?'Medidas inseridas. Confira a embalagem.':
+        'Nenhuma medida confiável encontrada.'});
   });
 
   const lerProdutoDoForm = (body) => {

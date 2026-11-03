@@ -257,18 +257,26 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               ${campoAdmin({ nome: 'quantidade', rotulo: 'Quantidade em estoque', tipo: 'number', min: '0', valor: p.estoque?.quantidade ?? 0 })}
               ${campoAdmin({ nome: 'estoqueMinimo', rotulo: 'Estoque mínimo (alerta)', tipo: 'number', min: '0', valor: p.estoque?.minimo ?? 5 })}
             </div>
+            <div class="alerta info" id="painelBuscaImagemEAN">
+              <strong>🖼️ Ferramenta de imagens — EAN</strong>
+              <p class="texto-pequeno mt-1">Busca foto frontal da embalagem (ou do produto), prioriza fonte
+              em alta resolução, converte para PNG real e descarta imagens pequenas, apagadas ou sem origem
+              autorizada. Não amplia foto pequena nem substitui imagem cadastrada.</p>
+              <button class="botao pequeno secundario" type="button" id="botaoBuscarImagemEAN">🖼️ Buscar imagem PNG pelo EAN</button>
+              <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaImagemEAN" role="status" aria-live="polite">Ainda não pesquisado.</p>
+            </div>
             <div class="alerta info" id="painelBuscaEAN">
-              <strong>📦 Foto e dimensões automáticas pelo EAN</strong>
-              <p class="texto-pequeno mt-1">Ao cadastrar ou ativar, o sistema busca foto da embalagem pelo código de barras
-              em catálogos com reutilização permitida e verifica peso e dimensões. Imagens e medidas já preenchidas
-              não serão substituídas. Google é opcional, sujeito a credenciais oficiais e licença da imagem.</p>
-              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">🔎 Buscar foto, peso e dimensões pelo EAN</button>
+              <strong>📦 Ferramenta de dimensões — EAN</strong>
+              <p class="texto-pequeno mt-1">Pesquisa separadamente peso e dimensões logísticas da embalagem.
+              Consulte e confira as medidas antes de calcular frete. O Google pode complementar resultados
+              somente quando a API oficial estiver configurada.</p>
+              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">📐 Buscar dimensões pelo EAN</button>
               <a id="linkPesquisaEAN" class="botao pequeno secundario mt-1" target="_blank"
                 rel="noopener noreferrer" style="display:none">🌐 Procurar medidas deste EAN na web</a>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaEAN" role="status">
                 ${p.logisticaFonte?.origem
                   ? `Fonte: ${e(p.logisticaFonte.origem)} · ${p.logisticaFonte.revisaoPendente ? 'Conferência da embalagem pendente' : 'Medidas revisadas'}`
-                  : 'Nenhuma busca realizada neste formulário.'}
+                  : 'Nenhuma pesquisa de medidas realizada.'}
               </p>
               ${p.logisticaFonte?.revisaoPendente ? `<label class="check mt-1">
                 <input type="checkbox" name="confirmouMedidasLogisticas" value="1">
