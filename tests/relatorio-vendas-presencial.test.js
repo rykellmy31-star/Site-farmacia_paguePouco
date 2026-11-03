@@ -93,7 +93,7 @@ test('cliente e farmácia recebem quantidade e pagamento escolhido, sem envio du
    assert.match(t,/Forma de pagamento escolhida: \*Dinheiro\*/);
    assert.match(t,/2x Dipirona/);
  }
- assert.match(textos.find(x=>x.includes('NOVO PEDIDO')),/TROCO A SEPARAR: R\\$ 65,00/);
+ assert.match(textos.find(x=>x.includes('NOVO PEDIDO')),/TROCO A SEPARAR: R\$ 65,00/);
  assert.match(textos.find(x=>x.startsWith('Olá')),/Nenhuma cobrança foi gerada/);
  enfileirarEvolution(db,pedido,'responsavel_local');
  assert.equal(db.out.size,2);
