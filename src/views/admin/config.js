@@ -20,7 +20,7 @@ export function telaFretes(ctx, { frete, categorias, produtos }) {
     <h1 class="mt-0">Configuração de fretes</h1>
     <div class="alerta info">
       <strong>Como funciona:</strong> cada estado (26 estados + Distrito Federal) tem um valor fixo definido por você.
-      Quando o cliente informa o CEP, identificamos a UF e aplicamos o valor desta tabela — <strong>sem depender da API dos Correios</strong>.
+      Com a cotação Melhor Envio desativada, aplicamos esta tabela por estado. Com a cotação ativada, consultamos os valores e prazos reais de transportadoras para CEPs diferentes do CEP da farmácia.
       O valor cobrado do cliente é o valor comercial do frete; o campo "custo estimado de postagem" serve para seu controle
       interno e não é exibido ao cliente.
     </div>
@@ -51,6 +51,21 @@ export function telaFretes(ctx, { frete, categorias, produtos }) {
         </table></div>`,
       })}
 
+      ${painel({
+        titulo: 'Melhor Envio — somente cálculo de frete',
+        corpo: `
+          <p>Consulta de preços e prazos, sem contratar transporte, criar etiqueta ou movimentar a carteira do Melhor Envio.</p>
+          <p><strong>Credenciais Cloudflare:</strong> ${config.melhorEnvio?.token && config.melhorEnvio?.contato
+            ? '<span class="etiqueta verde">Configuradas</span>'
+            : '<span class="etiqueta cinza">Ainda não configuradas</span>'}
+            — token e e-mail técnico são segredos no servidor; não aparecem neste painel.</p>
+          ${campoAdmin({nome:'me_ativo',rotulo:'Ativar somente consulta Melhor Envio para outros CEPs',
+            tipo:'checkbox',valor:!!frete.melhorEnvio?.ativo})}
+          <p class="texto-pequeno">Para ativar, configure MELHOR_ENVIO_TOKEN e MELHOR_ENVIO_CONTATO_EMAIL na Cloudflare.
+          O CEP da farmácia vem de Configurações → Empresa. Cadastre peso (kg) e dimensões (cm) reais de cada produto.
+          Com a integração ativa, caso a API esteja indisponível, a loja não inventa preços e solicita nova cotação.</p>
+        `,
+      })}
       <div class="grade-form duas-colunas">
         ${painel({
           titulo: 'Frete grátis',
