@@ -6,6 +6,24 @@ import { ICONES, money } from './layout.js';
 import { STATUS_FINANCEIRO, STATUS_OPERACIONAL } from '../lib/orders.js';
 import { melhorParcelamentoSemJuros } from '../lib/payments/index.js';
 
+/** Crédito obrigatório para fotos Creative Commons obtidas pelo Openverse. */
+export function creditoFotoOpenverse(produto){
+  const legenda=String((produto?.imagens||[]).find(f=>
+    String(f.legenda||'').includes('Openverse (Flickr)'))?.legenda||'');
+  const url=legenda.match(/https:\/\/www\.flickr\.com\/photos\/[^;\s]+/)?.[0];
+  const autor=legenda.match(/;\s*autor:\s*([^;]+)/)?.[1]?.trim();
+  const licenca=legenda.match(/;\s*(CC BY(?:-SA)? \d\.\d|CC0 1\.0);\s*autor:/)?.[1];
+  if(!url||!autor||!licenca)return '';
+  const linkLicenca=licenca==='CC0 1.0'
+    ?'https://creativecommons.org/publicdomain/zero/1.0/'
+    :'https://creativecommons.org/licenses/'+
+      (licenca.startsWith('CC BY-SA')?'by-sa/':'by/')+licenca.slice(-3)+'/';
+  return '<span class="texto-pequeno texto-suave" style="font-size:10px">'+
+    'Foto: <a href="'+e(url)+'" target="_blank" rel="noopener noreferrer">'+e(autor)+
+    '</a> via Openverse/Flickr (<a href="'+e(linkLicenca)+
+    '" target="_blank" rel="noopener noreferrer">'+e(licenca)+'</a>)</span>';
+}
+
 export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}) {
   const venda = podeVender(produto);
   const preco = precoVigenteCentavos(produto);
@@ -31,6 +49,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
       <img src="${e(img)}" alt="${e(produto.nome)}" loading="lazy" width="300" height="300">
     </a>
     ${creditoImagemPrecoMelhor}
+    ${creditoFotoOpenverse(produto)}
     ${produto.marca ? `<span class="marca">${e(produto.marca)}</span>` : ''}
     <h3 class="nome"><a href="${e(productUrl(produto))}">${e(produto.nome)}</a></h3>
     ${promo ? `<span class="preco-antigo">${money(original)}</span>` : ''}

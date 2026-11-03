@@ -617,8 +617,8 @@
     leg.type='hidden';leg.name='imagemLegenda[]';
     leg.value=fonte==='PreçoMelhor'
       ?'Foto frontal — PreçoMelhor (uso comercial com atribuição: https://www.precomelhor.com.br/p/'+encodeURIComponent(eanAtual())+'), convertida em PNG.'
-      :fonte==='Wikimedia Commons'
-        ?'Foto frontal — Wikimedia Commons; '+String(meta.licenca||'')+
+      :fonte==='Wikimedia Commons'||fonte==='Openverse (Flickr)'
+        ?'Foto frontal — '+fonte+'; '+String(meta.licenca||'')+
           '; autor: '+String(meta.autor||'')+'; origem: '+String(meta.atribuicao||'')+
           '; convertida em PNG.'
         :'Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
@@ -650,8 +650,7 @@
       const r=await post('/admin/api/produtos/imagem-ean',{ean,forcar});
       const fontes=Array.isArray(r.fontes)?r.fontes:[];
       if(!fontes.length){
-        atualizarStatusFoto((r.mensagem||'Nenhuma foto encontrada.')+
-          (r.googleAutomatico?'':' Google automático exige API previamente habilitada.'));
+        atualizarStatusFoto(r.mensagem||'Nenhuma foto compatível localizada nas fontes gratuitas disponíveis.');
         return;
       }
       if(ean!==eanAtual())return;

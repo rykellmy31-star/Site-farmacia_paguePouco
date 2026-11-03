@@ -83,6 +83,59 @@ function fotoCommonsPorEAN(json,ean){
   return imagens.slice(0,5);
 }
 
+// Catálogo aberto e gratuito de imagens com atribuição: Openverse (Flickr).
+// Sem token; busca apenas o EAN exato e licenças de uso comercial.
+const OPENVERSE_API='https://api.openverse.org/v1/images/';
+function urlFlickrValida(url){
+  if(typeof url!=='string'||url.length>700)return false;
+  try{
+    const u=new URL(url);
+    return u.protocol==='https:'&&u.hostname==='live.staticflickr.com'&&
+      !u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&
+      /^\/\d{2,6}\/\d{5,15}_[a-z0-9]{6,50}_(?:b|c|h|k|o)\.jpe?g$/i.test(u.pathname);
+  }catch{return false;}
+}
+function paginaFlickrValida(url){
+  if(typeof url!=='string'||url.length>700)return false;
+  try{
+    const u=new URL(url);
+    return u.protocol==='https:'&&['flickr.com','www.flickr.com'].includes(u.hostname)&&
+      !u.port&&!u.username&&!u.password&&!u.search&&!u.hash&&
+      /^\/photos\/[^/]+\/\d{5,15}\/?$/i.test(u.pathname);
+  }catch{return false;}
+}
+function registroOpenverseFlickr(item,ean){
+  if(String(item?.source||'').toLowerCase()!=='flickr'||!urlFlickrValida(item.url)||
+    !paginaFlickrValida(item.foreign_landing_url)||item.mature===true)return null;
+  const width=Number(item.width),height=Number(item.height);
+  if(width<600||height<600||width>8000||height>8000||
+    width/height>3.2||height/width>3.2)return null;
+  const identidade=[item.title,item.description,...(Array.isArray(item.tags)?item.tags.map(t=>t?.name):[])]
+    .filter(x=>typeof x==='string').join(' ').replace(/<[^>]*>/g,' ');
+  if(!identidade.includes(ean))return null;
+  const licenca=String(item.license||'').toLowerCase();
+  const versao=String(item.license_version||'');
+  const urlLicenca=String(item.license_url||'');
+  // Não aceitar CC-NC / ND: loja é uso comercial, PNG é obra derivada.
+  if(!['by','by-sa','cc0'].includes(licenca))return null;
+  const licencaEsperada=licenca==='cc0'
+    ?'https://creativecommons.org/publicdomain/zero/1.0/'
+    :'https://creativecommons.org/licenses/'+licenca+'/'+versao+'/';
+  if(!urlLicenca.startsWith(licencaEsperada.replace('https://','http://'))&&
+     !urlLicenca.startsWith(licencaEsperada))return null;
+  if(licenca==='cc0'?versao!=='1.0':!['2.0','2.5','3.0','4.0'].includes(versao))
+    return null;
+  const autor=String(item.creator||'Autor não informado').replace(/<[^>]*>/g,' ').trim().slice(0,120);
+  const licencaNome=licenca==='cc0'?'CC0 1.0':('CC '+licenca.toUpperCase()+' '+versao);
+  return {url:item.url,urlAltaResolucao:item.url,alternativas:[],
+    principal:true,ordem:1,
+    legenda:'Foto de produto — Openverse (Flickr); '+licencaNome+
+      '; autor: '+autor+'; origem: '+item.foreign_landing_url,
+    fonteEAN:{ean,fonte:'Openverse (Flickr)',licenca:licencaNome,
+      atribuicao:autor,urlAtribuicao:item.foreign_landing_url,
+      licencaUrl:urlLicenca,atribuidoEm:new Date().toISOString()}};
+}
+
 const CACHE=new Map();
 const AGENTE='FarmaciaPaguePouco/1.0 (site.farmaciapaguepouco.app)';
 const normal=s=>String(s||'').replace(/\D/g,'');
@@ -137,6 +190,7 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   const resultado={ok:true,imagem:null,imagensCandidatas:[],dimensoes:null,consultadas:[],origemDimensoes:''};
   const adicionar=imagem=>{
     if(!imagem||resultado.imagensCandidatas.some(i=>i.url===imagem.url))return;
+    if(resultado.imagensCandidatas.length>=35)return;
     resultado.imagensCandidatas.push(imagem);
     resultado.imagem??=imagem;
   };
@@ -199,6 +253,21 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
       consulta.searchParams.set(k,v);
     const json=await lerJson(consulta.href,{fetcher,timeoutMs:3800});
     for(const imagem of fotoCommonsPorEAN(json,ean))adicionar(imagem);
+  }
+  // Catálogo Openverse agrega fotos autorizadas de outras fontes, como
+  // Flickr. Busca automaticamente sem exigir API key, com rate limit público.
+  if(somente!=='dimensoes'){
+    resultado.consultadas.push('Openverse (Flickr)');
+    const busca=new URL(OPENVERSE_API);
+    busca.searchParams.set('q','"'+ean+'"');
+    busca.searchParams.set('source','flickr');
+    busca.searchParams.set('license_type','commercial');
+    busca.searchParams.set('page_size','15');
+    const resposta=await lerJson(busca.href,{fetcher,timeoutMs:3500});
+    for(const item of (Array.isArray(resposta?.results)?resposta.results:[]).slice(0,15)){
+      const foto=registroOpenverseFlickr(item,ean);
+      if(foto)adicionar(foto);
+    }
   }
   // Google só por API oficial com credenciais existentes. API descontinuada
   // em janeiro de 2027, portanto não depende dela para operar.

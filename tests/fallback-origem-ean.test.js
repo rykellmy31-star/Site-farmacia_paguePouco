@@ -91,5 +91,5 @@ test('coleta URLs alternativas apenas para o MESMO EAN em fontes independentes',
  assert.equal(r.imagem.url,principal);
  assert.deepEqual(r.imagensCandidatas.map(i=>i.url),[principal,outro]);
  assert.equal(r.imagensCandidatas[1].fonteEAN.fonte,'Open Beauty Facts');
- assert.equal(urls.length,6); // 4 catálogos Open Facts + PreçoMelhor + Commons
+ assert.equal(urls.length,7); // 4 catálogos Open Facts + PreçoMelhor + Commons + Openverse
 });

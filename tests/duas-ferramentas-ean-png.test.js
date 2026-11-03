@@ -23,7 +23,7 @@ test('imagem EAN isolada seleciona a frente em resolução full (não miniatura)
  assert.equal(r.imagem.url,jpg);
  assert.equal(r.imagem.urlAltaResolucao,jpg.replace('.400.jpg','.full.jpg'));
  assert.equal(r.dimensoes,null);
- assert.equal(urls.length,6); // Quatro catálogos Open Facts + PreçoMelhor + Commons
+ assert.equal(urls.length,7); // Quatro catálogos Open Facts + PreçoMelhor + Commons + Openverse
 });
 test('dimensões EAN isoladas não consultam catálogo de imagens',async()=>{
  const urls=[];
@@ -210,7 +210,7 @@ test('múltiplas fontes EAN: foto ruim não impede fontes posteriores de serem t
   assert.equal(r.imagensCandidatas[1].fonteEAN.fonte,'PreçoMelhor');
   assert.equal(r.imagem,r.imagensCandidatas[0]);
   assert.equal(r.consultadas.includes('Open Pet Food Facts'),true);
-  assert.equal(urls.length,6);
+  assert.equal(urls.length,7);
 });
 
 test('Google API antiga quando configurada amplia candidatos sem baixar imagens de lojas',async()=>{
@@ -303,4 +303,55 @@ test('um clique salva imagem PNG no cadastro existente, sem abrir outra aba',()=
   assert.match(js,/salvaNoProduto\?'salva automaticamente no produto/);
   assert.match(route,/fonte==='Wikimedia Commons'/);
   assert.match(route,/Atribuição ou licença da foto inválida/);
+});
+
+test('Openverse procura EAN automaticamente sem chave e respeita licença comercial',async()=>{
+ const code='7896006716112';
+ const foto='https://live.staticflickr.com/65535/123456789012_aabbccddeeff_b.jpg';
+ const link='https://www.flickr.com/photos/fotografo/123456789012/';
+ const registro={source:'flickr',title:'Embalagem '+code,description:'Foto de embalagem',
+   url:foto,foreign_landing_url:link,width:1200,height:1000,mature:false,
+   license:'by-sa',license_version:'4.0',
+   license_url:'https://creativecommons.org/licenses/by-sa/4.0/',creator:'Fotógrafo'};
+ const urls=[];
+ const resultado=await buscarDadosExternosEAN(code,{fetcher:async url=>{
+   urls.push(url);
+   return url.includes('api.openverse.org/v1/images/')?{ok:true,json:async()=>({results:[registro]})}:{ok:false};
+ },somente:'imagem',googleKey:'',googleCx:''});
+ assert.equal(resultado.imagem.url,foto);
+ assert.equal(resultado.imagem.fonteEAN.fonte,'Openverse (Flickr)');
+ assert.equal(resultado.imagem.fonteEAN.licenca,'CC BY-SA 4.0');
+ assert.equal(resultado.imagem.fonteEAN.urlAtribuicao,link);
+ assert.ok(resultado.consultadas.includes('Openverse (Flickr)'));
+ assert.ok(urls.some(u=>u.includes('openverse.org/v1/images/')&&
+   new URL(u).searchParams.get('license_type')==='commercial'));
+ assert.equal(origemImagemPermitida(foto,code),true);
+ assert.equal(origemImagemPermitida(foto+'?redirect=evil',code),false);
+ const fake={...registro,foreign_landing_url:'https://evil.example/photos/author/123456789012/'};
+ for(const altered of [
+   {...registro,title:'7896006716113',description:'foto sem EAN'},
+   {...registro,license:'by-nc-sa',license_url:'https://creativecommons.org/licenses/by-nc-sa/4.0/'},
+   {...registro,url:'https://live.staticflickr.com.evil.test/65535/123456789012_aabbccddeeff_b.jpg'},
+   {...registro,width:200},
+   fake,
+ ]){
+   const r=await buscarDadosExternosEAN(code,{somente:'imagem',googleKey:'',googleCx:'',
+     fetcher:async url=>url.includes('api.openverse.org/v1/images/')
+       ?{ok:true,json:async()=>({results:[altered]})}:{ok:false}});
+   assert.equal(r.imagem,null);
+ }
+});
+
+test('Openverse: atribuição e foto são vinculadas automaticamente no produto existente',()=>{
+ const root=new URL('../',import.meta.url);
+ const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
+ const route=readFileSync(new URL('src/routes/admin.js',root),'utf8');
+ const cards=readFileSync(new URL('src/views/partials.js',root),'utf8');
+ const publicPage=readFileSync(new URL('src/views/public.js',root),'utf8');
+ assert.ok(js.includes("fonte==='Openverse (Flickr)'"));
+ assert.ok(route.includes("fonte==='Openverse (Flickr)'"));
+ assert.match(cards,/function creditoFotoOpenverse/);
+ assert.ok(publicPage.includes('creditoFotoOpenverse(produto)'));
+ assert.match(js,/salvaNoProduto/);
+ assert.doesNotMatch(js,/Google automático exige API/);
 });
