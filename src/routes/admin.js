@@ -28,7 +28,7 @@ import {telaEvolutionWhatsapp} from '../views/admin/evolution.js';
 import {evolutionConfig,validarEvolutionConfig,resumoEvolution} from '../lib/evolution-whatsapp.js';
 import {credenciaisEvolution,estadoEvolution,conectarEvolution} from '../lib/evolution-connection.js';
 import {
-  telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias,
+  telaDashboard, telaProdutos, telaProdutoForm, telaImportar, telaCategorias, telaFontesImagemFabricante,
   telaEstoque, telaMidia, telaBanners, telaPromocoes,
 } from '../views/admin/catalogo.js';
 import {
@@ -52,6 +52,7 @@ import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/set
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
+import { inventarioFabricantesFotos } from '../lib/fabricantes-fontes.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { consultarDescricaoEAN, preencherDescricaoAusente } from '../lib/busca-descricao-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
@@ -299,6 +300,15 @@ export function registrarRotasAdmin(app, db) {
     const total = todos.length;
     const produtos = todos.slice((pagina - 1) * porPagina, pagina * porPagina);
     res.html(telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias: db.collection('categories').all().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), filtros: { categoria, status } }));
+  });
+
+  // Inventário interno, somente leitura. Usa o banco já carregado na
+  // sessão administrativa; não publica a lista nem expõe clientes.
+  app.get('/admin/produtos/fontes-de-imagens',(req,res)=>{
+    if(!guard(req,res,'produtos.ver'))return;
+    res.set('Cache-Control','private, no-store');
+    const dados=inventarioFabricantesFotos(db.collection('products').all());
+    res.html(telaFontesImagemFabricante(ctxAdmin(req,db),dados));
   });
 
   app.get('/admin/produtos/novo', (req, res) => {
@@ -1430,9 +1440,11 @@ function registrarApi(app, db) {
     const cadastrado=id?db.collection('products').get(id):null;
     if(cadastrado&&String(cadastrado.ean)===String(ean))
       return {nomeProduto:String(cadastrado.nome||'').slice(0,130),
-        marcaProduto:String(cadastrado.marca||'').slice(0,80)};
+        marcaProduto:String(cadastrado.marca||'').slice(0,80),
+        fabricanteProduto:String(cadastrado.fabricante||'').slice(0,100)};
     return {nomeProduto:cleanText(entrada?.nome,130),
-      marcaProduto:cleanText(entrada?.marca,80)};
+      marcaProduto:cleanText(entrada?.marca,80),
+      fabricanteProduto:cleanText(entrada?.fabricante,100)};
   };
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador
@@ -1467,7 +1479,7 @@ function registrarApi(app, db) {
     if(!eanValido(p.ean))return void res.json({ok:true,imagem:null,ean:p.ean});
     const dados=await buscarDadosExternosEAN(p.ean,{somente:'imagem',
       ...contextoImagemEsmalte(p.ean,{produtoId:p.id})});
-    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,imagem:dados.imagem,
+    res.json({ok:true,ean:p.ean,nome:p.nome,marca:p.marca,fabricante:p.fabricante,imagem:dados.imagem,
       fontes:(dados.imagensCandidatas||[]).map(img=>({
         fonte:img.fonteEAN?.fonte||'Catálogo',
         atribuicao:img.fonteEAN?.urlAtribuicao||null,
@@ -1488,6 +1500,7 @@ function registrarApi(app, db) {
     const dados=await buscarDadosExternosEAN(ean,{somente:'imagem',
       ...contextoImagemEsmalte(ean,{
         produtoId:req.query.get('produtoId'),nome:req.query.get('nome'),marca:req.query.get('marca'),
+        fabricante:req.query.get('fabricante'),
       })});
     const candidata=(dados.imagensCandidatas||[])[indice];
     if(!candidata)return void res.text('Nenhuma foto disponível nesta fonte.',404);

@@ -350,11 +350,12 @@ function extrairDimensaoGoogle(s){
 }
 export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
     googleKey=config.googleEan?.key,googleCx=config.googleEan?.cx,force=false,
-    somente='ambos',nomeProduto='',marcaProduto=''}={}){
+    somente='ambos',nomeProduto='',marcaProduto='',fabricanteProduto=''}={}){
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))return {ok:false,imagem:null,dimensoes:null,consultadas:[]};
   const referencia=somente==='dimensoes'?null:referenciaEsmalte(nomeProduto,marcaProduto);
-  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'');
+  const cacheKey=ean+':'+somente+':'+(referencia?referencia.query+'|'+referencia.volume:'')+
+    ':'+textoComparavel(marcaProduto).slice(0,60)+':'+textoComparavel(fabricanteProduto).slice(0,60);
   if(fetcher===globalThis.fetch&&!force){
     const c=CACHE.get(cacheKey);if(c&&c.expira>Date.now())return c.resultado;
   }
@@ -457,10 +458,10 @@ export async function buscarDadosExternosEAN(codigo,{fetcher=globalThis.fetch,
   // no cadastro oficial para impedir troca de tonalidades dos esmaltes.
   if(somente!=='dimensoes'&&(
       DAILUS_HANDLES_POR_EAN.has(ean.replace(/^0+(?=\d{13}$)/,''))||
-      /\bdailus\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||'')))){
+      /\bdailus\b/i.test(String(nomeProduto||'')+' '+String(marcaProduto||'')+' '+String(fabricanteProduto||'')))){
     resultado.consultadas.push('Dailus (fabricante)');
     const oficial=await consultarDailusEAN(ean,
-      (String(nomeProduto||'')+' '+String(marcaProduto||'')).trim(),{fetcher});
+      (String(nomeProduto||'')+' '+String(marcaProduto||'')+' '+String(fabricanteProduto||'')).trim(),{fetcher});
     if(oficial){
       adicionar(oficial);
       // Outras fotos do mesmo SKU permanecem alternativas se a primeira
