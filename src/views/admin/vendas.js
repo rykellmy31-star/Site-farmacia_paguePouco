@@ -19,8 +19,12 @@ function blocoPagamentoPresencial(ctx,pedido){
   const selecionado=(itens,atual)=>itens.map(([valor,rotulo])=>
     '<option value="'+e(valor)+'" '+(valor===atual?'selected':'')+'>'+e(rotulo)+'</option>').join('');
   let html='<p><strong>Escolhido pelo cliente:</strong> '+e(nomes[pedido.metodoPagamento]||'—')+'</p>'+
-    (local.precisaTroco ? '<p>Troco solicitado para '+money(local.trocoParaCentavos)+
-      ' · Troco estimado: '+money(local.trocoCentavos)+'</p>':'')+
+    (local.precisaTroco ? '<div class="alerta aviso" role="status">'+
+        '<strong>💵 SEPARAR TROCO: '+money(local.trocoCentavos)+'</strong>'+
+        '<p>Valor do pedido: '+money(pedido.totalCentavos)+
+        '<br>Cliente vai entregar: '+money(local.trocoParaCentavos)+
+        '<br>Troco estimado: '+money(local.trocoCentavos)+'</p></div>'
+        : '<p><strong>Troco:</strong> não solicitado.</p>')+
     '<p><strong>Total do pedido:</strong> '+money(pedido.totalCentavos)+'</p>';
   if(pedido.statusFinanceiro!=='pendente'){
     const recebido=local.recebimento||{};
