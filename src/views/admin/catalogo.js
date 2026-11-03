@@ -260,11 +260,10 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
             <div class="alerta info" id="painelBuscaImagemEAN">
               <strong>🖼️ Ferramenta de imagens — EAN</strong>
               <p class="texto-pequeno mt-1">Busca foto frontal da embalagem (ou do produto), prioriza fonte
-              em alta resolução, converte para PNG real e descarta imagens pequenas, apagadas ou sem origem
-              autorizada. Não amplia foto pequena nem substitui imagem cadastrada.</p>
-              <button class="botao pequeno secundario" type="button" id="botaoBuscarImagemEAN">🖼️ Buscar imagem PNG pelo EAN</button>
-              <a class="botao pequeno secundario" id="linkGoogleImagensEAN" hidden style="display:none"
-                 rel="noopener noreferrer" target="_blank">🔎 Buscar também no Google Imagens</a>
+              em alta resolução nas fontes autorizadas, inclusive pesquisa extra automática por EAN,
+              converte para PNG e grava a foto aprovada no produto existente.
+              Não amplia imagens pequenas nem substitui fotos manuais.</p>
+              <button class="botao pequeno secundario" type="button" id="botaoBuscarImagemEAN">🖼️ Buscar e salvar foto automaticamente</button>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaImagemEAN" role="status" aria-live="polite">Ainda não pesquisado.</p>
             </div>
             <div class="alerta info" id="painelBuscaEAN">
