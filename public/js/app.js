@@ -349,7 +349,7 @@
     if (!form) return;
     const opcoes = $('#opcoesFrete');
     const botaoAvancar = $('#botaoIrPagamento');
-    const cepInput = $('#cepEntrega');
+    const cepInput = $('#campo_cep');
     const enderecoSalvo = $('#usarEnderecoSalvo');
     const campos = $('#camposEndereco');
     const radiosEndereco = $$('input[name=enderecoSalvo]', document);
