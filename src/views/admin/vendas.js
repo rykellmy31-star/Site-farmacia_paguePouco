@@ -9,6 +9,51 @@ import { STATUS_FINANCEIRO, STATUS_OPERACIONAL, pedidoPrecisaConferencia, status
 import { mapStatus } from '../../lib/payments/internal.js';
 import { pedidoOcultoDoCliente, podeOcultarPedido } from '../../lib/order-visibility.js';
 
+function blocoPagamentoPresencial(ctx,pedido){
+  const local=pedido.pagamentoPresencial||{};
+  const opcoes=[['pix','Pix'],['credit_card','Cartão de crédito'],['debit_card','Cartão de débito'],['cash','Dinheiro']];
+  const nomes={pix:'Pix',credit_card:'Cartão de crédito',debit_card:'Cartão de débito',cash:'Dinheiro'};
+  const bandeiras=[['visa','Visa'],['mastercard','Mastercard'],['elo','Elo'],
+    ['amex','American Express'],['hipercard','Hipercard'],['outra','Outra']];
+  const escolhido=local.recebimento?.metodo||pedido.metodoPagamento||'pix';
+  const selecionado=(itens,atual)=>itens.map(([valor,rotulo])=>
+    '<option value="'+e(valor)+'" '+(valor===atual?'selected':'')+'>'+e(rotulo)+'</option>').join('');
+  let html='<p><strong>Escolhido pelo cliente:</strong> '+e(nomes[pedido.metodoPagamento]||'—')+'</p>'+
+    (local.precisaTroco ? '<p>Troco solicitado para '+money(local.trocoParaCentavos)+
+      ' · Troco estimado '+money(local.trocoCentavos)+'</p>':'')+
+    '<p><strong>Total do pedido:</strong> '+money(pedido.totalCentavos)+'</p>';
+  if(pedido.statusFinanceiro!=='pendente'){
+    const recebido=local.recebimento||{};
+    return html+'<p><strong>Pagamento recebido:</strong> '+
+      e(nomes[recebido.metodo]||nomes[pedido.metodoPagamento]||'—')+
+      (recebido.bandeira?' · '+e(recebido.bandeira):'')+
+      (recebido.parcelas?' · '+e(recebido.parcelas)+'x':'')+'</p>'+
+      '<p>Confirmado por '+e(local.confirmadoPor||'—')+' em '+formatDateTime(local.confirmadoEm)+'</p>';
+  }
+  if(!ctx.permissoes?.podeEditarPedidos)
+    return html+'<p>Aguardando recebimento do pagamento presencial.</p>';
+  html+='<form id="formRecebimentoPresencial" method="post" action="/admin/pedidos/'+e(pedido.id)+
+    '/confirmar-pagamento-presencial">'+
+    '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+    '<p><strong>Registre o pagamento que realmente recebeu:</strong></p>'+
+    '<label for="metodoRecebido">Forma recebida</label>'+
+    '<select name="metodoRecebido" id="metodoRecebido" required>'+selecionado(opcoes,escolhido)+'</select>'+
+    '<div id="detalhesCartaoPresencial" '+(['credit_card','debit_card'].includes(escolhido)?'':'hidden')+'>'+
+    '<label for="bandeira">Bandeira do cartão</label>'+
+    '<select id="bandeira" name="bandeira"><option value="">Selecione</option>'+
+      selecionado(bandeiras,'')+'</select>'+
+    '<label for="parcelasRecebidas">Quantidade de parcelas</label>'+
+    '<select id="parcelasRecebidas" name="parcelas">'+
+      Array.from({length:12},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'x'+(i===0?' — à vista':'')+'</option>').join('')+
+    '</select><p class="texto-pequeno texto-suave">Débito: somente 1x. Crédito: à vista ou parcelado.</p></div>'+
+    '<label class="mt-2"><input type="checkbox" name="confirmouRecebimento" value="1" required> '+
+      'Confirmo que o pagamento foi efetivamente recebido e conferido.</label>'+
+    '<label class="mt-2"><input type="checkbox" name="entregarAgora" value="1"> '+
+      'O pedido também foi entregue ao cliente — finalizar entrega agora.</label>'+
+    '<button class="botao mt-2" type="submit">Registrar pagamento recebido</button></form>';
+  return html;
+}
+
 /* =============================== PEDIDOS =============================== */
 export function telaPedidos(ctx, { pedidos, total, pagina, porPagina, filtros, vendedores = [], totalOcultos = 0, aviso = '' }) {
   return paginaAdmin(ctx, {
@@ -122,23 +167,7 @@ export function telaPedido(ctx, { pedido, pagamento, eventos }) {
 
     ${pedido.pagamentoPresencial ? painel({
       titulo:'Pagamento presencial — pedido local',
-      corpo:'<p><strong>Forma escolhida:</strong> '+e({pix:'Pix',credit_card:'Cartão de crédito',
-        debit_card:'Cartão de débito',cash:'Dinheiro'}[pedido.metodoPagamento]||pedido.metodoPagamento)+'</p>'+
-        (pedido.pagamentoPresencial.precisaTroco
-          ? '<p><strong>Troco para:</strong> '+money(pedido.pagamentoPresencial.trocoParaCentavos)+
-            ' — Troco estimado: '+money(pedido.pagamentoPresencial.trocoCentavos)+'</p>' : '')+
-        '<p><strong>Valor a receber:</strong> '+money(pedido.totalCentavos)+'</p>'+
-        (pedido.statusFinanceiro==='pendente' ?
-          (ctx.permissoes?.podeConfirmarPagamentoLocal
-            ? '<form method="post" action="/admin/pedidos/'+e(pedido.id)+
-                '/confirmar-pagamento-presencial" onsubmit="return confirm(&quot;O pagamento foi REALMENTE recebido?&quot;)">'+
-                '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
-                '<label><input type="checkbox" name="confirmouRecebimento" value="1" required> ' +
-                'Confirmo que recebi e conferi o pagamento presencial</label>'+
-                '<button class="botao mt-1" type="submit">Confirmar pagamento recebido</button></form>'
-            : '<p>Pagamento ainda não recebido. Apenas administração financeira pode confirmar.</p>')
-          : '<p><strong>Pagamento registrado como recebido.</strong> '+
-            e(pedido.pagamentoPresencial.confirmadoPor||'')+'</p>'),
+      corpo:blocoPagamentoPresencial(ctx,pedido),
     }) : ''}
 
     ${pedido.falhaPagamento && ctx.adminUser?.role === 'super_admin' ? `<div class="alerta aviso" role="status">
