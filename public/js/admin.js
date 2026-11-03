@@ -330,13 +330,12 @@
       try {
         // Mesmo que o operador tenha marcado Ativo/Aprovar sem tirar o
         // foco do EAN, consultar dados antes de montar o FormData.
-        if(buscaEANAntesDeSalvar){
-          const precisaMedidas=['peso','altura','largura','comprimento'].some(nome=>
-            !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0));
-          const precisaFoto=!form.querySelector('[name="imagens[]"]');
-          if(precisaMedidas||precisaFoto)
-            await buscaEANAntesDeSalvar({silencioso:true});
-        }
+        if(buscaImagemAntesDeSalvar&&!form.querySelector('[name="imagens[]"]'))
+          await buscaImagemAntesDeSalvar({silencioso:true});
+        if(buscaMedidasAntesDeSalvar&&
+          ['peso','altura','largura','comprimento'].some(nome=>
+            !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0)))
+          await buscaMedidasAntesDeSalvar({silencioso:true});
         const resposta = await api(form.getAttribute('action'), {
           method: 'POST',
           body: new FormData(form),
@@ -446,9 +445,138 @@
   }
   renderCaracteristicas();
 
-  /* ------------ dimensões logísticas por código EAN (admin) ------------ */
-  let buscaEANAntesDeSalvar=null;
+  /* --- Ferramentas EAN independentes: imagem PNG e medidas logísticas --- */
+  let buscaImagemAntesDeSalvar=null, buscaMedidasAntesDeSalvar=null;
   const formEAN=$('#formProduto');
+  const eanAtual=()=>String(formEAN?.querySelector('[name="ean"]')?.value||'').replace(/[\s.-]/g,'');
+  const formatoEAN=ean=>/^\d{8}$|^\d{12,14}$/.test(ean);
+  function atualizarStatusFoto(msg){
+    const el=$('#resultadoBuscaImagemEAN');
+    if(el)el.textContent=msg;
+  }
+  async function converterFotoEANparaPNG(ean){
+    const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?ean='+encodeURIComponent(ean),{
+      credentials:'same-origin',headers:{'X-CSRF-Token':CFG.csrf}});
+    if(!resp.ok)throw new Error('Foto de origem indisponível ou muito grande.');
+    const blob=await resp.blob();
+    if(blob.size>7*1024*1024||!/^image\/(jpeg|png|webp)$/.test(blob.type))
+      throw new Error('Imagem de origem não permitida.');
+    const objetoUrl=URL.createObjectURL(blob);
+    let bitmap,imagem;
+    try{
+      if(typeof createImageBitmap==='function'){
+        bitmap=await createImageBitmap(blob);
+        imagem=bitmap;
+      }else{
+        imagem=await new Promise((resolve,reject)=>{
+          const img=new Image();
+          img.onload=()=>resolve(img);
+          img.onerror=()=>reject(Error('Não foi possível analisar a foto.'));
+          img.src=objetoUrl;
+        });
+      }
+      const w=imagem.width||imagem.naturalWidth,h=imagem.height||imagem.naturalHeight;
+      if(!w||!h||Math.min(w,h)<600||Math.max(w,h)/Math.min(w,h)>3.2)
+        throw new Error('Foto com resolução insuficiente ou recorte inadequado (mínimo 600 × 600).');
+      // Detecta fotos praticamente vazias/desbotadas, não tenta criar detalhes.
+      const amostra=document.createElement('canvas');
+      amostra.width=100;amostra.height=100;
+      const a=amostra.getContext('2d',{willReadFrequently:true});
+      if(!a)throw new Error('Não foi possível verificar a qualidade da foto.');
+      a.drawImage(imagem,0,0,100,100);
+      const px=a.getImageData(0,0,100,100).data;
+      let menor=255,maior=0,arestas=0;
+      const tons=new Float32Array(10000);
+      for(let i=0;i<10000;i++){
+        const k=i*4,cor=(px[k]*0.2126+px[k+1]*0.7152+px[k+2]*0.0722);
+        tons[i]=cor;menor=Math.min(menor,cor);maior=Math.max(maior,cor);
+      }
+      for(let y=1;y<99;y++)for(let x=1;x<99;x++){
+        const p=y*100+x;
+        if(Math.abs(tons[p]-tons[p+1])+Math.abs(tons[p]-tons[p+100])>30)arestas++;
+      }
+      if(maior-menor<45||arestas<95)
+        throw new Error('Foto muito apagada ou com poucos detalhes; não será adicionada.');
+      const escala=Math.min(1,1400/Math.max(w,h));
+      const tela=document.createElement('canvas');
+      tela.width=Math.round(w*escala);tela.height=Math.round(h*escala);
+      const ctx=tela.getContext('2d');
+      if(!ctx)throw new Error('Não foi possível converter para PNG.');
+      ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+      ctx.drawImage(imagem,0,0,tela.width,tela.height);
+      const png=await new Promise(resolve=>tela.toBlob(resolve,'image/png'));
+      if(!png||png.type!=='image/png'||png.size>7.5*1024*1024)
+        throw new Error('PNG gerado muito grande. Foto não adicionada.');
+      return new File([png],'ean-'+ean+'.png',{type:'image/png'});
+    }finally{
+      bitmap?.close?.();
+      URL.revokeObjectURL(objetoUrl);
+    }
+  }
+  async function enviarPNG(ean){
+    const arquivo=await converterFotoEANparaPNG(ean);
+    const fd=new FormData();
+    fd.append('arquivo',arquivo);
+    const dados=await api('/admin/api/upload',{method:'POST',body:fd});
+    const resultado=(dados.arquivos||[]).find(a=>a.ok)?.arquivo;
+    if(!resultado||resultado.ext!=='png'||!resultado.url)
+      throw new Error('Não foi possível salvar o PNG de qualidade na farmácia.');
+    return resultado;
+  }
+  function anexarFotoFormulario(midia,fonte){
+    if(!formEAN||formEAN.querySelector('[name="imagens[]"]'))return false;
+    const inp=document.createElement('input');
+    inp.type='hidden';inp.name='imagens[]';inp.value=midia.url;
+    const leg=document.createElement('input');
+    leg.type='hidden';leg.name='imagemLegenda[]';
+    leg.value='Foto frontal — '+fonte+' (CC BY-SA 3.0, Open Facts), convertida em PNG.';
+    formEAN.append(inp,leg);
+    const galeria=$('#galeriaProduto');
+    if(galeria){
+      const item=document.createElement('div');
+      item.className='item-midia';item.dataset.tipo='image';item.dataset.url=midia.url;
+      const img=document.createElement('img');img.src=midia.url;img.alt='Foto do produto em PNG pelo EAN';
+      const desc=document.createElement('p');desc.className='texto-pequeno';
+      desc.textContent='PNG de alta resolução — '+fonte+'. Salve o produto para confirmar.';
+      item.append(img,desc);
+      galeria.prepend(item);
+    }
+    return true;
+  }
+  async function buscarFotoEAN({silencioso=false,forcar=false}={}){
+    if(!formEAN||formEAN.querySelector('[name="imagens[]"]'))return;
+    const ean=eanAtual();
+    if(!formatoEAN(ean)){
+      if(!silencioso)notificar('Informe um EAN válido antes de buscar imagem.','erro');
+      return;
+    }
+    const botao=$('#botaoBuscarImagemEAN');
+    if(botao?.disabled)return;
+    if(botao)botao.disabled=true;
+    atualizarStatusFoto('Pesquisando foto frontal de alta qualidade para converter em PNG...');
+    try{
+      const r=await post('/admin/api/produtos/imagem-ean',{ean,forcar});
+      if(!r.imagem){atualizarStatusFoto(r.mensagem||'Nenhuma foto encontrada para este EAN.');return;}
+      if(ean!==eanAtual())return;
+      const midia=await enviarPNG(ean);
+      if(ean!==eanAtual())return;
+      if(anexarFotoFormulario(midia,r.imagem.fonteEAN?.fonte||'Open Facts')){
+        atualizarStatusFoto('Foto de boa resolução convertida para PNG e adicionada. Salve o produto.');
+        if(!silencioso)notificar('Foto PNG adicionada com sucesso.');
+      }
+    }catch(err){
+      atualizarStatusFoto(err.message||'Foto não adicionada. Tente outra imagem.');
+      if(!silencioso)notificar(err.message||'Falha na imagem EAN.','erro');
+    }finally{if(botao)botao.disabled=false;}
+  }
+  async function imagemNaAtivacao(id){
+    const result=await post('/admin/api/produtos/'+encodeURIComponent(id)+'/imagem-ean');
+    if(!result.imagem||!formatoEAN(result.ean))return;
+    const png=await enviarPNG(result.ean);
+    await post('/admin/api/produtos/'+encodeURIComponent(id)+'/vincular-imagem-ean',{
+      ean:result.ean,imagemUrl:png.url,fonte:result.imagem.fonteEAN?.fonte||'Open Facts',
+    });
+  }
   if(formEAN){
     const campo=nome=>formEAN.querySelector('[name="'+nome+'"]');
     const btn=$('#botaoBuscarMedidasEAN');
@@ -457,50 +585,22 @@
     const produtoId=formEAN.getAttribute('action')?.split('/').pop()||null;
     let codigoConsultado='';
     let emConsulta=false;
-    function adicionarFotoEAN(imagem){
-      if(!imagem?.url||!/^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(imagem.url))
-        return false;
-      if(formEAN.querySelector('[name="imagens[]"]'))return false;
-      // Anexar ao formulário como primeira imagem. O produto é persistido
-      // ao clicar Salvar, sem exigir upload manual de cada foto.
-      const input=document.createElement('input');
-      input.type='hidden';input.name='imagens[]';input.value=imagem.url;
-      const legenda=document.createElement('input');
-      legenda.type='hidden';legenda.name='imagemLegenda[]';
-      legenda.value=imagem.legenda||'Imagem com licença CC BY-SA 3.0 — Open Facts';
-      formEAN.append(input,legenda);
-      const galeria=$('#galeriaProduto');
-      if(galeria){
-        const item=document.createElement('div');item.className='item-midia';
-        const img=document.createElement('img');
-        img.src=imagem.url;img.alt='Foto encontrada pelo EAN';
-        const desc=document.createElement('p');
-        desc.className='texto-pequeno';desc.textContent='Foto EAN (salve para confirmar). Fonte: '+(imagem.fonteEAN?.fonte||'Open Facts');
-        item.append(img,desc);galeria.prepend(item);
-      }
-      return true;
-    }
     async function consultarMedidasEAN({silencioso=false,forcar=false}={}){
-      const ean=String(campo('ean')?.value||'').replace(/[\s.-]/g,'');
-      if(!/^\d{8}$|^\d{12,14}$/.test(ean)){
+      const ean=eanAtual();
+      if(!formatoEAN(ean)){
         if(!silencioso)notificar('Informe um EAN válido para pesquisar.','erro');
         return;
       }
       if(emConsulta||(!forcar&&ean===codigoConsultado))return;
       emConsulta=true;if(btn)btn.disabled=true;
-      if(status)status.textContent='Pesquisando medidas do EAN em catálogos públicos...';
+      if(status)status.textContent='Pesquisando apenas peso e dimensões da embalagem...';
       try{
         const r=await post('/admin/api/produtos/dimensoes-ean',{ean,forcar,produtoId});
-        if(ean!==String(campo('ean')?.value||'').replace(/[\s.-]/g,''))return;
+        if(ean!==eanAtual())return;
         codigoConsultado=ean;
-        const fotoAdicionada=adicionarFotoEAN(r.imagem);
-        // A consulta pode achar foto, mas nenhuma dimensão publicada.
-        // A ausência de medidas não impede a inclusão da foto correta.
         if(!r.encontrado){
-          if(status)status.textContent=(fotoAdicionada?'Foto do produto encontrada e adicionada. ':'')+
-            (r.mensagem||'Nenhuma medida logística confiável encontrada.')+
-            (r.consultadas?.length?' Fontes consultadas: '+r.consultadas.join(', ')+'.':'');
-          if(btn)btn.textContent='🔄 Tentar buscar novamente pelo EAN';
+          if(status)status.textContent=(r.mensagem||'Nenhuma medida confiável encontrada.')+
+            (r.consultadas?.length?' Fontes: '+r.consultadas.join(', ')+'.':'');
           if(linkWeb){
             linkWeb.href='https://www.google.com/search?q='+encodeURIComponent(
               'EAN '+ean+' peso bruto dimensões embalagem altura largura comprimento');
@@ -509,7 +609,6 @@
           return;
         }
         if(linkWeb){linkWeb.removeAttribute('href');linkWeb.style.display='none';}
-        if(btn)btn.textContent='🔎 Buscar peso e dimensões pelo EAN';
         const valores={peso:r.peso,largura:r.dimensoes?.largura,
           altura:r.dimensoes?.altura,comprimento:r.dimensoes?.comprimento};
         const preenchidos=[];
@@ -519,25 +618,23 @@
             input.value=String(valor);preenchidos.push(nome);
           }
         }
-        if(status)status.textContent=(fotoAdicionada?'Foto adicionada pelo EAN. ':'')+
-          (preenchidos.length
-            ? 'Encontrado em '+r.origem+': preenchidos '+preenchidos.join(', ')+
-              '. Confira as medidas antes de cotar frete.'
-            : 'Medidas existentes preservadas ou não disponíveis.');
-        if(!silencioso)notificar('Busca realizada. Confira as medidas antes de salvar.');
+        if(status)status.textContent=preenchidos.length
+          ? 'Medidas sugeridas ('+r.origem+'): '+preenchidos.join(', ')+'. Confira a embalagem.'
+          : 'Campos de medidas já preenchidos, preservados.';
+        if(!silencioso)notificar('Medidas consultadas. Confira antes de salvar.');
       }catch(err){
-        if(status)status.textContent='Consulta indisponível. Você pode informar as medidas manualmente.';
-        if(!silencioso)notificar(err.message||'Falha ao consultar EAN.','erro');
+        if(status)status.textContent='Consulta de medidas indisponível.';
+        if(!silencioso)notificar(err.message||'Falha na consulta de dimensões.','erro');
       }finally{emConsulta=false;if(btn)btn.disabled=false;}
     }
-    buscaEANAntesDeSalvar=consultarMedidasEAN;
+    buscaImagemAntesDeSalvar=buscarFotoEAN;
+    buscaMedidasAntesDeSalvar=consultarMedidasEAN;
+    $('#botaoBuscarImagemEAN')?.addEventListener('click',()=>buscarFotoEAN({forcar:true}));
     btn?.addEventListener('click',()=>consultarMedidasEAN({forcar:true}));
-    // Pesquisa quando um novo EAN é digitado. Evita requisições repetidas
-    // e jamais sobrescreve peso/dimensões que o operador já informou.
     campo('ean')?.addEventListener('change',()=>{
       codigoConsultado='';
-      if(!formEAN.querySelector('[name="imagens[]"]')||
-          ['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
+      if(!formEAN.querySelector('[name="imagens[]"]'))buscarFotoEAN({silencioso:true});
+      if(['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
         consultarMedidasEAN({silencioso:true});
     });
   }
@@ -566,8 +663,10 @@
         // Busca opcional e limitada, não pode impedir ativação se
         // nenhum catálogo público tiver informações para o EAN.
         if(altProd.textContent.trim()==='Ativar'){
-          try { await post(`/admin/api/produtos/${id}/buscar-medidas-ean`); }
-          catch { /* busca não impede ativação */ }
+          try { await imagemNaAtivacao(id); }
+          catch(err) { notificar('Foto PNG não adicionada: '+err.message, 'erro'); }
+          try { await post('/admin/api/produtos/'+encodeURIComponent(id)+'/buscar-medidas-ean'); }
+          catch { /* medida ausente não bloqueia ativação */ }
         }
         await post(`/admin/api/produtos/${id}/ativar`);
         location.reload();
