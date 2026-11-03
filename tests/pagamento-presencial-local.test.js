@@ -82,3 +82,9 @@ test('formulário de dinheiro só aparece quando dinheiro está selecionado',()=
  assert.match(js,/if\(dinheiro\)dinheiro.hidden=!usaDinheiro/);
  assert.match(js,/valorTroco\.required=pedirTroco/);
 });
+
+test('conciliador Pix jamais classifica pagamento local como checkout interrompido',()=>{
+ const base=new URL('../',import.meta.url);
+ const fonte=readFileSync(new URL('src/lib/payments/reconciliation.js',base),'utf8');
+ assert.equal((fonte.match(/!p\.pagamentoPresencial/g)||[]).length,2);
+});
