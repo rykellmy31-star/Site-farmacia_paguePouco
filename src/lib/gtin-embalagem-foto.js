@@ -18,7 +18,7 @@ const comparavel=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''
   .toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
 function tamanhoFralda(s){
   const c=' '+comparavel(s)+' ';
-  const tokens=c.trim().split(' ');
+  const tokens=c.trim().split(' ').map(t=>t.replace(/^(XXG|XG|EG|G|M|P)(\d{1,3})$/,'$1'));
   if(tokens.includes('XXG')||tokens.includes('XGG')||tokens.includes('EXTRAEXTRAGRANDE'))return 'XXG';
   if(tokens.includes('XG')||tokens.includes('EG')||tokens.includes('EXTRAGRANDE'))return 'XG';
   if(tokens.includes('G')||tokens.includes('GRANDE'))return 'G';
@@ -38,6 +38,9 @@ function quantidadesFralda(s){
   for(const re of regexes)for(const m of t.matchAll(re)){
     const n=Number(m[1]);if(n>=4&&n<=150)qs.add(n);
   }
+  for(const m of t.matchAll(/\b(?:XXG|XG|EG|G|M|P)(\d{1,3})\b/g)){
+    const n=Number(m[1]);if(n>=4&&n<=150)qs.add(n);
+  }
   return [...qs];
 }
 /**
@@ -51,7 +54,7 @@ export function mesmaFraldaDeEmbalagem({nomeProduto='',marcaProduto='',produtoFo
   const original=comparavel(nomeProduto+' '+marcaProduto);
   const fonte=comparavel(produtoFonte.product_name||'');
   const marca=comparavel(produtoFonte.brand||produtoFonte.brand_name||'');
-  if(!original.includes('FRALDA')||!fonte.includes('FRALDA'))return false;
+  if(!original.includes('FRALDA')||!/\b(?:FRALDA|FRD|FR)\b/.test(fonte))return false;
   // Confiança conservadora: fabricante da fralda Personal, que aparece
   // em vários GTIN14 do CSV, e catálogo valida marca de varejo.
   if(!(/\bPERSONAL\b/.test(original)&&/\bPERSONAL\b/.test(marca+' '+fonte)))return false;
