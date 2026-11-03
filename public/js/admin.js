@@ -457,7 +457,7 @@
     if(!formEAN)return false;
     // querySelector retorna null quando não existe foto; precisamos de uma lista.
     // Sem imagens cadastradas, o botão deve permitir a busca EAN normalmente.
-    const imgs=$('[name="imagens[]"]',formEAN);
+    const imgs=$$('[name="imagens[]"]',formEAN);
     if(imgs.length!==1)return false;
     const legenda=formEAN.querySelector('[name="imagemLegenda[]"]')?.value||'';
     return /^https:\/\/images\.open(?:food|beauty|products)facts\.org\/images\/products\//i.test(imgs[0].value) &&
