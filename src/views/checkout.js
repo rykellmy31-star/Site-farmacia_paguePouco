@@ -384,8 +384,7 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
         <p><strong>Forma escolhida:</strong> ${e({pix:'Pix',credit_card:'Cartão de crédito',debit_card:'Cartão de débito',cash:'Dinheiro'}[pedido.metodoPagamento]||pedido.metodoPagamento)}</p>
         ${pedido.pagamentoPresencial.precisaTroco ? `<p><strong>Troco para:</strong> ${money(pedido.pagamentoPresencial.trocoParaCentavos)} — Troco: ${money(pedido.pagamentoPresencial.trocoCentavos)}</p>` : ''}
         <p>${pedido.statusFinanceiro==='aprovado'?'Pagamento recebido pela farmácia.':'Pagamento presencial pendente.'} Nenhuma cobrança foi gerada pelo site.</p>
-      </div>` : 
-${['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? `
+      </div>` : ['conciliacao_necessaria', 'criacao_em_andamento'].includes(pedido.pendenciaPagamento) ? `
       <div class="cartao mt-2" role="status">
         <h3>Pagamento em verificação — não faça outra tentativa agora</h3>
         <p>O provedor não confirmou se recebeu a solicitação. <strong>O pagamento ainda não está confirmado</strong> e o estoque está reservado temporariamente.</p>
