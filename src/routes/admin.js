@@ -1393,6 +1393,11 @@ function registrarApi(app, db) {
     if (aprovarAoSalvar && revisaoInovaPendente && !confirmouRevisao)
       return void res.json({ok:false,erro:'Confira a classificação sanitária e marque a confirmação antes de salvar.'},409);
     const dados = lerProdutoDoForm(req.body);
+    // Fonte preenchida pela API do EAN não pode desaparecer na edição.
+    dados.logisticaFonte=produto.logisticaFonte||null;
+    if(req.body.confirmouMedidasLogisticas==='1'&&dados.logisticaFonte)
+      dados.logisticaFonte={...dados.logisticaFonte,revisaoPendente:false,
+        revisadoEm:new Date().toISOString(),revisadoPor:req.adminUser.id};
     dados.slug = produto.slug;
     if (dados.nome !== produto.nome) dados.slug = slugUnicoProduto(db, dados.nome, produto.id);
     const estoque = { ...(produto.estoque || {}) };
