@@ -383,7 +383,15 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
 
       ${painel({
         titulo: 'Descrição',
-        corpo: `<div class="editor-texto" data-editor>
+        corpo: `<div class="alerta info mb-2" id="painelDescricaoEAN">
+          <strong>📝 Buscar informações e descrição pelo EAN</strong>
+          <p class="texto-pequeno mt-1">Pesquisa nome, marca, conteúdo e dados da embalagem.
+          Consulta bases abertas automaticamente; Bluesoft Cosmos é consultado quando houver
+          credencial autorizada. Não sobrescreve descrições que você já preencheu.</p>
+          <button class="botao pequeno secundario" type="button" id="botaoBuscarDescricaoEAN">🔎 Buscar descrição pelo EAN</button>
+          <p class="texto-pequeno mt-1 mb-0" id="resultadoDescricaoEAN" role="status" aria-live="polite">
+            Nenhuma pesquisa de descrição realizada.</p>
+        </div><div class="editor-texto" data-editor>
           <div class="ferramentas">
             <button type="button" data-cmd="bold"><strong>N</strong></button>
             <button type="button" data-cmd="italic"><em>I</em></button>
