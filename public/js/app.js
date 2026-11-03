@@ -553,7 +553,7 @@
           '. Deixe este campo vazio se for pagar o valor exato.';
         return;
       }
-      if(!/^\\d{1,7}(?:[.,]\\d{1,2})?$/.test(digitado)){
+      if(!/^\d{1,7}(?:[.,]\d{1,2})?$/.test(digitado)){
         valorTroco.setCustomValidity('Informe um valor válido, como 100,00.');
         resumoTroco.textContent='Informe um valor válido, como 100,00.';
         return;
