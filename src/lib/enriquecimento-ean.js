@@ -169,7 +169,7 @@ const GENERICOS_ESMALTE=new Set(['ESMALTE','ESM','VERNIZ','UNHAS','UNHA','PARA',
   'DE','DA','DO','DAS','DOS','COR','CORES','CREMOSO','CREM','CINTILANTE',
   'PEROLADO','PEROL','EXTRA','BRILHO','FOSCO','GEL','LONGA','DURACAO',
   'BASE','ESPECIAL','LINHA','NOVA','FRASCO','EDICAO','ED','ML','ESMALTACAO',
-  'UNIDADE','UN','COLECAO','NUDE','VERNIS','NAIL','POLISH','NAGELLACK']);
+  'UNIDADE','UN','COLECAO','VERNIS','NAIL','POLISH','NAGELLACK']);
 function textoComparavel(v){
   return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
@@ -186,14 +186,14 @@ function referenciaEsmalte(nome,marca){
   if(!fabricante){
     fabricante=MARCAS_ESMALTE.find(m=>contemSequencia(n,m))||'';
   }
-  if(!fabricante||fabricante.length<4||!contemSequencia(n,fabricante))return null;
+  if(!fabricante||fabricante.length<4)return null;
   const volume=n.match(/\b(\d{1,2})\s*ML\b/)?.[1]||'';
   // Sem volume, a chance de confundir apresentações é maior.
   if(!volume)return null;
   const marcaTokens=new Set(tokensComparaveis(fabricante));
   const especificos=tokensComparaveis(n).filter((t,i,tokens)=>
     !GENERICOS_ESMALTE.has(t)&&!marcaTokens.has(t)&&
-    !(t===volume&&tokens[i+1]==='ML'));
+    t!==volume+'ML'&&!(t===volume&&tokens[i+1]==='ML'));
   if(!especificos.length||especificos.length>7)return null;
   return {marca:fabricante,volume,especificos:[...new Set(especificos)],
     query:[fabricante,...especificos].join(' ').slice(0,90)};
@@ -210,7 +210,7 @@ function esmalteMesmaVariante(produto,referencia){
   const marcaTokens=new Set(tokensComparaveis(referencia.marca));
   const itens=tokensComparaveis(nome).filter((t,i,tokens)=>
     !GENERICOS_ESMALTE.has(t)&&!marcaTokens.has(t)&&
-    !(t===referencia.volume&&tokens[i+1]==='ML'));
+    t!==referencia.volume+'ML'&&!(t===referencia.volume&&tokens[i+1]==='ML'));
   const detalhe=[...new Set(itens)];
   // Exigir mesma tonalidade completa, sem aceitar tons parecidos ou versões
   // diferentes com palavras adicionais ("Renda Paetê" ≠ "Renda").
