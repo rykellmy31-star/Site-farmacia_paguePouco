@@ -7,7 +7,7 @@ import {
 } from '../lib/catalog.js';
 import { paginaPublica, money, ICONES } from './layout.js';
 import {
-  vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, enderecoHtml, creditoFotoOpenverse,
+  vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, enderecoHtml, creditoFotoOpenverse, creditoFotoDailus,
 } from './partials.js';
 import { formatDate } from '../lib/format.js';
 import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
@@ -340,6 +340,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
     </div>
     ${creditoPrecoMelhor}
     ${creditoFotoOpenverse(produto)}
+    ${creditoFotoDailus(produto)}
   </div>`;
 
   const caracteristicas = Object.entries(produto.caracteristicas || {});
