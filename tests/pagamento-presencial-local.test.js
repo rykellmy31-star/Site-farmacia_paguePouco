@@ -88,3 +88,11 @@ test('conciliador Pix jamais classifica pagamento local como checkout interrompi
  const fonte=readFileSync(new URL('src/lib/payments/reconciliation.js',base),'utf8');
  assert.equal((fonte.match(/!p\.pagamentoPresencial/g)||[]).length,2);
 });
+
+test('cliente vê confirmação de modalidade e troco em Meus pedidos',()=>{
+ const base=new URL('../',import.meta.url);
+ const conta=readFileSync(new URL('src/views/account.js',base),'utf8');
+ assert.match(conta,/pedido\.pagamentoPresencial/);
+ assert.match(conta,/Troco para:/);
+ assert.match(conta,/pagamento será realizado presencialmente/);
+});
