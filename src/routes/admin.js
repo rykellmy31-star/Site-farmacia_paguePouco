@@ -2170,6 +2170,12 @@ function registrarApi(app, db) {
   app.post('/admin/api/fretes', (req, res) => {
     if (!guardApi(req, res, 'fretes.editar')) return;
     const cfg = normalizeFreightConfig(getSetting(db, 'frete'));
+    // Somente permite ativar a cotação com credenciais do servidor.
+    const solicitarMelhorEnvio = req.body.me_ativo === '1';
+    if (solicitarMelhorEnvio && (!config.melhorEnvio?.token || !config.melhorEnvio?.contato))
+      return void res.redirect('/admin/fretes?erro='+encodeURIComponent(
+        'Configure MELHOR_ENVIO_TOKEN e MELHOR_ENVIO_CONTATO_EMAIL na Cloudflare antes de ativar.'));
+    cfg.melhorEnvio = {ativo: solicitarMelhorEnvio};
     for (const u of UFS) {
       const st = cfg.states[u.uf];
       st.ativo = req.body[`uf_ativo_${u.uf}`] === '1';
