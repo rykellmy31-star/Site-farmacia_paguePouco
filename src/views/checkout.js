@@ -159,10 +159,6 @@ export function telaPagamentoPresencial(ctx,{totais,endereco,frete,vendedores=[]
     ['debit_card','Cartão de débito','Pagar com a equipe da farmácia'],
     ['cash','Dinheiro','Se precisar de troco, informe o valor abaixo'],
   ];
-  const vendedor=vendedores.length?'<div class="cartao"><h3>Selecione seu vendedor</h3>'+
-    '<select name="vendedorId" required><option value="">Selecione seu vendedor</option>'+
-    vendedores.map(v=>'<option value="'+e(v.id)+'">'+e(v.nome)+'</option>').join('')+
-    '</select></div>':'';
   const enderecoHtml='<strong>'+e(endereco.nome||'')+'</strong><br>'+
     e(endereco.logradouro||'')+', '+e(endereco.numero||'')+
     (endereco.complemento?' — '+e(endereco.complemento):'')+'<br>'+
@@ -183,7 +179,7 @@ export function telaPagamentoPresencial(ctx,{totais,endereco,frete,vendedores=[]
         '<p>Seu CEP é igual ao da farmácia. Nenhuma cobrança será feita pelo site.</p></div>'+
       '<div class="checkout-grade"><form method="post" action="/checkout/finalizar" '+
         'id="formPagamento" data-pagamento-presencial="1">'+
-        '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+vendedor+
+        '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
         '<div class="cartao"><h3>Como deseja pagar?</h3>'+escolhas+
         '<div id="detalheDinheiro" hidden class="mt-2" data-total-centavos="'+
           String(totais.totalCentavos)+'">'+
@@ -232,17 +228,6 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
       <div class="checkout-grade">
         <form method="post" action="/checkout/finalizar" id="formPagamento">
           <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
-          <div class="cartao">
-            <h3>SELECIONE SEU VENDEDOR</h3>
-            ${vendedores.length ? `<div class="campo">
-              <label for="vendedorId">Selecione seu vendedor</label>
-              <select id="vendedorId" name="vendedorId" required aria-required="true">
-                <option value="">Selecione um vendedor</option>
-                ${vendedores.map(v => `<option value="${e(v.id)}">${e(v.nome)}</option>`).join('')}
-              </select>
-              <p class="texto-pequeno texto-suave">Escolha o profissional responsável por seu atendimento.</p>
-            </div>` : '<p class="texto-suave">Atendimento geral da Farmácia Pague Pouco. Nenhum vendedor está disponível para seleção no momento.</p>'}
-          </div>
           <div class="cartao">
             <h3>${ICONES.cadeado} Como você quer pagar?</h3>
             ${infoPag.real && formasPagamento.pix ? `<div class="campo">
