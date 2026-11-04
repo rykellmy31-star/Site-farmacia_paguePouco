@@ -676,8 +676,8 @@
     const galeria=$('#galeriaProduto');
     // O operador escolheu EXPLICITAMENTE uma foto: somente esta fica
     // como principal. Vídeos e todos os outros dados permanecem intocados.
-    galeria?.querySelectorAll('.item-midia[data-tipo="image"]').forEach(el=>el.remove());
-    $$('[name="imagens[]"],[name="imagemLegenda[]"]',formEAN).forEach(el=>el.remove());
+    galeria?.querySelectorAll('.item-midia[data-tipo="image"],[data-google-pendente="1"]').forEach(el=>el.remove());
+    $('[name="imagens[]"],[name="imagemLegenda[]"]',formEAN).forEach(el=>el.remove());
     const ligada=anexarFotoFormulario(midia,'Google Imagens (seleção manual)',{
       atribuicao:origem
     });
