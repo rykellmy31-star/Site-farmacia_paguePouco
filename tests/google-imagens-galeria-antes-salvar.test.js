@@ -32,7 +32,7 @@ test('troca somente fotos (preserva vídeos), usa inputs do formulário, e não 
   const fragmento=admin.slice(inicio,fim);
   assert.match(fragmento,/querySelectorAll\('\.item-midia\[data-tipo="image"\],\[data-google-pendente="1"\]'\)/);
   assert.doesNotMatch(fragmento,/querySelectorAll\('\.item-midia\[data-tipo="video"\]'\)/);
-  assert.match(fragmento,/\$\$\('\[name="imagens\[\]"\],\[name="imagemLegenda\[\]"\]',formEAN\)\.forEach/);
+  assert.match(fragmento,/Array\.from\(formEAN\.querySelectorAll\(/);
   assert.match(fragmento,/anexarFotoFormulario\(midia,'Google Imagens \(seleção manual\)'/);
   // O formulário já grava a primeira imagem do array como principal.
   assert.match(routes,/principal:\s*i === 0/);
@@ -48,7 +48,7 @@ test('fragmento da galeria funciona com arrays simulados e remove apenas fotos a
     querySelectorAll:selector=>selector.includes('data-tipo="image"')?fotos:[],
     querySelector:()=>({querySelector:()=>({textContent:''})}),
   };
-  const formEAN={};
+  const formEAN={querySelectorAll:()=>inputs};
   let imagemSalva=null;
   const fn=Function('formEAN','$','$$','anexarFotoFormulario',fragmento+
     'return definirFotoGoogleFormulario;')(
