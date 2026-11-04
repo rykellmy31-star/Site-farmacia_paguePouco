@@ -30,7 +30,7 @@ test('troca somente fotos (preserva vídeos), usa inputs do formulário, e não 
   const fim=admin.indexOf('async function pesquisarGoogleImagensEAN(',inicio);
   assert.ok(inicio>0&&fim>inicio);
   const fragmento=admin.slice(inicio,fim);
-  assert.match(fragmento,/querySelectorAll\('\.item-midia\[data-tipo="image"\]'\)/);
+  assert.match(fragmento,/querySelectorAll\('\.item-midia\[data-tipo="image"\],\[data-google-pendente="1"\]'\)/);
   assert.doesNotMatch(fragmento,/querySelectorAll\('\.item-midia\[data-tipo="video"\]'\)/);
   assert.match(fragmento,/\$\$\('\[name="imagens\[\]"\],\[name="imagemLegenda\[\]"\]',formEAN\)\.forEach/);
   assert.match(fragmento,/anexarFotoFormulario\(midia,'Google Imagens \(seleção manual\)'/);
