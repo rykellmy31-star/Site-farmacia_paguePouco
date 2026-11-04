@@ -50,6 +50,38 @@ test('download usa URL assinada e valida bytes PNG sem usar miniatura',async()=>
  assert.equal(r.mime,'image/png');
  assert.deepEqual(urls,[imagem.url]);
 });
+
+test('ticket com três URLs longas ainda é validável ou é recusado antes de renderizar',()=>{
+ const longo='x'.repeat(1500);
+ const imagemGrande={...imagem,
+  url:'https://cdn.fabricante.com.br/a.jpg?foto='+longo,
+  miniatura:'https://cdn.fabricante.com.br/b.jpg?mini='+longo,
+  pagina:'https://fabricante.com.br/produto?origem='+longo
+ };
+ const t=criarTicketGoogle(imagemGrande,credentials);
+ assert.ok(t.length<=4400);
+ assert.ok(t.length>0);
+ assert.equal(validarTicketGoogle(t,credentials).url,imagemGrande.url);
+});
+
+test('se imagem original recusar download, tenta miniatura que veio no ticket assinado',async()=>{
+ const minhaImagem={...imagem,miniatura:'https://cdn.fabricante.com.br/miniatura.png'};
+ const assinado=criarTicketGoogle(minhaImagem,credentials);
+ const validado=validarTicketGoogle(assinado,credentials);
+ assert.equal(validado.miniatura,minhaImagem.miniatura);
+ const calls=[];
+ const r=await baixarFotoGoogleEscolhida([validado.url,validado.miniatura],{
+   fetcher:async url=>{
+     calls.push(url);
+     return url===validado.url?resp(403):resp(200);
+   }
+ });
+ assert.equal(r.ok,true);
+ assert.equal(r.mime,'image/png');
+ assert.equal(r.alternativa,true);
+ assert.deepEqual(calls,[validado.url,validado.miniatura]);
+});
+
 test('não segue redirect para IP privado, HTML ou imagem muito grande',async()=>{
  const redirect=await baixarFotoGoogleEscolhida(imagem.url,{
    fetcher:async()=>resp(302,foto,'https://127.0.0.1/segredo.png')
@@ -78,10 +110,10 @@ test('salvamento selecionado mantém uma só imagem PNG e substitui somente com 
  assert.match(route,/validarTicketGoogle/);
  assert.match(route,/m\.ext==='png'/);
  assert.match(route,/imagens:\[\{url,principal:true,ordem:1,legenda\}\]/);
- assert.match(js,/Salvar esta foto \(PNG\)/);
- assert.match(js,/enviarPNG\(ean,0,contextoBuscaImagemEAN\(\),proxy\)/);
+ assert.match(js,/Escolher esta foto/);
+ assert.match(js,/enviarPNG\(escolha.ean,0,contextoBuscaImagemEAN\(\),url\)/);
  assert.match(js,/definirFotoGoogleFormulario/);
- assert.match(js,/galeria\?\.querySelectorAll\('\.item-midia\[data-tipo="image"\]'\)/);
+ assert.match(js,/galeria\?\.querySelectorAll\('\.item-midia\[data-tipo="image"\],\[data-google-pendente="1"\]'\)/);
  assert.match(view,/id="botaoGoogleImagensEAN"/);
  assert.doesNotMatch(route,/app\.post\('\/admin\/api\/produtos\/google-imagens\/lote'/);
 });

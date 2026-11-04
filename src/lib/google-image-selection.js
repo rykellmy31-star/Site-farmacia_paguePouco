@@ -35,11 +35,25 @@ export function criarTicketGoogle(imagem,{ean,adminId,segredo,agora=Date.now()}=
   const p={
     url,ean:normalizado,adminId:String(adminId),
     pagina:urlFotoGoogleSegura(imagem?.pagina)||'',
+    miniatura:urlFotoGoogleSegura(imagem?.miniatura)||'',
     titulo:String(imagem?.titulo||'').slice(0,180),
     exp:agora+TEMPO_TICKET
   };
-  const dados=Buffer.from(JSON.stringify(p)).toString('base64url');
-  return dados+'.'+assinatura(dados,segredo);
+  let dados=Buffer.from(JSON.stringify(p)).toString('base64url');
+  let ticket=dados+'.'+assinatura(dados,segredo);
+  // Nunca renderizar botão cujo ticket exceda o limite aceito no resgate.
+  // Preservar URL principal e remover referências opcionais se necessário.
+  if(ticket.length>4400){
+    p.miniatura='';
+    dados=Buffer.from(JSON.stringify(p)).toString('base64url');
+    ticket=dados+'.'+assinatura(dados,segredo);
+  }
+  if(ticket.length>4400){
+    p.pagina='';
+    dados=Buffer.from(JSON.stringify(p)).toString('base64url');
+    ticket=dados+'.'+assinatura(dados,segredo);
+  }
+  return ticket.length<=4400?ticket:'';
 }
 export function validarTicketGoogle(ticket,{ean,adminId,segredo,agora=Date.now()}={}){
   if(typeof ticket!=='string'||ticket.length>4400||!segredo||!adminId)return null;
@@ -55,6 +69,7 @@ export function validarTicketGoogle(ticket,{ean,adminId,segredo,agora=Date.now()
        !eanValido(p.ean)||p.ean!==normalizarEAN(ean)||
        !urlFotoGoogleSegura(p.url))return null;
     return {url:p.url,ean:p.ean,pagina:urlFotoGoogleSegura(p.pagina)||'',
+      miniatura:urlFotoGoogleSegura(p.miniatura)||'',
       titulo:String(p.titulo||'').slice(0,180)};
   }catch{return null}
 }
@@ -91,41 +106,70 @@ async function lerImagemLimitada(resp){
     reader.releaseLock?.();
   }
 }
-/** Baixa somente a URL assinada; no máximo dois redirects HTTPS seguros. */
-export async function baixarFotoGoogleEscolhida(url,{
-  fetcher=globalThis.fetch,timeoutMs=11500
+/** Tenta o original assinado; se a origem negar acesso, tenta a miniatura
+ * assinada separadamente (a qualidade mínima ainda será verificada no navegador).
+ * Nada é obtido de URL informada livremente pelo cliente.
+ */
+export async function baixarFotoGoogleEscolhida(urls,{
+  fetcher=globalThis.fetch,timeoutMs=14500
 }={}){
-  let atual=urlFotoGoogleSegura(url);
-  if(!atual)return {ok:false,motivo:'A origem da imagem não é permitida.'};
+  const entradas=Array.isArray(urls)?urls:[urls];
+  const permitidas=[...new Set(entradas.map(urlFotoGoogleSegura).filter(Boolean))].slice(0,2);
+  if(!permitidas.length)return {ok:false,motivo:'A origem da imagem não é permitida.'};
+  let ultimaFalha='A fonte da imagem não disponibilizou o arquivo. Escolha outra foto.';
   const ctrl=new AbortController();
   const timeout=setTimeout(()=>ctrl.abort(),timeoutMs);
   try{
-    for(let redirecionamentos=0;redirecionamentos<=2;redirecionamentos++){
-      if(!urlFotoGoogleSegura(atual))
-        return {ok:false,motivo:'A origem da imagem não é segura.'};
-      const resp=await fetcher(atual,{
-        method:'GET',redirect:'manual',signal:ctrl.signal,
-        headers:{Accept:'image/png,image/jpeg,image/webp;q=0.9'}
-      });
-      if([301,302,303,307,308].includes(resp.status)){
-        const destino=resp.headers?.get?.('location');
-        if(!destino||redirecionamentos===2)
-          return {ok:false,motivo:'A imagem redirecionou muitas vezes.'};
-        atual=urlFotoGoogleSegura(new URL(destino,atual).href);
-        if(!atual)return {ok:false,motivo:'A imagem redirecionou para origem não permitida.'};
-        continue;
+    for(const origem of permitidas){
+      let atual=origem;
+      for(let redirecionamentos=0;redirecionamentos<=2;redirecionamentos++){
+        if(!urlFotoGoogleSegura(atual)){
+          ultimaFalha='A origem da imagem não é segura.';
+          break;
+        }
+        let resp;
+        try{
+          const referer=new URL(atual).origin+'/';
+          resp=await fetcher(atual,{
+            method:'GET',redirect:'manual',signal:ctrl.signal,
+            headers:{
+              Accept:'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+              'User-Agent':'Mozilla/5.0 (compatible; FarmaciaPaguePouco/1.0)',
+              Referer:referer
+            }
+          });
+        }catch{
+          if(ctrl.signal.aborted)return {ok:false,motivo:'Tempo esgotado para baixar a imagem. Escolha outra foto.'};
+          ultimaFalha='O servidor da imagem não permitiu o download. Escolha outra foto.';
+          break;
+        }
+        if([301,302,303,307,308].includes(resp.status)){
+          const destino=resp.headers?.get?.('location');
+          if(!destino||redirecionamentos===2){
+            ultimaFalha='A fonte redirecionou muitas vezes.';
+            break;
+          }
+          atual=urlFotoGoogleSegura(new URL(destino,atual).href);
+          if(!atual){ultimaFalha='A imagem redirecionou para origem não permitida.';break;}
+          continue;
+        }
+        if(!resp.ok){
+          ultimaFalha='A fonte da imagem recusou o download (HTTP '+Number(resp.status||0)+'). Escolha outra foto.';
+          break;
+        }
+        try{
+          const bytes=await lerImagemLimitada(resp);
+          const mime=detectarTipoImagem(bytes);
+          if(!mime){ultimaFalha='A fonte retornou conteúdo que não é imagem JPG, PNG ou WEBP.';break;}
+          return {ok:true,bytes,mime,origem:atual,alternativa:origem!==permitidas[0]};
+        }catch(e){
+          ultimaFalha=e?.message==='grande'?
+            'A imagem é maior que 12 MB. Escolha outra foto.':
+            'Falha ao ler o arquivo da imagem. Tente outra foto.';
+          break;
+        }
       }
-      if(!resp.ok)return {ok:false,motivo:'A fonte da imagem não permitiu o download. Escolha outra foto.'};
-      const bytes=await lerImagemLimitada(resp);
-      const mime=detectarTipoImagem(bytes);
-      if(!mime)return {ok:false,motivo:'A imagem encontrada não possui formato JPG, PNG ou WEBP válido.'};
-      return {ok:true,bytes,mime};
     }
-  }catch(e){
-    return {ok:false,motivo:e?.message==='grande'?
-      'A imagem é maior que 12 MB. Escolha outra foto.':
-      ctrl.signal.aborted?'A fonte demorou demais para fornecer a imagem. Tente outra.':
-      'Não foi possível baixar a foto da origem. Escolha outra imagem.'};
-  }finally{clearTimeout(timeout)}
-  return {ok:false,motivo:'Não foi possível baixar a imagem.'};
+  }finally{clearTimeout(timeout);}
+  return {ok:false,motivo:ultimaFalha};
 }
