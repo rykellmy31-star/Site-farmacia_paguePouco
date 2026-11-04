@@ -24,7 +24,7 @@ test('pesquisa pelo EAN somente no Google Imagens BR, sem expor token na URL',as
  assert.equal(payload.zone,'cr_farmacia_imagens');
  const url=new URL(payload.url);
  assert.equal(url.hostname,'www.google.com');
- assert.equal(url.searchParams.get('tbm'),'isch');
+ assert.equal(url.searchParams.get('udm'),'2');
  assert.equal(url.searchParams.get('gl'),'br');
  assert.equal(url.searchParams.get('brd_json'),'1');
  assert.doesNotMatch(payload.url,/SEGREDO/);
@@ -53,6 +53,47 @@ test('não aceita HTTP nem URL com credenciais e não duplica imagens',()=>{
  ]},ean);
  assert.equal(imagens.length,1);
  assert.equal(imagens[0].eanMencionado,true);
+});
+test('uma busca de imagens usa timeout estendido de 55 segundos',async()=>{
+ let tempo=0;
+ const r=await consultarGoogleImagensEAN(ean,{apiToken:'SEGREDO',zone:'cr_farmacia_imagens',
+  fetcher:async(_url,opt)=>{
+    // Não acessa a rede: garante que timeout não seja 12 segundos.
+    tempo=opt.signal?55000:0;
+    return {ok:true,json:async()=>({images:[]})};
+  }});
+ assert.equal(r.ok,true);
+ assert.equal(tempo,55000);
+});
+test('timeout informa causa sem expor segredo nem repetir consultas',async()=>{
+ let tentativas=0;
+ const r=await consultarGoogleImagensEAN(ean,{apiToken:'SEGREDO',zone:'cr_farmacia_imagens',
+  fetcher:async()=>{tentativas++;throw Object.assign(new Error('SEGREDO'),{name:'TimeoutError'})}});
+ assert.equal(r.status,504);
+ assert.equal(r.codigo,'BD_TIMEOUT');
+ assert.equal(tentativas,1);
+ assert.doesNotMatch(r.erro,/SEGREDO/);
+ assert.match(r.erro,/55 segundos/);
+});
+test('falha de rede é distinta de credenciais inválidas',async()=>{
+ const r=await consultarGoogleImagensEAN(ean,{apiToken:'SEGREDO',zone:'cr_farmacia_imagens',
+  fetcher:async()=>{throw Object.assign(new Error('SEGREDO'),{name:'TypeError'})}});
+ assert.equal(r.codigo,'BD_REDE');
+ assert.equal(r.status,502);
+ assert.doesNotMatch(r.erro,/SEGREDO/);
+});
+test('zona inválida retorna diagnóstico sem vazar resposta do provedor',async()=>{
+ const r=await consultarGoogleImagensEAN(ean,{apiToken:'SEGREDO',zone:'cr_farmacia_imagens',
+  fetcher:async()=>({ok:false,status:400,headers:new Headers({'x-brd-error-code':'zone_missing'})})});
+ assert.equal(r.codigo,'BD_CONFIGURACAO');
+ assert.equal(r.referencia,'zone_missing');
+ assert.equal(r.status,503);
+});
+test('HTTP 200 com corpo de erro não simula pesquisa vazia',async()=>{
+ const r=await consultarGoogleImagensEAN(ean,{apiToken:'SEGREDO',zone:'cr_farmacia_imagens',
+  fetcher:async()=>({ok:true,status:200,json:async()=>({error:'zone not found'})})});
+ assert.equal(r.codigo,'BD_RESPOSTA_ERRO');
+ assert.equal(r.ok,false);
 });
 test('erros de autenticação não vazam segredo',async()=>{
  const r=await consultarGoogleImagensEAN(ean,{apiToken:'SEGREDO',zone:'cr_farmacia_imagens',

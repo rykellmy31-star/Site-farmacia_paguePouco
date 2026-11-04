@@ -54,7 +54,10 @@
     const r = await fetch(path, o);
     let dados = null;
     try { dados = await r.json(); } catch (e) { dados = null; }
-    if (!r.ok || (dados && dados.ok === false)) throw new Error((dados && dados.erro) || 'Não foi possível concluir.');
+    if (!r.ok || (dados && dados.ok === false)) {
+      const codigo = /^BD_[A-Z_]{2,40}$/.test(String(dados?.codigo||'')) ? ' ['+dados.codigo+']' : '';
+      throw new Error(((dados && dados.erro) || 'Não foi possível concluir.') + codigo);
+    }
     return dados || { ok: true };
   }
 
