@@ -662,22 +662,20 @@
     }
     return true;
   }
-  function definirFotoGoogleFormulario(midia,origem,jaSalva=false){
+  function definirFotoGoogleFormulario(midia,origem){
     if(!formEAN)return false;
     const galeria=$('#galeriaProduto');
     // O operador escolheu EXPLICITAMENTE uma foto: somente esta fica
     // como principal. Vídeos e todos os outros dados permanecem intocados.
     galeria?.querySelectorAll('.item-midia[data-tipo="image"]').forEach(el=>el.remove());
-    $('[name="imagens[]"],[name="imagemLegenda[]"]',formEAN).forEach(el=>el.remove());
+    $$('[name="imagens[]"],[name="imagemLegenda[]"]',formEAN).forEach(el=>el.remove());
     const ligada=anexarFotoFormulario(midia,'Google Imagens (seleção manual)',{
       atribuicao:origem
     });
     if(ligada){
       const item=galeria?.querySelector('.item-midia[data-url]');
       const texto=item?.querySelector('p');
-      if(texto)texto.textContent=jaSalva?
-        'PNG salvo como imagem principal deste produto.':
-        'PNG incluído. Salve o cadastro para confirmar a imagem.';
+      if(texto)texto.textContent='PNG na galeria. Clique em Salvar alterações para confirmar.';
     }
     return ligada;
   }
@@ -693,6 +691,7 @@
     if(botao)botao.disabled=true;
     if(lista)lista.replaceChildren();
     if(status)status.textContent='Consultando o Google Imagens pelo EAN...';
+    let salvandoFotoGoogle=false;
     try{
       const resultado=await post('/admin/api/produtos/google-imagens',{ean});
       if(ean!==eanAtual())return;
@@ -733,44 +732,36 @@
           salvar.className='botao pequeno mt-1';
           salvar.textContent='💾 Salvar esta foto (PNG)';
           salvar.addEventListener('click',async()=>{
+            if(salvandoFotoGoogle)return;
             if(ean!==eanAtual()){
               if(status)status.textContent='O EAN foi alterado. Pesquise novamente.';
               return;
             }
-            const botoes=$('button',lista);
+            salvandoFotoGoogle=true;
+            const botoes=$$('button',lista);
             botoes.forEach(b=>b.disabled=true);
-            if(status)status.textContent='Verificando qualidade e convertendo a imagem escolhida para PNG...';
+            if(status)status.textContent='Baixando e convertendo a foto para PNG...';
             try{
               const proxy='/admin/api/produtos/google-imagens/arquivo?'+
                 new URLSearchParams({ean,ticket:item.ticket}).toString();
-              // Reutiliza EXATAMENTE a validação de resolução e upload PNG
-              // existente; não usa o thumb do Google.
+              // Somente prepara o PNG no armazenamento. O produto permanece
+              // sem alterações até o operador clicar em Salvar alterações.
               const midia=await enviarPNG(ean,0,contextoBuscaImagemEAN(),proxy);
-              if(ean!==eanAtual())throw new Error('O EAN foi alterado durante o envio.');
-              const contexto=contextoBuscaImagemEAN();
-              const origem=item.pagina||item.url;
-              let persistida=false;
-              if(contexto.produtoId){
-                const resultado=await post('/admin/api/produtos/'+
-                  encodeURIComponent(contexto.produtoId)+'/vincular-imagem-google',{
-                    ean,imagemUrl:midia.url,ticket:item.ticket
-                  });
-                if(!resultado.salva)throw new Error('A foto não foi confirmada no produto.');
-                persistida=true;
-              }
-              definirFotoGoogleFormulario(midia,origem,persistida);
-              if(status)status.textContent=persistida?
-                '✅ Foto PNG salva como única imagem principal do produto.':
-                '✅ Foto PNG preparada. Salve o cadastro do novo produto para confirmar.';
-              notificar(persistida?'Foto PNG salva com sucesso.':
-                'Foto PNG pronta. Salve o novo produto para confirmar.');
-              salvar.textContent='✅ Foto selecionada';
-              // Não permitir salvar mais de uma em um único clique/processamento.
-              botoes.forEach(b=>b.disabled=true);
-              return;
-            }catch(erro){
-              if(status)status.textContent=erro.message||'Não foi possível salvar a foto selecionada.';
-              notificar(erro.message||'Erro ao salvar foto PNG.','erro');
+              if(ean!==eanAtual())throw new Error('O EAN mudou durante o envio.');
+              if(!definirFotoGoogleFormulario(midia,item.pagina||item.url))
+                throw new Error('Não foi possível incluir a foto na galeria.');
+              if(status)status.textContent='✅ Foto na galeria! Clique em Salvar alterações.';
+              notificar('Foto PNG na galeria. Clique em Salvar alterações.');
+              $$('#listaGoogleImagensEAN button').forEach(b=>{
+                b.textContent='💾 Salvar esta foto (PNG)';
+              });
+              salvar.textContent='✅ Foto na galeria';
+              $('#galeriaProduto')?.scrollIntoView?.({behavior:'smooth',block:'center'});
+            }catch(err){
+              if(status)status.textContent=err.message||'Erro ao preparar foto.';
+              notificar(err.message||'Erro ao preparar foto.','erro');
+            }finally{
+              salvandoFotoGoogle=false;
               botoes.forEach(b=>b.disabled=false);
             }
           });
