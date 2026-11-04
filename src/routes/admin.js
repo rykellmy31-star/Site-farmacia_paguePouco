@@ -54,6 +54,7 @@ import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, e
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { consultarGoogleImagensEAN } from '../lib/brightdata-google-imagens.js';
+import {criarTicketGoogle,validarTicketGoogle,baixarFotoGoogleEscolhida} from '../lib/google-image-selection.js';
 import {gtinVarejoDaEmbalagem} from '../lib/gtin-embalagem-foto.js';
 import { consultarDescricaoEAN, preencherDescricaoAusente } from '../lib/busca-descricao-ean.js';
 import { linkWhatsApp } from '../views/layout.js';
@@ -1450,7 +1451,62 @@ function registrarApi(app, db) {
       apiToken:config.brightDataGoogle?.token,
       zone:config.brightDataGoogle?.zone,
     });
+    if(resultado.ok&&Array.isArray(resultado.imagens)){
+      resultado.imagens=resultado.imagens.map(imagem=>({
+        ...imagem,ticket:criarTicketGoogle(imagem,{
+          ean:resultado.ean,adminId:req.adminUser.id,segredo:config.sessionSecret
+        })
+      })).filter(imagem=>!!imagem.ticket);
+    }
     res.json(resultado,resultado.ok?200:(resultado.status||502));
+  });
+  // O ticket assinado prova que a URL veio da busca do Google deste usuário.
+  // Não existe URL editável na requisição: evita downloads externos arbitrários.
+  app.get('/admin/api/produtos/google-imagens/arquivo',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const ean=String(req.query.get('ean')||'');
+    const ticket=String(req.query.get('ticket')||'');
+    const escolha=validarTicketGoogle(ticket,{
+      ean,adminId:req.adminUser.id,segredo:config.sessionSecret
+    });
+    res.set('Cache-Control','no-store');
+    if(!escolha)return void res.text('Seleção expirada ou inválida. Pesquise novamente.',403);
+    const arquivo=await baixarFotoGoogleEscolhida(escolha.url);
+    if(!arquivo.ok)return void res.text(arquivo.motivo,422);
+    res.set('Content-Type',arquivo.mime);
+    res.set('Content-Length',String(arquivo.bytes.length));
+    res.set('X-Content-Type-Options','nosniff');
+    res.end(arquivo.bytes);
+  });
+  // Seleção MANUAL de uma só foto PNG. Só substitui outra quando o
+  // administrador clicou explicitamente em Salvar esta foto.
+  app.post('/admin/api/produtos/:id/vincular-imagem-google',(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)
+      return void res.json({ok:false,erro:'Produto não encontrado.'},404);
+    const escolha=validarTicketGoogle(String(req.body?.ticket||''),{
+      ean:String(p.ean||''),adminId:req.adminUser.id,segredo:config.sessionSecret
+    });
+    if(!escolha||String(req.body?.ean)!==String(p.ean))
+      return void res.json({ok:false,erro:'Seleção não corresponde ao EAN. Pesquise novamente.'},409);
+    const url=String(req.body?.imagemUrl||'');
+    const media=db.collection('midia').findOne(m=>m.url===url&&m.ext==='png'&&m.tipo==='image'&&
+      m.autorId===req.adminUser.id&&Number(m.largura)>=600&&Number(m.altura)>=600&&
+      Date.now()-Date.parse(m.criadoEm)>=0&&Date.now()-Date.parse(m.criadoEm)<25*60*1000);
+    if(!media)
+      return void res.json({ok:false,erro:'PNG válido não encontrado. Escolha e salve novamente.'},400);
+    const anterior=(p.imagens||[]).map(img=>img.url);
+    const origem=(escolha.pagina||escolha.url).slice(0,600);
+    const legenda='Foto selecionada manualmente no Google Imagens pelo EAN '+p.ean+
+      '; fonte: '+origem+'; direitos de uso sujeitos à autorização do titular.';
+    db.collection('products').update(p.id,{
+      imagens:[{url,principal:true,ordem:1,legenda}]
+    });
+    logAdmin(db,req.adminUser,'selecionou_foto_google_png','produto',p.id,{
+      ean:p.ean,imagem:url,substituidas:anterior,origem
+    },req);
+    res.json({ok:true,salva:true,imagemUrl:url,legenda});
   });
   // Ferramenta de fotos INDEPENDENTE: apenas sugere imagem por EAN.
   // A conversão para PNG e a aferição de resolução são feitas no navegador

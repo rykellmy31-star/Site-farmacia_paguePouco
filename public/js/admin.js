@@ -513,11 +513,12 @@
       fabricante:String(formEAN?.querySelector('[name="fabricante"]')?.value||
         formEAN?.querySelector('[name="marca"]')?.value||'').slice(0,80)};
   }
-  async function converterFotoEANparaPNG(ean,indice=0,contexto=contextoBuscaImagemEAN()){
+  async function converterFotoEANparaPNG(ean,indice=0,contexto=contextoBuscaImagemEAN(),arquivoUrl=null){
     const params=new URLSearchParams({ean,indice:String(indice),
       nome:contexto.nome||'',marca:contexto.marca||'',fabricante:contexto.fabricante||'',
       produtoId:contexto.produtoId||''});
-    const resp=await fetch('/admin/api/produtos/imagem-ean/arquivo?'+params.toString(),{
+    const origem=arquivoUrl||'/admin/api/produtos/imagem-ean/arquivo?'+params.toString();
+    const resp=await fetch(origem,{
       credentials:'same-origin',headers:{'X-CSRF-Token':CFG.csrf}});
     if(!resp.ok){
       const detalhe=(await resp.text().catch(()=>'' )).slice(0,180).trim();
@@ -597,8 +598,8 @@
       URL.revokeObjectURL(objetoUrl);
     }
   }
-  async function enviarPNG(ean,indice=0,contexto=contextoBuscaImagemEAN()){
-    const arquivo=await converterFotoEANparaPNG(ean,indice,contexto);
+  async function enviarPNG(ean,indice=0,contexto=contextoBuscaImagemEAN(),arquivoUrl=null){
+    const arquivo=await converterFotoEANparaPNG(ean,indice,contexto,arquivoUrl);
     const fd=new FormData();
     fd.append('ean',ean);
     fd.append('arquivo',arquivo);
@@ -639,6 +640,9 @@
       :fonte==='Dailus (fabricante)'
         ?'Foto frontal — catálogo oficial Dailus ('+String(meta.atribuicao||'')+
           '); direitos reservados da fabricante; convertida em PNG.'
+      :fonte==='Google Imagens (seleção manual)'
+        ?'Foto escolhida manualmente no Google Imagens; origem: '+String(meta.atribuicao||'').slice(0,600)+
+          '; direitos de uso sujeitos à autorização do titular; convertida em PNG.'
       :fonte==='Wikimedia Commons'||fonte==='Openverse (Flickr)'
         ?'Foto frontal — '+fonte+'; '+String(meta.licenca||'')+
           '; autor: '+String(meta.autor||'')+'; origem: '+String(meta.atribuicao||'')+
@@ -657,6 +661,25 @@
       galeria.prepend(item);
     }
     return true;
+  }
+  function definirFotoGoogleFormulario(midia,origem,jaSalva=false){
+    if(!formEAN)return false;
+    const galeria=$('#galeriaProduto');
+    // O operador escolheu EXPLICITAMENTE uma foto: somente esta fica
+    // como principal. Vídeos e todos os outros dados permanecem intocados.
+    galeria?.querySelectorAll('.item-midia[data-tipo="image"]').forEach(el=>el.remove());
+    $('[name="imagens[]"],[name="imagemLegenda[]"]',formEAN).forEach(el=>el.remove());
+    const ligada=anexarFotoFormulario(midia,'Google Imagens (seleção manual)',{
+      atribuicao:origem
+    });
+    if(ligada){
+      const item=galeria?.querySelector('.item-midia[data-url]');
+      const texto=item?.querySelector('p');
+      if(texto)texto.textContent=jaSalva?
+        'PNG salvo como imagem principal deste produto.':
+        'PNG incluído. Salve o cadastro para confirmar a imagem.';
+    }
+    return ligada;
   }
   async function pesquisarGoogleImagensEAN(){
     const ean=eanAtual();
@@ -704,6 +727,55 @@
         link.textContent='Ver origem';
         link.className='botao pequeno secundario';
         card.appendChild(link);
+        if(item.ticket){
+          const salvar=document.createElement('button');
+          salvar.type='button';
+          salvar.className='botao pequeno mt-1';
+          salvar.textContent='💾 Salvar esta foto (PNG)';
+          salvar.addEventListener('click',async()=>{
+            if(ean!==eanAtual()){
+              if(status)status.textContent='O EAN foi alterado. Pesquise novamente.';
+              return;
+            }
+            const botoes=$('button',lista);
+            botoes.forEach(b=>b.disabled=true);
+            if(status)status.textContent='Verificando qualidade e convertendo a imagem escolhida para PNG...';
+            try{
+              const proxy='/admin/api/produtos/google-imagens/arquivo?'+
+                new URLSearchParams({ean,ticket:item.ticket}).toString();
+              // Reutiliza EXATAMENTE a validação de resolução e upload PNG
+              // existente; não usa o thumb do Google.
+              const midia=await enviarPNG(ean,0,contextoBuscaImagemEAN(),proxy);
+              if(ean!==eanAtual())throw new Error('O EAN foi alterado durante o envio.');
+              const contexto=contextoBuscaImagemEAN();
+              const origem=item.pagina||item.url;
+              let persistida=false;
+              if(contexto.produtoId){
+                const resultado=await post('/admin/api/produtos/'+
+                  encodeURIComponent(contexto.produtoId)+'/vincular-imagem-google',{
+                    ean,imagemUrl:midia.url,ticket:item.ticket
+                  });
+                if(!resultado.salva)throw new Error('A foto não foi confirmada no produto.');
+                persistida=true;
+              }
+              definirFotoGoogleFormulario(midia,origem,persistida);
+              if(status)status.textContent=persistida?
+                '✅ Foto PNG salva como única imagem principal do produto.':
+                '✅ Foto PNG preparada. Salve o cadastro do novo produto para confirmar.';
+              notificar(persistida?'Foto PNG salva com sucesso.':
+                'Foto PNG pronta. Salve o novo produto para confirmar.');
+              salvar.textContent='✅ Foto selecionada';
+              // Não permitir salvar mais de uma em um único clique/processamento.
+              botoes.forEach(b=>b.disabled=true);
+              return;
+            }catch(erro){
+              if(status)status.textContent=erro.message||'Não foi possível salvar a foto selecionada.';
+              notificar(erro.message||'Erro ao salvar foto PNG.','erro');
+              botoes.forEach(b=>b.disabled=false);
+            }
+          });
+          card.appendChild(salvar);
+        }
         lista.appendChild(card);
       }
     }catch(err){
