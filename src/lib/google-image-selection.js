@@ -39,8 +39,21 @@ export function criarTicketGoogle(imagem,{ean,adminId,segredo,agora=Date.now()}=
     titulo:String(imagem?.titulo||'').slice(0,180),
     exp:agora+TEMPO_TICKET
   };
-  const dados=Buffer.from(JSON.stringify(p)).toString('base64url');
-  return dados+'.'+assinatura(dados,segredo);
+  let dados=Buffer.from(JSON.stringify(p)).toString('base64url');
+  let ticket=dados+'.'+assinatura(dados,segredo);
+  // Nunca renderizar botão cujo ticket exceda o limite aceito no resgate.
+  // Preservar URL principal e remover referências opcionais se necessário.
+  if(ticket.length>4400){
+    p.miniatura='';
+    dados=Buffer.from(JSON.stringify(p)).toString('base64url');
+    ticket=dados+'.'+assinatura(dados,segredo);
+  }
+  if(ticket.length>4400){
+    p.pagina='';
+    dados=Buffer.from(JSON.stringify(p)).toString('base64url');
+    ticket=dados+'.'+assinatura(dados,segredo);
+  }
+  return ticket.length<=4400?ticket:'';
 }
 export function validarTicketGoogle(ticket,{ean,adminId,segredo,agora=Date.now()}={}){
   if(typeof ticket!=='string'||ticket.length>4400||!segredo||!adminId)return null;
