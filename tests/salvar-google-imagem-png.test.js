@@ -50,6 +50,25 @@ test('download usa URL assinada e valida bytes PNG sem usar miniatura',async()=>
  assert.equal(r.mime,'image/png');
  assert.deepEqual(urls,[imagem.url]);
 });
+
+test('se imagem original recusar download, tenta miniatura que veio no ticket assinado',async()=>{
+ const minhaImagem={...imagem,miniatura:'https://cdn.fabricante.com.br/miniatura.png'};
+ const assinado=criarTicketGoogle(minhaImagem,credentials);
+ const validado=validarTicketGoogle(assinado,credentials);
+ assert.equal(validado.miniatura,minhaImagem.miniatura);
+ const calls=[];
+ const r=await baixarFotoGoogleEscolhida([validado.url,validado.miniatura],{
+   fetcher:async url=>{
+     calls.push(url);
+     return url===validado.url?resp(403):resp(200);
+   }
+ });
+ assert.equal(r.ok,true);
+ assert.equal(r.mime,'image/png');
+ assert.equal(r.alternativa,true);
+ assert.deepEqual(calls,[validado.url,validado.miniatura]);
+});
+
 test('não segue redirect para IP privado, HTML ou imagem muito grande',async()=>{
  const redirect=await baixarFotoGoogleEscolhida(imagem.url,{
    fetcher:async()=>resp(302,foto,'https://127.0.0.1/segredo.png')
