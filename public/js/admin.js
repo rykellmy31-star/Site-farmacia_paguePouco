@@ -63,6 +63,30 @@
 
   async function post(path, body) { return api(path, { method: 'POST', body: body || {} }); }
 
+  // Seleção de produtos da semana; somente os itens visíveis na página.
+  // Formulário separado da tabela para não aninhar forms das ações existentes.
+  const formPromocoesDias=$('#formPromocoesDias');
+  if(formPromocoesDias){
+    const todos=$('#selecionarTodosPromocoes');
+    const checkboxes=$('.selecionarProdutoPromocao');
+    todos?.addEventListener('change',()=>{
+      checkboxes.filter(el=>!el.disabled).forEach(el=>{el.checked=todos.checked;});
+    });
+    checkboxes.forEach(el=>el.addEventListener('change',()=>{
+      if(!todos)return;
+      const ativos=checkboxes.filter(input=>!input.disabled);
+      const marcados=ativos.filter(input=>input.checked).length;
+      todos.checked=ativos.length>0&&marcados===ativos.length;
+      todos.indeterminate=marcados>0&&marcados<ativos.length;
+    }));
+    formPromocoesDias.addEventListener('submit',ev=>{
+      if(!checkboxes.some(el=>el.checked&&!el.disabled)){
+        ev.preventDefault();
+        notificar('Marque pelo menos um produto para organizar por dia.','erro');
+      }
+    });
+  }
+
   /* ------------------------------ uploads ------------------------------ */
   function configurarUpload(zonaSel, inputSel, aoEnviar) {
     const zona = $(zonaSel);
