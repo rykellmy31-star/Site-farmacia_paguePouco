@@ -1471,7 +1471,7 @@ function registrarApi(app, db) {
     });
     res.set('Cache-Control','no-store');
     if(!escolha)return void res.text('Seleção expirada ou inválida. Pesquise novamente.',403);
-    const arquivo=await baixarFotoGoogleEscolhida(escolha.url);
+    const arquivo=await baixarFotoGoogleEscolhida([escolha.url,escolha.miniatura]);
     if(!arquivo.ok)return void res.text(arquivo.motivo,422);
     res.set('Content-Type',arquivo.mime);
     res.set('Content-Length',String(arquivo.bytes.length));
