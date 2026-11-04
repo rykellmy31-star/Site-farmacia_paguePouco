@@ -9,7 +9,14 @@ const NOMES={
   quinta:'quinta-feira',sexta:'sexta-feira',sabado:'sábado',domingo:'domingo'
 };
 const DATA=/^\d{4}-\d{2}-\d{2}$/;
-const br=(v)=>DATA.test(String(v||''))?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):null;
+const br=v=>{
+  if(!DATA.test(String(v||'')))return null;
+  const [ano,mes,dia]=v.split('-').map(Number);
+  const data=new Date(Date.UTC(ano,mes-1,dia));
+  if(data.getUTCFullYear()!==ano||data.getUTCMonth()!==mes-1||data.getUTCDate()!==dia)
+    return null;
+  return v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4);
+};
 export function vigenciasPromocaoInova(produto,momento=new Date()){
   const hoje=diaLocalFarmacia(momento),dia=diaSemanaLocalFarmacia(hoje);
   const registros=Array.isArray(produto?.inovaPromocoes)?produto.inovaPromocoes:[];
