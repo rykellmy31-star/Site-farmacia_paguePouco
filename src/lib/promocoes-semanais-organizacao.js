@@ -20,8 +20,8 @@ export function diasPromocaoInova(produto,referencia=new Date()){
   const hoje=diaLocalFarmacia(referencia);
   return [...new Set((Array.isArray(produto?.inovaPromocoes)?produto.inovaPromocoes:[])
     .filter(p=>p&&VALIDOS.has(p.diaSemana) &&
-      /^\\d{4}-\\d{2}-\\d{2}$/.test(String(p.inicio||'')) &&
-      /^\\d{4}-\\d{2}-\\d{2}$/.test(String(p.fim||'')) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(p.inicio||'')) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(p.fim||'')) &&
       p.fim>=hoje && p.fim>=p.inicio)
     .map(p=>p.diaSemana))];
 }
