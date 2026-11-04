@@ -63,7 +63,7 @@ export function candidatosGoogleImagens(json,ean){
 }
 
 export async function consultarGoogleImagensEAN(codigo,{
-  apiToken='',zone='',fetcher=globalThis.fetch,timeoutMs=12000,
+  apiToken='',zone='',fetcher=globalThis.fetch,timeoutMs=55000,
 }={}){
   const ean=normalizarEAN(codigo);
   if(!eanValido(ean))
@@ -74,10 +74,13 @@ export async function consultarGoogleImagensEAN(codigo,{
     return {ok:false,status:503,erro:'O nome da zona SERP não é válido.'};
   const google=new URL('https://www.google.com/search');
   google.searchParams.set('q','"'+ean+'" produto embalagem');
-  google.searchParams.set('tbm','isch');
+  google.searchParams.set('udm','2'); // Google Imagens: formato atual documentado
   google.searchParams.set('gl','br');
   google.searchParams.set('hl','pt-BR');
   google.searchParams.set('brd_json','1');
+  // Uma SERP pode levar dezenas de segundos. Não repita automaticamente
+  // chamadas: a conta possui cota gratuita limitada a consultas.
+  const inicio=Date.now();
   let response;
   try{
     response=await fetcher(ENDPOINT,{
@@ -86,20 +89,51 @@ export async function consultarGoogleImagensEAN(codigo,{
       body:JSON.stringify({zone,url:google.href,format:'raw'}),
       signal:AbortSignal.timeout(timeoutMs),
     });
-  }catch{
-    return {ok:false,status:502,erro:'Não foi possível consultar o Google Imagens agora.'};
+  }catch(erro){
+    // Nunca imprimir err.message: o provedor pode incluir cabeçalhos na exceção.
+    const nome=String(erro?.name||'');
+    const duracaoMs=Math.max(0,Date.now()-inicio);
+    const esgotado=['TimeoutError','AbortError'].includes(nome)||duracaoMs>=timeoutMs-200;
+    const codigo=esgotado?'BD_TIMEOUT':'BD_REDE';
+    console.warn('[brightdata] consulta falhou',codigo,'duracaoMs',duracaoMs);
+    return {ok:false,status:esgotado?504:502,codigo,
+      erro:esgotado?
+        'A pesquisa ultrapassou o limite de '+Math.ceil(timeoutMs/1000)+' segundos. Tente novamente mais tarde.':
+        'Falha de conexão entre a Cloudflare e a Bright Data. Verifique a disponibilidade da API.'};
   }
-  if(!response.ok){
-    const status=response.status===401||response.status===403?503:502;
-    return {ok:false,status,erro:status===503?
-      'A Bright Data recusou as credenciais ou a zona. Confira a API configurada.':
-      'A Bright Data não retornou resultados. Confira a zona SERP e tente novamente.'};
+  const codigoRemoto=String(response.headers?.get?.('x-brd-error-code')||
+    response.headers?.get?.('x-brd-err-code')||'').slice(0,45);
+  const codigoSeguro=/^[a-z0-9_.-]{1,45}$/i.test(codigoRemoto)?codigoRemoto:'';
+  const erroRemoto=!!(response.headers?.get?.('x-brd-error')||
+    response.headers?.get?.('x-brd-err-msg'));
+  if(!response.ok||erroRemoto){
+    let codigo='BD_PROVEDOR',status=502;
+    let mensagem='A Bright Data não conseguiu concluir a pesquisa. Verifique a zona SERP no painel.';
+    if(response.status===401||response.status===403){
+      codigo='BD_AUTORIZACAO';status=503;
+      mensagem='A Bright Data recusou a chave de API ou as permissões. Confira API Keys e a zona SERP.';
+    }else if(response.status===400){
+      codigo='BD_CONFIGURACAO';status=503;
+      mensagem='A Bright Data recusou a configuração da busca. Confirme o tipo SERP API e o nome exato da zona.';
+    }else if(response.status===402){
+      codigo='BD_FRANQUIA';status=503;
+      mensagem='A Bright Data exige conferir o saldo ou a franquia gratuita. Não contrate plano pago sem revisar sua conta.';
+    }else if(response.status===429){
+      codigo='BD_LIMITE';status=429;
+      mensagem='A Bright Data limitou as consultas. Aguarde antes de tentar novamente.';
+    }
+    return {ok:false,status,codigo,referencia:codigoSeguro||undefined,erro:mensagem};
   }
   let json;
   try{json=await response.json()}catch{
-    return {ok:false,status:502,erro:'A zona SERP não devolveu JSON estruturado de imagens.'};
+    return {ok:false,status:502,codigo:'BD_FORMATO',
+      erro:'A zona SERP retornou uma resposta que não é JSON. Confira se a zona é do tipo SERP API.'};
   }
   const dados=normalizarResposta(json);
+  if(dados?.error||dados?.errors?.length){
+    return {ok:false,status:502,codigo:'BD_RESPOSTA_ERRO',
+      erro:'A Bright Data retornou uma mensagem de erro. Confirme a zona SERP e o acesso à pesquisa de imagens.'};
+  }
   if(!dados||!listasDeImagens(dados).length)
     return {ok:true,ean,imagens:[],mensagem:'Nenhuma imagem estruturada retornada. Verifique se a zona aceita Google Imagens com brd_json=1.'};
   const imagens=candidatosGoogleImagens(dados,ean);
