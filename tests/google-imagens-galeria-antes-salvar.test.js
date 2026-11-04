@@ -5,28 +5,25 @@ import {readFileSync} from 'node:fs';
 const admin=readFileSync(new URL('../public/js/admin.js',import.meta.url),'utf8');
 const routes=readFileSync(new URL('../src/routes/admin.js',import.meta.url),'utf8');
 
-test('botão Google usa querySelectorAll e nunca tenta .forEach em um único elemento',()=>{
-  const inicio=admin.indexOf("salvar.addEventListener('click',async()=>{");
+test('seleção de Google Imagens é imediata, sem executar download no clique',()=>{
+  const inicio=admin.indexOf("salvar.addEventListener('click',()=>{");
   const fim=admin.indexOf('card.appendChild(salvar)',inicio);
   assert.ok(inicio>0&&fim>inicio);
-  const action=admin.slice(inicio,fim);
-  assert.match(action,/const botoes=\$\$\('button',lista\)/);
-  assert.doesNotMatch(action,/const botoes=\$\('button',lista\)/);
-  assert.match(action,/finally\s*\{[\s\S]*botoes\.forEach\(b=>b\.disabled=false\)/);
-  assert.match(action,/if\(salvandoFotoGoogle\)return;/);
-  assert.match(action,/salvandoFotoGoogle=false;/);
+  const trecho=admin.slice(inicio,fim);
+  assert.match(trecho,/mostrarFotoGooglePendente\(item,ean\)/);
+  assert.match(trecho,/galeriaProduto/);
+  assert.match(trecho,/Salvar alterações/);
+  assert.doesNotMatch(trecho,/enviarPNG\(/);
+  assert.doesNotMatch(trecho,/vincular-imagem-google/);
 });
-test('clique adiciona na galeria do produto e NÃO grava cadastro sem Salvar alterações',()=>{
-  const inicio=admin.indexOf("salvar.addEventListener('click',async()=>{");
-  const fim=admin.indexOf('card.appendChild(salvar)',inicio);
-  const action=admin.slice(inicio,fim);
-  assert.match(action,/enviarPNG\(ean,0,contextoBuscaImagemEAN\(\),proxy\)/);
-  assert.match(action,/definirFotoGoogleFormulario\(midia,item\.pagina\|\|item\.url\)/);
-  assert.match(action,/galeriaProduto/);
-  assert.match(action,/Salvar alterações/);
-  assert.doesNotMatch(action,/vincular-imagem-google/);
-  assert.doesNotMatch(action,/post\('\/admin\/api\/produtos\/[^']+'/,);
-  assert.match(admin,/body: new FormData\(form\)/);
+test('somente Salvar alterações do produto converte e envia PNG antes do FormData',()=>{
+ const inicio=admin.indexOf("if(fotoGooglePendente){");
+ const png=admin.indexOf("await concluirFotoGooglePendente()",inicio);
+ const envio=admin.indexOf("body: new FormData(form)",png);
+ assert.ok(inicio>0&&png>inicio&&envio>png);
+ assert.match(admin,/const midia=await enviarPNG\(escolha\.ean,0,contextoBuscaImagemEAN\(\),url\)/);
+ assert.match(admin,/if\(!definirFotoGoogleFormulario\(midia,escolha\.origem\)\)/);
+ assert.match(admin,/if\(buscaImagemAntesDeSalvar&&podeAtualizarFotoEAN\(\)&&!fotoGooglePendente\)/);
 });
 test('troca somente fotos (preserva vídeos), usa inputs do formulário, e não trava por DOM singleton',()=>{
   const inicio=admin.indexOf('function definirFotoGoogleFormulario(');
