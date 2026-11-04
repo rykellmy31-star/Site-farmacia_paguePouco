@@ -336,7 +336,12 @@
         if(buscaDescricaoAntesDeSalvar&&
           !($('#editorDescricao')?.textContent||'').trim())
           await buscaDescricaoAntesDeSalvar({silencioso:true});
-        if(buscaImagemAntesDeSalvar&&podeAtualizarFotoEAN())
+        if(fotoGooglePendente){
+          if(botao)botao.textContent='Preparando a foto PNG...';
+          await concluirFotoGooglePendente();
+          if(botao)botao.textContent='Salvando produto...';
+        }
+        if(buscaImagemAntesDeSalvar&&podeAtualizarFotoEAN()&&!fotoGooglePendente)
           await buscaImagemAntesDeSalvar({silencioso:true});
         if(buscaMedidasAntesDeSalvar&&
           ['peso','altura','largura','comprimento'].some(nome=>
@@ -454,6 +459,10 @@
   /* --- Ferramentas EAN independentes: imagem PNG e medidas logísticas --- */
   let buscaImagemAntesDeSalvar=null, buscaMedidasAntesDeSalvar=null,
     buscaDescricaoAntesDeSalvar=null;
+  // A escolha do Google aparece imediatamente na galeria; o PNG será
+  // baixado e validado somente quando Salvar alterações for pressionado.
+  let fotoGooglePendente=null;
+  let preparandoFotoGoogle=false;
   const formEAN=$('#formProduto');
   const eanAtual=()=>String(formEAN?.querySelector('[name="ean"]')?.value||'').replace(/[\s.-]/g,'');
   function fotoEANLegadaFormulario(){
@@ -679,6 +688,64 @@
     }
     return ligada;
   }
+  function mostrarFotoGooglePendente(item,ean){
+    if(!formEAN||!item?.ticket)return false;
+    const galeria=$('#galeriaProduto');
+    if(!galeria)return false;
+    // Não remover fotos nem inputs ainda: o operador só confirmou uma prévia.
+    galeria.querySelectorAll('[data-google-pendente="1"]').forEach(el=>el.remove());
+    const card=document.createElement('div');
+    card.className='item-midia';
+    card.dataset.googlePendente='1';
+    card.dataset.tipo='preview';
+    card.style.maxWidth='240px';
+    const rotulo=document.createElement('p');
+    rotulo.className='texto-pequeno';
+    rotulo.textContent='Foto escolhida — pendente. Clique em Salvar alterações para confirmar.';
+    const foto=document.createElement('img');
+    foto.src=item.miniatura||item.url;
+    foto.referrerPolicy='no-referrer';
+    foto.alt=String(item.titulo||'Foto escolhida do produto');
+    foto.style.objectFit='contain';
+    card.append(foto,rotulo);
+    galeria.prepend(card);
+    fotoGooglePendente={
+      ean,ticket:item.ticket,origem:item.pagina||item.url,
+      titulo:String(item.titulo||'')
+    };
+    return true;
+  }
+  async function concluirFotoGooglePendente(){
+    if(!fotoGooglePendente||preparandoFotoGoogle)return;
+    preparandoFotoGoogle=true;
+    const escolha=fotoGooglePendente;
+    const status=$('#resultadoGoogleImagensEAN');
+    const galeria=$('#galeriaProduto');
+    const preview=galeria?.querySelector('[data-google-pendente="1"]');
+    const aviso=preview?.querySelector('p');
+    if(status)status.textContent='Convertendo a foto selecionada em PNG...';
+    if(aviso)aviso.textContent='Preparando foto PNG; o cadastro ainda não foi salvo...';
+    try{
+      if(escolha.ean!==eanAtual())throw new Error('O EAN mudou. Escolha a foto novamente.');
+      const url='/admin/api/produtos/google-imagens/arquivo?'+
+        new URLSearchParams({ean:escolha.ean,ticket:escolha.ticket}).toString();
+      const midia=await enviarPNG(escolha.ean,0,contextoBuscaImagemEAN(),url);
+      if(escolha!==fotoGooglePendente||escolha.ean!==eanAtual())
+        throw new Error('A seleção mudou. Escolha a foto novamente.');
+      if(!definirFotoGoogleFormulario(midia,escolha.origem))
+        throw new Error('Não foi possível vincular o PNG à galeria.');
+      if(status)status.textContent='✅ Foto PNG pronta. Salvando as alterações do produto...';
+      return midia;
+    }catch(err){
+      const msg=err.message||'Não foi possível preparar a foto selecionada.';
+      if(status)status.textContent='Não foi possível salvar a imagem: '+msg;
+      if(aviso)aviso.textContent='Erro: '+msg+' Escolha outra foto ou tente salvar novamente.';
+      // Preserva fotos antigas e deixa seleção disponível para tentar de novo.
+      throw new Error('A imagem não foi salva: '+msg);
+    }finally{
+      preparandoFotoGoogle=false;
+    }
+  }
   async function pesquisarGoogleImagensEAN(){
     const ean=eanAtual();
     const botao=$('#botaoGoogleImagensEAN'),status=$('#resultadoGoogleImagensEAN');
@@ -730,40 +797,23 @@
           const salvar=document.createElement('button');
           salvar.type='button';
           salvar.className='botao pequeno mt-1';
-          salvar.textContent='💾 Salvar esta foto (PNG)';
-          salvar.addEventListener('click',async()=>{
-            if(salvandoFotoGoogle)return;
+          salvar.textContent='💾 Escolher esta foto';
+          salvar.addEventListener('click',()=>{
             if(ean!==eanAtual()){
               if(status)status.textContent='O EAN foi alterado. Pesquise novamente.';
               return;
             }
-            salvandoFotoGoogle=true;
-            const botoes=$$('button',lista);
-            botoes.forEach(b=>b.disabled=true);
-            if(status)status.textContent='Baixando e convertendo a foto para PNG...';
-            try{
-              const proxy='/admin/api/produtos/google-imagens/arquivo?'+
-                new URLSearchParams({ean,ticket:item.ticket}).toString();
-              // Somente prepara o PNG no armazenamento. O produto permanece
-              // sem alterações até o operador clicar em Salvar alterações.
-              const midia=await enviarPNG(ean,0,contextoBuscaImagemEAN(),proxy);
-              if(ean!==eanAtual())throw new Error('O EAN mudou durante o envio.');
-              if(!definirFotoGoogleFormulario(midia,item.pagina||item.url))
-                throw new Error('Não foi possível incluir a foto na galeria.');
-              if(status)status.textContent='✅ Foto na galeria! Clique em Salvar alterações.';
-              notificar('Foto PNG na galeria. Clique em Salvar alterações.');
-              $$('#listaGoogleImagensEAN button').forEach(b=>{
-                b.textContent='💾 Salvar esta foto (PNG)';
-              });
-              salvar.textContent='✅ Foto na galeria';
-              $('#galeriaProduto')?.scrollIntoView?.({behavior:'smooth',block:'center'});
-            }catch(err){
-              if(status)status.textContent=err.message||'Erro ao preparar foto.';
-              notificar(err.message||'Erro ao preparar foto.','erro');
-            }finally{
-              salvandoFotoGoogle=false;
-              botoes.forEach(b=>b.disabled=false);
+            if(!mostrarFotoGooglePendente(item,ean)){
+              if(status)status.textContent='Não foi possível abrir a galeria do produto.';
+              return;
             }
+            for(const btn of $$('button',lista)){
+              btn.textContent='💾 Escolher esta foto';
+            }
+            salvar.textContent='✅ Foto escolhida';
+            if(status)status.textContent='✅ Foto na galeria. Clique em Salvar alterações do produto.';
+            notificar('Foto escolhida! Confirme em Salvar alterações.');
+            $('#galeriaProduto')?.scrollIntoView?.({behavior:'smooth',block:'center'});
           });
           card.appendChild(salvar);
         }
