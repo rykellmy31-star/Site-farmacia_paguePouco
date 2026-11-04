@@ -160,6 +160,8 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
         '<input type="hidden" name="filtroCategoria" value="'+e(filtros.categoria||'')+'">'+
         '<input type="hidden" name="filtroStatus" value="'+e(filtros.status||'')+'">'+
         '<input type="hidden" name="filtroDia" value="'+e(filtros.diaPromocao||'')+'">'+
+        '<label class="texto-pequeno"><input type="checkbox" id="selecionarTodosPromocoes" '+
+          'aria-label="Selecionar todos os produtos desta página"> Selecionar todos desta página</label>'+
         '<label>Organizar selecionados por dia<select name="dia" required aria-label="Dia da promoção">'+
           '<option value="">Escolha um dia</option>'+
           DIAS_PROMOCAO.map(d=>'<option value="'+e(d.id)+'"'+
@@ -174,8 +176,7 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
     ${painel({
       semPadding: true,
       corpo: tabelaAdmin({
-        colunas: [...(ctx.adminUser?.role==='super_admin' ?
-          ['<label class="texto-pequeno"><input type="checkbox" id="selecionarTodosPromocoes" aria-label="Selecionar todos os produtos desta página"> Todos</label>'] : []),
+        colunas: [...(ctx.adminUser?.role==='super_admin' ? ['Selecionar'] : []),
           'Foto', 'Produto', 'Categoria', 'Preço', 'Estoque', 'Situação', 'Ações'],
         linhas: produtos.map((p) => {
           const venda = podeVender(p);
