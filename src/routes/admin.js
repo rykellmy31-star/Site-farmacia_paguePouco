@@ -1493,7 +1493,7 @@ function registrarApi(app, db) {
     const url=String(req.body?.imagemUrl||'');
     const media=db.collection('midia').findOne(m=>m.url===url&&m.ext==='png'&&m.tipo==='image'&&
       m.autorId===req.adminUser.id&&Number(m.largura)>=600&&Number(m.altura)>=600&&
-      Date.now()-Date.parse(m.criadoEm)>0&&Date.now()-Date.parse(m.criadoEm)<25*60*1000);
+      Date.now()-Date.parse(m.criadoEm)>=0&&Date.now()-Date.parse(m.criadoEm)<25*60*1000);
     if(!media)
       return void res.json({ok:false,erro:'PNG válido não encontrado. Escolha e salve novamente.'},400);
     const anterior=(p.imagens||[]).map(img=>img.url);
