@@ -48,6 +48,8 @@ jobs:
         run: node --test tests/busca-descricao-ean.test.js
       - name: Validar Google Imagens via Bright Data sem chamadas pagas
         run: node --test tests/brightdata-google-imagens.test.js
+      - name: Validar foto escolhida PNG e proteção do proxy Google
+        run: node --test tests/salvar-google-imagem-png.test.js
       - name: Validar fallback das origens de imagem por EAN
         run: node --test tests/fallback-origem-ean.test.js
       - name: Validar pesquisa de fotos por fabricante em catálogos abertos
