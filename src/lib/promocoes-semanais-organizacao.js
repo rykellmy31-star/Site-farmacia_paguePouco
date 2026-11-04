@@ -3,6 +3,8 @@
  * NÃO altera preços, períodos do InovaFarma nem inicia desconto no checkout.
  * Marcações manuais servem somente ao planejamento e aos filtros do painel.
  */
+import {diaLocalFarmacia} from './inovafarma-promocoes-precos.js';
+
 export const DIAS_PROMOCAO=[
   {id:'segunda',nome:'Segunda-feira'},
   {id:'terca',nome:'Terça-feira'},
@@ -14,9 +16,13 @@ export const DIAS_PROMOCAO=[
 ];
 const VALIDOS=new Set(DIAS_PROMOCAO.map(d=>d.id));
 const LISTA_LIMITE=25;
-export function diasPromocaoInova(produto){
+export function diasPromocaoInova(produto,referencia=new Date()){
+  const hoje=diaLocalFarmacia(referencia);
   return [...new Set((Array.isArray(produto?.inovaPromocoes)?produto.inovaPromocoes:[])
-    .filter(p=>p&&VALIDOS.has(p.diaSemana))
+    .filter(p=>p&&VALIDOS.has(p.diaSemana) &&
+      /^\\d{4}-\\d{2}-\\d{2}$/.test(String(p.inicio||'')) &&
+      /^\\d{4}-\\d{2}-\\d{2}$/.test(String(p.fim||'')) &&
+      p.fim>=hoje && p.fim>=p.inicio)
     .map(p=>p.diaSemana))];
 }
 export function diasPromocaoMarcados(produto){
