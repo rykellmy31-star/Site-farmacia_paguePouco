@@ -100,7 +100,7 @@ test('salvamento selecionado mantém uma só imagem PNG e substitui somente com 
  assert.match(js,/Escolher esta foto/);
  assert.match(js,/enviarPNG\(escolha.ean,0,contextoBuscaImagemEAN\(\),url\)/);
  assert.match(js,/definirFotoGoogleFormulario/);
- assert.match(js,/galeria\?\.querySelectorAll\('\.item-midia\[data-tipo="image"\]'\)/);
+ assert.match(js,/galeria\?\.querySelectorAll\('\.item-midia\[data-tipo="image"\],\[data-google-pendente="1"\]'\)/);
  assert.match(view,/id="botaoGoogleImagensEAN"/);
  assert.doesNotMatch(route,/app\.post\('\/admin\/api\/produtos\/google-imagens\/lote'/);
 });
