@@ -51,6 +51,19 @@ test('download usa URL assinada e valida bytes PNG sem usar miniatura',async()=>
  assert.deepEqual(urls,[imagem.url]);
 });
 
+test('ticket com três URLs longas ainda é validável ou é recusado antes de renderizar',()=>{
+ const longo='x'.repeat(1500);
+ const imagemGrande={...imagem,
+  url:'https://cdn.fabricante.com.br/a.jpg?foto='+longo,
+  miniatura:'https://cdn.fabricante.com.br/b.jpg?mini='+longo,
+  pagina:'https://fabricante.com.br/produto?origem='+longo
+ };
+ const t=criarTicketGoogle(imagemGrande,credentials);
+ assert.ok(t.length<=4400);
+ assert.ok(t.length>0);
+ assert.equal(validarTicketGoogle(t,credentials).url,imagemGrande.url);
+});
+
 test('se imagem original recusar download, tenta miniatura que veio no ticket assinado',async()=>{
  const minhaImagem={...imagem,miniatura:'https://cdn.fabricante.com.br/miniatura.png'};
  const assinado=criarTicketGoogle(minhaImagem,credentials);
