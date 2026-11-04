@@ -8,6 +8,7 @@ import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
 import { statusOperacionalExibido } from '../../lib/orders.js';
 import {vigenciasPromocaoInova} from '../../lib/rotulos-vigencia-inova.js';
+import {DIAS_PROMOCAO,diasPromocaoMarcados,diasPromocaoInova} from '../../lib/promocoes-semanais-organizacao.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -109,6 +110,9 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       </div>
     </div>
 
+    ${/^[0-9]{1,2}$/.test(String(filtros.promosOrganizadas||'')) ?
+      '<div class="alerta info">'+e(filtros.promosOrganizadas)+
+      ' produto(s) tiveram marcação organizacional atualizada. Descontos não foram modificados.</div>' : ''}
     ${painel({
       corpo: `<form class="barra-ferramentas" method="get" action="/admin/produtos" style="margin:0">
         <div class="linha centro" style="gap:6px;flex:1;min-width:min(100%,260px)">
@@ -134,19 +138,54 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
           <option value="em_estoque" ${filtros.status === 'em_estoque' ? 'selected' : ''}>Em estoque</option>
           <option value="bloqueado" ${filtros.status === 'bloqueado' ? 'selected' : ''}>Bloqueados para venda</option>
         </select>
+        <label class="texto-pequeno" for="diaPromocaoFiltro" style="display:flex;flex-direction:column;gap:3px">
+          Promoções por dia
+          <select id="diaPromocaoFiltro" name="diaPromocao" aria-label="Filtrar promoções por dia da semana">
+            <option value="">Todos os dias</option>
+            ${DIAS_PROMOCAO.map(d=>'<option value="'+e(d.id)+'"'+
+              (filtros.diaPromocao===d.id?' selected':'')+'>'+e(d.nome)+'</option>').join('')}
+            <option value="sem_dia" ${filtros.diaPromocao==='sem_dia'?'selected':''}>Sem dia de promoção marcado</option>
+          </select>
+        </label>
         <button class="botao secundario" type="submit">Filtrar</button>
-        ${busca || filtros.categoria || filtros.status ? '<a class="botao secundario" href="/admin/produtos">Limpar</a>' : ''}
+        ${busca || filtros.categoria || filtros.status || filtros.diaPromocao ? '<a class="botao secundario" href="/admin/produtos">Limpar</a>' : ''}
       </form>`,
     })}
 
+    ${ctx.adminUser?.role==='super_admin' ?
+      '<form id="formPromocoesDias" method="post" action="/admin/produtos/promocoes-dias" class="painel mb-2" '+
+        'style="padding:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap">'+
+        '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+        '<input type="hidden" name="filtroBusca" value="'+e(busca)+'">'+
+        '<input type="hidden" name="filtroCategoria" value="'+e(filtros.categoria||'')+'">'+
+        '<input type="hidden" name="filtroStatus" value="'+e(filtros.status||'')+'">'+
+        '<input type="hidden" name="filtroDia" value="'+e(filtros.diaPromocao||'')+'">'+
+        '<label class="texto-pequeno"><input type="checkbox" id="selecionarTodosPromocoes" '+
+          'aria-label="Selecionar todos os produtos desta página"> Selecionar todos desta página</label>'+
+        '<label>Organizar selecionados por dia<select name="dia" required aria-label="Dia da promoção">'+
+          '<option value="">Escolha um dia</option>'+
+          DIAS_PROMOCAO.map(d=>'<option value="'+e(d.id)+'"'+
+            (filtros.diaPromocao===d.id?' selected':'')+'>'+e(d.nome)+'</option>').join('')+
+        '</select></label>'+
+        '<button class="botao pequeno" type="submit" name="acao" value="marcar">Marcar para este dia</button>'+
+        '<button class="botao pequeno secundario" type="submit" name="acao" value="desmarcar">Remover marcação</button>'+
+        '<div class="texto-pequeno texto-suave" style="flex-basis:100%">Selecione produtos usando as caixas da lista abaixo '+
+        '(até 25 nesta página). Marcação para organizar a semana — não cria nem modifica descontos; '+
+        'promoções do InovaFarma continuam controladas pelo ERP.</div>'+
+      '</form>' : ''}
     ${painel({
       semPadding: true,
       corpo: tabelaAdmin({
-        colunas: ['Foto', 'Produto', 'Categoria', 'Preço', 'Estoque', 'Situação', 'Ações'],
+        colunas: [...(ctx.adminUser?.role==='super_admin' ? ['Selecionar'] : []),
+          'Foto', 'Produto', 'Categoria', 'Preço', 'Estoque', 'Situação', 'Ações'],
         linhas: produtos.map((p) => {
           const venda = podeVender(p);
           const cat = ctx.db.collection('categories').get(p.categoriaId);
           return `<tr>
+            ${ctx.adminUser?.role==='super_admin' ?
+              '<td><input type="checkbox" class="selecionarProdutoPromocao" form="formPromocoesDias"'+
+              ' name="produtoIds[]" value="'+e(p.id)+'" aria-label="Selecionar '+e(p.nome)+'"'+
+              (p.inovaArquivado?.em?' disabled':'')+'></td>' : ''}
             <td><img class="mini" src="${e(p.imagens?.[0]?.url || '/img/produto-sem-foto.svg')}" alt=""></td>
             <td>
               <strong>${e(p.nome)}</strong><br>
@@ -165,6 +204,10 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
                   : '<br><span class="texto-pequeno texto-suave">Promoção InovaFarma: vigência indisponível no cadastro.</span>'
                 ) : (temPromocao(p) ?
                   '<br><span class="texto-pequeno texto-suave">Promoção manual — sem período informado</span>' : '')}
+              ${diasPromocaoMarcados(p).length ?
+                 '<br><span class="texto-pequeno texto-suave">Organizado para: '+
+                   diasPromocaoMarcados(p).map(d=>e(DIAS_PROMOCAO.find(x=>x.id===d)?.nome||d)).join(', ')+
+                 ' (sem alterar desconto)</span>' : ''}
             </td>
             <td>
               <strong>${e(p.estoque?.quantidade ?? 0)}</strong>
@@ -196,7 +239,8 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
         vazio: 'Nenhum produto encontrado com esses filtros.',
       }),
     })}
-    ${paginacaoAdmin({ pagina, total, porPagina, base: '/admin/produtos', query: { q: busca, ...filtros } })}`,
+    ${paginacaoAdmin({ pagina, total, porPagina, base: '/admin/produtos',
+      query: { q: busca, categoria:filtros.categoria, status:filtros.status, diaPromocao:filtros.diaPromocao } })}`,
   });
 }
 
