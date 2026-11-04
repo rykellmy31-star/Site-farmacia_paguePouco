@@ -7,6 +7,7 @@ import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
 import { statusOperacionalExibido } from '../../lib/orders.js';
+import {vigenciasPromocaoInova} from '../../lib/rotulos-vigencia-inova.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -101,6 +102,8 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       <div class="linha" style="gap:6px">
         <a class="botao" href="/admin/produtos/novo">+ Novo produto</a>
         <a class="botao secundario" href="/admin/produtos/importar">Importar/exportar</a>
+        ${ctx.adminUser?.role === 'super_admin' ?
+          '<a class="botao secundario" href="/admin/produtos/organizar-categorias">Organizar categorias sem classificação</a>' : ''}
         ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/produtos/substituir-catalogo">Zerar e importar novo catálogo InovaFarma</a>' : ''}
         ${ctx.adminUser?.role === 'super_admin' ? '<a class="botao secundario" href="/admin/produtos/inovafarma">Importar da InovaFarma</a>' : ''}
       </div>
@@ -154,7 +157,14 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
             <td>
               ${money(precoVigenteCentavos(p))}
               ${temPromocao(p) ? `<br><span class="texto-pequeno texto-suave"><s>${money(p.precoCentavos)}</s> −${descontoPercentual(p)}%</span>` : ''}
-              ${p.inovaPromocoes?.length ? '<br><span class="texto-pequeno texto-suave">Promoção InovaFarma (vigência automática)</span>' : ''}
+              ${p.inovaPromocoes?.length ? (
+                vigenciasPromocaoInova(p).length ?
+                  '<br><span class="texto-pequeno texto-suave">Promoção InovaFarma:</span>'+
+                  vigenciasPromocaoInova(p).map(v=>
+                    '<br><span class="texto-pequeno texto-suave">'+e(v.texto)+'</span>').join('')
+                  : '<br><span class="texto-pequeno texto-suave">Promoção InovaFarma: vigência indisponível no cadastro.</span>'
+                ) : (temPromocao(p) ?
+                  '<br><span class="texto-pequeno texto-suave">Promoção manual — sem período informado</span>' : '')}
             </td>
             <td>
               <strong>${e(p.estoque?.quantidade ?? 0)}</strong>

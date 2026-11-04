@@ -16,6 +16,8 @@ import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js
 import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.js';
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
 import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
+import {telaOrganizarCategoriasProdutos} from '../views/admin/organizar-categorias.js';
+import {planejarCategoriasProdutos,aplicarCategoriasProdutos} from '../lib/categorizar-produtos-sem-categoria.js';
 import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
 import { telaPreviaAplicacaoPromocoesInova } from '../views/admin/inovafarma-promocoes-aplicar.js';
 import { prepararPromocoesInova, consultarPromocoesInova, aplicarPromocoesInova } from '../lib/inovafarma-promocoes-aplicacao.js';
@@ -302,6 +304,38 @@ export function registrarRotasAdmin(app, db) {
     const total = todos.length;
     const produtos = todos.slice((pagina - 1) * porPagina, pagina * porPagina);
     res.html(telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias: db.collection('categories').all().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), filtros: { categoria, status } }));
+  });
+
+  // Organizar somente produtos que ainda não têm categoria.
+  // Prévia não escreve nada. Aplicação exige superadmin e confirmação explícita.
+  app.get('/admin/produtos/organizar-categorias',(req,res)=>{
+    if(!guard(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente o Super Administrador pode organizar o catálogo em lote.');
+    const plano=planejarCategoriasProdutos(db);
+    const mensagem=String(req.query.get('aplicados')||'');
+    res.html(telaOrganizarCategoriasProdutos(ctxAdmin(req,db),plano,{
+      mensagem:/^\d{1,5}$/.test(mensagem)?
+        mensagem+' produtos foram organizados com segurança.':''
+    }));
+  });
+  app.post('/admin/produtos/organizar-categorias/aplicar',(req,res)=>{
+    if(!guard(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente o Super Administrador pode organizar o catálogo em lote.');
+    const resultado=aplicarCategoriasProdutos(db,{
+      fingerprint:String(req.body?.fingerprint||''),
+      confirmacao:String(req.body?.confirmacao||''),
+      operadorId:req.adminUser.id
+    });
+    if(!resultado.ok)
+      return void res.status(resultado.status||409).html(
+        '<h1>Organização não realizada</h1><p>'+e(resultado.erro)+'</p>'+
+        '<p><a href="/admin/produtos/organizar-categorias">Rever a prévia</a></p>');
+    logAdmin(db,req.adminUser,'organizou_categorias_seguras','produto','lote',{
+      atualizados:resultado.atualizados
+    },req);
+    res.redirect('/admin/produtos/organizar-categorias?aplicados='+resultado.atualizados);
   });
 
   app.get('/admin/produtos/novo', (req, res) => {
