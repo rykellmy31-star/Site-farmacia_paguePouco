@@ -707,7 +707,17 @@
     foto.referrerPolicy='no-referrer';
     foto.alt=String(item.titulo||'Foto escolhida do produto');
     foto.style.objectFit='contain';
-    card.append(foto,rotulo);
+    const cancelar=document.createElement('button');
+    cancelar.type='button';
+    cancelar.className='botao pequeno secundario';
+    cancelar.textContent='Cancelar seleção';
+    cancelar.addEventListener('click',()=>{
+      fotoGooglePendente=null;
+      card.remove();
+      const status=$('#resultadoGoogleImagensEAN');
+      if(status)status.textContent='Seleção cancelada. Nenhuma foto do produto foi alterada.';
+    });
+    card.append(foto,rotulo,cancelar);
     galeria.prepend(card);
     fotoGooglePendente={
       ean,ticket:item.ticket,origem:item.pagina||item.url,
@@ -758,7 +768,6 @@
     if(botao)botao.disabled=true;
     if(lista)lista.replaceChildren();
     if(status)status.textContent='Consultando o Google Imagens pelo EAN...';
-    let salvandoFotoGoogle=false;
     try{
       const resultado=await post('/admin/api/produtos/google-imagens',{ean});
       if(ean!==eanAtual())return;
