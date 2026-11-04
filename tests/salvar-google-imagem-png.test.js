@@ -78,8 +78,8 @@ test('salvamento selecionado mantém uma só imagem PNG e substitui somente com 
  assert.match(route,/validarTicketGoogle/);
  assert.match(route,/m\.ext==='png'/);
  assert.match(route,/imagens:\[\{url,principal:true,ordem:1,legenda\}\]/);
- assert.match(js,/Salvar esta foto \(PNG\)/);
- assert.match(js,/enviarPNG\(ean,0,contextoBuscaImagemEAN\(\),proxy\)/);
+ assert.match(js,/Escolher esta foto/);
+ assert.match(js,/enviarPNG\(escolha.ean,0,contextoBuscaImagemEAN\(\),url\)/);
  assert.match(js,/definirFotoGoogleFormulario/);
  assert.match(js,/galeria\?\.querySelectorAll\('\.item-midia\[data-tipo="image"\]'\)/);
  assert.match(view,/id="botaoGoogleImagensEAN"/);
