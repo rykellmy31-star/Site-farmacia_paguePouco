@@ -17,6 +17,7 @@ import { planejarLimpezaCatalogoInova } from '../lib/inovafarma-limpeza-previa.j
 import { prepararLimpezaInova, aplicarLimpezaInova, restaurarProdutoArquivado, ErroRelatorioInova } from '../lib/inovafarma-limpeza-segura.js';
 import { telaPreviaPromocoesInova } from '../views/admin/inovafarma-promocoes-previa.js';
 import {telaOrganizarCategoriasProdutos} from '../views/admin/organizar-categorias.js';
+import {DIAS_PROMOCAO,filtrarPromocoesPorDia,alterarMarcacoesPromocao} from '../lib/promocoes-semanais-organizacao.js';
 import {planejarCategoriasProdutos,aplicarCategoriasProdutos} from '../lib/categorizar-produtos-sem-categoria.js';
 import { previsualizarPromocoesInova } from '../lib/inovafarma-promocoes-previa.js';
 import { telaPreviaAplicacaoPromocoesInova } from '../views/admin/inovafarma-promocoes-aplicar.js';
@@ -284,6 +285,7 @@ export function registrarRotasAdmin(app, db) {
     const busca = String(req.query.get('q') || '').trim();
     const categoria = req.query.get('categoria') || '';
     const status = req.query.get('status') || '';
+    const diaPromocao = req.query.get('diaPromocao') || '';
     const pagina = Number(req.query.get('pagina')) || 1;
     const porPagina = 25;
     let todos = db.collection('products').all();
@@ -300,10 +302,43 @@ export function registrarRotasAdmin(app, db) {
     if (status === 'estoque_baixo') todos = todos.filter((p) => Number(p.estoque?.quantidade || 0) <= Number(p.estoque?.minimo || 0));
     todos = filtrarProdutosPorEstoque(todos, status);
     if (status === 'bloqueado') todos = todos.filter((p) => p.ativo && !podeVender(p).ok);
+    todos = filtrarPromocoesPorDia(todos,diaPromocao);
     todos.sort((a, b) => String(b.atualizadoEm || '').localeCompare(String(a.atualizadoEm || '')));
     const total = todos.length;
     const produtos = todos.slice((pagina - 1) * porPagina, pagina * porPagina);
-    res.html(telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias: db.collection('categories').all().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), filtros: { categoria, status } }));
+    res.html(telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias: db.collection('categories').all().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), filtros: { categoria, status, diaPromocao, promosOrganizadas: req.query.get('promosOrganizadas') || '' } }));
+  });
+
+  // Marcação administrativa para facilitar a escolha dos produtos por dia.
+  // Não cria promoções, não modifica o CSV nem altera preços/checkout.
+  app.post('/admin/produtos/promocoes-dias',(req,res)=>{
+    if(!guard(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente o Super Administrador pode organizar produtos por dia.');
+    const original=req.body?.['produtoIds[]']??req.body?.produtoIds??[];
+    const produtoIds=Array.isArray(original)?original:original?[original]:[];
+    const resultado=alterarMarcacoesPromocao(db,{
+      produtoIds,dia:String(req.body?.dia||''),acao:String(req.body?.acao||'')
+    });
+    if(!resultado.ok)
+      return void res.status(resultado.status||400).html(
+        '<h1>Seleção não aplicada</h1><p>'+e(resultado.erro)+'</p>'+
+        '<p><a href="/admin/produtos">Voltar à lista de produtos</a></p>');
+    logAdmin(db,req.adminUser,'organizou_produtos_por_dia','produto','lote',{
+      dia:resultado.dia,acao:resultado.acao,quantidade:resultado.atualizados
+    },req);
+    const retorno=new URLSearchParams();
+    const q=String(req.body?.filtroBusca||'').slice(0,100);
+    const categoria=String(req.body?.filtroCategoria||'').slice(0,120);
+    const status=String(req.body?.filtroStatus||'').slice(0,50);
+    const diaFiltro=String(req.body?.filtroDia||'').slice(0,20);
+    if(q)retorno.set('q',q);
+    if(categoria)retorno.set('categoria',categoria);
+    if(status)retorno.set('status',status);
+    if(DIAS_PROMOCAO.some(d=>d.id===diaFiltro)||diaFiltro==='sem_dia')
+      retorno.set('diaPromocao',diaFiltro);
+    retorno.set('promosOrganizadas',String(resultado.atualizados));
+    res.redirect('/admin/produtos?'+retorno.toString());
   });
 
   // Organizar somente produtos que ainda não têm categoria.
