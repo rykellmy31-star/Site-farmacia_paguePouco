@@ -95,23 +95,23 @@ function ambiente({ autoplay = true, reduzirMovimento = false, slides = 3 } = {}
   };
 }
 
-test('rotação automática permanece em cada banner por quatro segundos', () => {
+test('rotação automática permanece em cada banner por seis segundos', () => {
   const c = ambiente();
-  c.avancar(3999);
+  c.avancar(5999);
   assert.equal(c.indice(), 0);
   c.avancar(1);
   assert.equal(c.indice(), 1);
-  c.avancar(3999);
+  c.avancar(5999);
   assert.equal(c.indice(), 1);
   c.avancar(1);
   assert.equal(c.indice(), 2);
-  c.avancar(4000);
+  c.avancar(6000);
   assert.equal(c.indice(), 0);
 });
 
 test('seta manual cancela avanço iminente e mantém banner por dez segundos completos', () => {
   const c = ambiente();
-  c.avancar(3900);
+  c.avancar(5900);
   c.proximo();
   assert.equal(c.indice(), 1);
   assert.equal(c.destacado(), 1);
@@ -121,7 +121,7 @@ test('seta manual cancela avanço iminente e mantém banner por dez segundos com
   assert.equal(c.indice(), 1);
   c.avancar(1);
   assert.equal(c.indice(), 2);
-  c.avancar(3999);
+  c.avancar(5999);
   assert.equal(c.indice(), 2);
   c.avancar(1);
   assert.equal(c.indice(), 0);
@@ -145,7 +145,7 @@ test('seta voltar, pontos e novos cliques reiniciam a pausa inteira', () => {
 
 test('arrastar carrossel também suspende avanço automático por dez segundos', () => {
   const c = ambiente();
-  c.avancar(3950);
+  c.avancar(5950);
   c.arrastar();
   c.avancar(9950);
   assert.equal(c.indice(), 0);
@@ -161,7 +161,7 @@ test('aba oculta interrompe contador e volta sem avanço instantâneo', () => {
   c.avancar(10000);
   assert.equal(c.indice(), 0);
   c.mostrar();
-  c.avancar(3999);
+  c.avancar(5999);
   assert.equal(c.indice(), 0);
   c.avancar(1);
   assert.equal(c.indice(), 1);
@@ -180,13 +180,13 @@ test('inicialização repetida não cria dois temporizadores no mesmo carrossel'
   const c = ambiente();
   c.reiniciar();
   assert.equal(c.timers(), 1);
-  c.avancar(4000);
+  c.avancar(6000);
   assert.equal(c.indice(), 1);
   assert.equal(c.timers(), 1);
 });
 
 test('o HTML referencia nova versão do JavaScript para evitar cache de navegador', () => {
   const html = readFileSync(new URL('../src/views/layout.js', import.meta.url), 'utf8');
-  assert.match(html, /app\.js\?v=carrossel-pausa-4s-10s-20261104/);
+  assert.match(html, /app\.js\?v=carrossel-pausa-6s-10s-20261104/);
   assert.doesNotMatch(codigoCarrossel, /setInterval\s*\(/);
 });
