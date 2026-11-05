@@ -12,6 +12,7 @@ import {
 import { formatDate } from '../lib/format.js';
 import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
 import { melhorParcelamentoSemJuros } from '../lib/payments/index.js';
+import { bannerDeveAparecer, ordenarBanners } from '../lib/banner-agendamento.js';
 
 /* ------------------------------------------------------------------ */
 /* HOME                                                                */
@@ -143,16 +144,14 @@ export function homePage(ctx) {
   const ofertasDoDia = vitrineProdutos(db, 'ofertas', Infinity);
   const ofertasVisiveis = secoesAtivas.some((s) => s.tipo === 'ofertas');
   const idsNasOfertas = new Set(ofertasVisiveis ? ofertasDoDia.map((p) => p.id) : []);
-  const banners = db.collection('banners').all()
-    .filter((b) => b.ativo !== false && (b.posicao || 'principal') === 'principal')
-    .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
-  const bannersSec = db.collection('banners').all()
-    .filter((b) => b.ativo !== false && b.posicao === 'secundario')
-    .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
+  const bannersHoje = db.collection('banners').all().filter((b) => bannerDeveAparecer(b));
+  const banners = ordenarBanners(bannersHoje.filter((b) => (b.posicao || 'principal') === 'principal'));
+  const bannersSec = ordenarBanners(bannersHoje.filter((b) => b.posicao === 'secundario'));
 
   const blocos = secoesAtivas.map((s) => {
     switch (s.tipo) {
       case 'banners':
+        if (!banners.length && !bannersSec.length) return '';
         return `<section class="secao" id="banners" style="margin-top:14px">${carrosselBanners(banners)}
           ${bannersSec.length ? `<div class="vitrine vitrine-banners mt-2" style="--colunas-banner:${Math.min(bannersSec.length, 3)}">
             ${bannersSec.map((b) => `<a href="${e(b.link || '#')}"><img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || '')}" loading="lazy" style="border-radius:12px"></a>`).join('')}
