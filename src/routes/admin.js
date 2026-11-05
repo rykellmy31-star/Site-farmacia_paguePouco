@@ -2571,6 +2571,12 @@ function registrarApi(app, db) {
 
   app.post('/admin/api/config/tema', async (req, res) => {
     if (!guardApi(req, res, 'configuracoes.editar')) return;
+    const temaAtual = getSetting(db, 'tema') || {};
+    const barraTopoCorFundo = String(req.body.barraTopoCorFundo ?? temaAtual.barraTopoCorFundo ?? '#fff0f0');
+    const barraTopoCorTexto = String(req.body.barraTopoCorTexto ?? temaAtual.barraTopoCorTexto ?? '#8b0000');
+    if (!/^#[0-9a-f]{6}$/i.test(barraTopoCorFundo) || !/^#[0-9a-f]{6}$/i.test(barraTopoCorTexto)) {
+      return void res.json({ ok: false, erro: 'Escolha cores válidas para a barra superior.' }, 400);
+    }
     const dados = {
       corPrimaria: cleanText(req.body.corPrimaria, 9),
       corPrimariaEscura: cleanText(req.body.corPrimariaEscura, 9),
@@ -2580,6 +2586,10 @@ function registrarApi(app, db) {
       logoAltura: Number(req.body.logoAltura) || 44,
       barraTopoAtiva: req.body.barraTopoAtiva === '1',
       barraTopoTexto: cleanText(req.body.barraTopoTexto, 200),
+      barraTopoCorFundo,
+      barraTopoCorTexto,
+      barraTopoPulsante: req.body.barraTopoPulsanteDefinida === '1'
+        ? req.body.barraTopoPulsante === '1' : temaAtual.barraTopoPulsante !== false,
       mostrarConsultaCep: req.body.mostrarConsultaCep === '1',
     };
     const arquivo = (req.files || [])[0];
