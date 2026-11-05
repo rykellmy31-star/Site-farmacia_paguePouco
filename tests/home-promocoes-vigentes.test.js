@@ -157,7 +157,7 @@ test('prioridade exige campanha semanal vigente e preserva filtros de estoque', 
   assert.deepEqual(ordenarOfertasVigentes([mensal], DATA_QUINTA).map(p => p.id), ['black']);
 });
 
-test('página inicial mantém a ordem semanal e nenhum produto é duplicado na vitrine', () => {
+test('página inicial mantém a ordem semanal e nenhum produto é duplicado na vitrine', async () => {
   // Este teste é independente do dia corrente: escolhe a terça/sexta calculada
   // pelo mesmo fuso da loja e verifica as referências reais da home.
   const { diaLocalFarmacia, diaSemanaLocalFarmacia } =
