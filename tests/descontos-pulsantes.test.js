@@ -13,7 +13,7 @@ const p = (id, desconto = 0) => ({
 test('produto com desconto real e vigente exibe selo -20% pulsante', () => {
   const html = cartaoProduto(p('oferta', 1000), { mostrarParcela: false });
   assert.match(html, /class="etiqueta-desconto oferta-pulsante">-20%<\/span>/);
-  assert.match(html, /R\$ 40,00/);
+  assert.match(html, /R\$\s40,00/);
 });
 
 test('produto sem desconto não recebe selo nem animação', () => {
