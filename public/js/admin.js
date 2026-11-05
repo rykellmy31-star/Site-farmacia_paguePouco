@@ -1330,6 +1330,41 @@
     }
   });
 
+  /* ---------- pré-visualização do fundo sazonal da página inicial ---------- */
+  const formFundoHome = document.querySelector('#formFundoHome');
+  if (formFundoHome) {
+    const preview = document.querySelector('#previewFundoHome');
+    const modo = formFundoHome.querySelector('[name="modoFundoHome"]');
+    const cor = formFundoHome.querySelector('[name="corFundoHome"]');
+    const posicao = formFundoHome.querySelector('[name="posicaoFundoHome"]');
+    const inputImagem = formFundoHome.querySelector('[name="imagemFundoHome"]');
+    const remover = formFundoHome.querySelector('[name="removerImagemFundoHome"]');
+    let urlTemporaria = '';
+    const posicionamentos = { centro: 'center center', topo: 'center top', baixo: 'center bottom' };
+    function atualizarPreviaFundo() {
+      if (!preview) return;
+      const fundoAtivo = modo?.value !== 'padrao';
+      const imagem = urlTemporaria || (remover?.checked ? '' : preview.dataset.imagemUrl);
+      preview.style.backgroundColor = fundoAtivo ? (cor?.value || '#fffafa') : '#fffafa';
+      preview.style.backgroundImage = fundoAtivo && modo?.value === 'imagem' && imagem
+        ? 'url("' + imagem + '")' : 'none';
+      preview.style.backgroundPosition = posicionamentos[posicao?.value] || 'center center';
+    }
+    for (const campo of [modo, cor, posicao, remover]) {
+      campo?.addEventListener('change', atualizarPreviaFundo);
+    }
+    cor?.addEventListener('input', atualizarPreviaFundo);
+    inputImagem?.addEventListener('change', () => {
+      if (urlTemporaria) URL.revokeObjectURL(urlTemporaria);
+      urlTemporaria = inputImagem.files?.[0] ? URL.createObjectURL(inputImagem.files[0]) : '';
+      atualizarPreviaFundo();
+    });
+    window.addEventListener('pagehide', () => {
+      if (urlTemporaria) URL.revokeObjectURL(urlTemporaria);
+    });
+    atualizarPreviaFundo();
+  }
+
   /* --------------------- máscara de CEP e preços ------------------------ */
   $$('input[data-mascara-cep]').forEach((inp) => {
     inp.addEventListener('input', () => {

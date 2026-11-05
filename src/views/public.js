@@ -181,6 +181,7 @@ export function homePage(ctx) {
 
   return paginaPublica(ctx, {
     titulo: '',
+    corpoClasse: 'pagina-inicial',
     conteudo: `<div class="container">${blocos}</div>`,
   });
 }

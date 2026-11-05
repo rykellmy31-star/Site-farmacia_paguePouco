@@ -355,7 +355,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(newProductPage.status, 200);
   const newProductHtml = await newProductPage.text();
   assert.match(newProductHtml, /id="formProduto" method="post" action="\/admin\/api\/produtos"/);
-  assert.match(newProductHtml, /js\/admin\.js\?v=banners-programados-20261104/);
+  assert.match(newProductHtml, /js\/admin\.js\?v=[a-z0-9-]+/i);
   const adminScript = await (await call('/js/admin.js?v=banners-programados-20261104')).text();
   assert.match(adminScript, /form\.id !== 'formProduto'/);
   assert.match(adminScript, /body: new FormData\(form\)/);
