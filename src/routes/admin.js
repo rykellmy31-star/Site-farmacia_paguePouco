@@ -2596,6 +2596,47 @@ function registrarApi(app, db) {
     res.redirect('/admin/configuracoes?salvo=tema');
   });
 
+
+  // Fundo tem formulário e upload próprios: nunca confundir a foto de fundo com o logotipo.
+  app.post('/admin/api/config/fundo-home', async (req, res) => {
+    if (!guardApi(req, res, 'configuracoes.editar')) return;
+    const modo = String(req.body.modoFundoHome || 'padrao');
+    const cor = String(req.body.corFundoHome || '#fffafa').trim();
+    const posicao = String(req.body.posicaoFundoHome || 'centro');
+    if (!['padrao', 'cor', 'imagem'].includes(modo) || !/^#[0-9a-f]{6}$/i.test(cor) ||
+        !['centro', 'topo', 'baixo'].includes(posicao)) {
+      return void res.json({ ok: false, erro: 'Escolha um tipo de fundo, uma cor e um enquadramento válidos.' }, 400);
+    }
+    const arquivos = req.files || [];
+    if (arquivos.length > 1 || arquivos.some((file) => file.field !== 'imagemFundoHome')) {
+      return void res.json({ ok: false, erro: 'Envie apenas uma imagem de fundo.' }, 400);
+    }
+    const arquivo = arquivos[0];
+    if (arquivo && !['image/jpeg', 'image/png', 'image/webp'].includes(detectFileType(arquivo.data)?.mime)) {
+      return void res.json({ ok: false, erro: 'A imagem de fundo precisa ser PNG, JPG ou WebP.' }, 400);
+    }
+    const temaAtual = getSetting(db, 'tema') || {};
+    let imagemUrl = req.body.removerImagemFundoHome === '1'
+      ? '' : (temaAtual.fundoHome?.imagemUrl || '');
+    if (modo === 'imagem' && !arquivo && !imagemUrl) {
+      return void res.json({ ok: false, erro: 'Escolha uma imagem antes de ativar o fundo com foto.' }, 400);
+    }
+    if (arquivo) {
+      try {
+        const reg = await saveUpload(db, arquivo, {
+          kind: 'image', userId: req.adminUser.id, userType: 'admin', nome: 'Fundo da página inicial',
+        });
+        imagemUrl = reg.url;
+      } catch (err) {
+        return void res.json({ ok: false, erro: err.message || 'Não foi possível salvar a imagem.' }, 400);
+      }
+    }
+    patchSetting(db, 'tema', { fundoHome: { modo, cor, imagemUrl, posicao } }, req.adminUser, req);
+    logAdmin(db, req.adminUser, 'alterou_fundo_home', 'configuracao', 'tema',
+      { modo, posicao, temImagem: !!imagemUrl }, req);
+    res.redirect('/admin/configuracoes?salvo=fundo-home');
+  });
+
   app.post('/admin/api/config/loja', (req, res) => {
     if (!guardApi(req, res, 'configuracoes.editar')) return;
     patchSetting(db, 'loja', {
