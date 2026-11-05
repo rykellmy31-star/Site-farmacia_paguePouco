@@ -272,7 +272,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=barra-topo-20261105">
+<link rel="stylesheet" href="/styles.css?v=barra-topo-forte-20261105">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
@@ -290,7 +290,7 @@ ${seo.googleAnalyticsId ? `<script async src="https://www.googletagmanager.com/g
 ${headExtra}
 </head>
 <body class="com-menu-mobile ${corpoClasse}${classeFundoHome}">
-${(tema.barraTopoAtiva && tema.barraTopoTexto) ? `<div class="barra-topo${tema.barraTopoPulsante !== false ? ' barra-topo-pulsante' : ''}" style="--barra-topo-fundo:${corBarraTopoFundo};--barra-topo-texto:${corBarraTopoTexto}">${sanitizeHtml(tema.barraTopoTexto)}</div>` : ''}
+${(tema.barraTopoAtiva && tema.barraTopoTexto) ? `<div class="barra-topo${tema.barraTopoPulsante !== false ? ' barra-topo-pulsante' : ''}" style="--barra-topo-fundo:${corBarraTopoFundo};--barra-topo-texto:${corBarraTopoTexto}"><span class="barra-topo-conteudo">${sanitizeHtml(tema.barraTopoTexto)}</span></div>` : ''}
 <div class="notificacao" id="notificacao" role="status" aria-live="polite"></div>
 ${cabecalho({ ...ctx, arvore })}
 <main id="conteudo">${conteudo}</main>
