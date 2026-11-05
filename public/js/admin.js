@@ -1365,6 +1365,32 @@
     atualizarPreviaFundo();
   }
 
+  /* -------- Prévia em tempo real da barra superior personalizável -------- */
+  const formularioTema = document.querySelector('form[action="/admin/api/config/tema"]');
+  const previaBarra = document.querySelector('#previewBarraTopo');
+  if (formularioTema && previaBarra) {
+    const corFundo = formularioTema.querySelector('[name="barraTopoCorFundo"]');
+    const corTexto = formularioTema.querySelector('[name="barraTopoCorTexto"]');
+    const textoBarra = formularioTema.querySelector('[name="barraTopoTexto"]');
+    const pulsante = formularioTema.querySelector('[name="barraTopoPulsante"]');
+    const visivel = formularioTema.querySelector('[name="barraTopoAtiva"]');
+    const previaTexto = document.querySelector('#previewTextoBarraTopo');
+    function atualizarPreviaBarra() {
+      previaBarra.style.setProperty('--barra-topo-fundo', corFundo?.value || '#fff0f0');
+      previaBarra.style.setProperty('--barra-topo-texto', corTexto?.value || '#8b0000');
+      previaBarra.classList.toggle('barra-topo-pulsante', !!pulsante?.checked);
+      previaBarra.hidden = visivel ? !visivel.checked : false;
+      if (previaTexto) previaTexto.textContent = textoBarra?.value || 'Seu aviso aparecerá aqui';
+    }
+    for (const campo of [corFundo, corTexto, textoBarra]) {
+      campo?.addEventListener('input', atualizarPreviaBarra);
+    }
+    for (const campo of [visivel, pulsante]) {
+      campo?.addEventListener('change', atualizarPreviaBarra);
+    }
+    atualizarPreviaBarra();
+  }
+
   /* --------------------- máscara de CEP e preços ------------------------ */
   $$('input[data-mascara-cep]').forEach((inp) => {
     inp.addEventListener('input', () => {

@@ -42,6 +42,9 @@ export const DEFAULT_SETTINGS = () => ({
     faviconUrl: '',
     barraTopoTexto: 'Entregamos para todo o Brasil • Dúvidas? Fale com nosso farmacêutico',
     barraTopoAtiva: true,
+    barraTopoCorFundo: '#fff0f0',
+    barraTopoCorTexto: '#8b0000',
+    barraTopoPulsante: true,
     mostrarConsultaCep: true,
   },
   whatsapp: {
