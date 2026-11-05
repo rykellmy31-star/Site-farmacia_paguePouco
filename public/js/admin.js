@@ -1205,6 +1205,21 @@
       try { await post(`/admin/api/banners/${altBanner.getAttribute('data-alternar-banner')}/ativar`); location.reload(); } catch (err) { notificar(err.message, 'erro'); }
       return;
     }
+    const moverBanner = alvo('[data-mover-banner]');
+    if (moverBanner) {
+      if (moverBanner.disabled) return;
+      const id = moverBanner.getAttribute('data-mover-banner');
+      const direcao = moverBanner.getAttribute('data-direcao-banner');
+      moverBanner.disabled = true;
+      try {
+        await post(`/admin/api/banners/${encodeURIComponent(id)}/mover`, { direcao });
+        location.reload();
+      } catch (err) {
+        moverBanner.disabled = false;
+        notificar(err.message, 'erro');
+      }
+      return;
+    }
     const excBanner = alvo('[data-excluir-banner]');
     if (excBanner) {
       if (!confirm('Excluir este banner?')) return;
