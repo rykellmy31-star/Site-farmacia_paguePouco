@@ -260,7 +260,7 @@ export function searchProducts(db, {
     }
   }
   if (marca) rows = rows.filter((p) => normalize(p.marca) === normalize(marca));
-  if (promocao) rows = rows.filter((p) => temPromocao(p));
+  if (promocao) rows = rows.filter((p) => temPromocao(p, referencia));
   const pMin = precoMin != null && precoMin !== '' ? Number(precoMin) * 100 : null;
   const pMax = precoMax != null && precoMax !== '' ? Number(precoMax) * 100 : null;
   if (pMin != null) rows = rows.filter((p) => precoVigenteCentavos(p) >= pMin);
