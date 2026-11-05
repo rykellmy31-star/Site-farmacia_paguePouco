@@ -49,6 +49,8 @@ jobs:
 
       - name: Validar ritmo de 6 segundos e pausa manual de 10 segundos no carrossel
         run: node --test tests/carrossel-tempo-interacao.test.js
+      - name: Verificar imagem correta dos banners no celular
+        run: node --test tests/banner-mobile-imagem-principal.test.js
       - name: Validar agendamento semanal de banners e ordenação manual
         run: node --test tests/banners-agendamento-ordem.test.js
       - name: Validar ofertas vigentes, vitrine completa e destaques sem repetição
