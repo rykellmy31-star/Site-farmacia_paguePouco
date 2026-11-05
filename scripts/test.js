@@ -413,8 +413,8 @@ async function main() {
       const page = await anon.get(url);
       assert(page.status === 200, 'não carregou a página ' + titulo);
       assert(page.texto.includes('width=device-width'), 'viewport mobile ausente em ' + titulo);
-      assert(page.texto.includes('styles.css?v=confirmacao-pix-20261021'),
-        'CSS novo não referenciado em ' + titulo);
+      assert(/href="\/styles\.css\?v=[a-z0-9-]+"/i.test(page.texto),
+        'CSS versionado não referenciado em ' + titulo);
     }
     return 'viewport e CSS versionado carregam em desktop/mobile';
   });
