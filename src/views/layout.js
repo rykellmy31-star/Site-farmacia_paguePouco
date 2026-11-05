@@ -297,7 +297,7 @@ ${barraCookies(settings.cookies)}
     cep: ctx.cepSessao || '',
     logado: !!ctx.usuario,
   })};</script>
-<script src="/js/app.js?v=confirmacao-pix-20261021" defer></script>
+<script src="/js/app.js?v=carrossel-pausa-4s-10s-20261104" defer></script>
 </body>
 </html>`;
 }
