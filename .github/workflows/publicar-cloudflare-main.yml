@@ -47,7 +47,7 @@ jobs:
       - name: Validar robo local e sincronizacao automatica antes do deploy
         run: node --test tests/inovafarma-robo-windows.test.js tests/inovafarma-robo-auto.test.js
 
-      - name: Validar ritmo de 4 segundos e pausa manual de 10 segundos no carrossel
+      - name: Validar ritmo de 6 segundos e pausa manual de 10 segundos no carrossel
         run: node --test tests/carrossel-tempo-interacao.test.js
       - name: Validar agendamento semanal de banners e ordenação manual
         run: node --test tests/banners-agendamento-ordem.test.js

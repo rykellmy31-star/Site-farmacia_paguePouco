@@ -261,7 +261,7 @@
   /* ---------------------------- carrossel --------------------------- */
   // Após clicar nas setas/pontos, garantir tempo para ler o banner selecionado.
   // Nunca usar setInterval fixo: ele pode disparar logo depois de um clique.
-  const INTERVALO_CARROSSEL_MS = 4000;
+  const INTERVALO_CARROSSEL_MS = 6000;
   const PAUSA_CARROSSEL_MANUAL_MS = 10000;
 
   function iniciarCarrosseis() {
