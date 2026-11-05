@@ -9,6 +9,7 @@ import { inovaAtiva } from '../../lib/inovafarma-stock.js';
 import { statusOperacionalExibido } from '../../lib/orders.js';
 import {vigenciasPromocaoInova} from '../../lib/rotulos-vigencia-inova.js';
 import {DIAS_PROMOCAO,diasPromocaoMarcados,diasPromocaoInova} from '../../lib/promocoes-semanais-organizacao.js';
+import { DIAS_BANNER, bannerDeveAparecer, descricaoAgendamentoBanner, ordenarBanners } from '../../lib/banner-agendamento.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -789,6 +790,14 @@ export function telaBanners(ctx, { banners, midias, categorias = [], editando = 
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', valor: editando?.posicao || 'principal', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
           <p class="texto-pequeno texto-suave">${editando ? `Ordem atual: ${e(editando.ordem)}. Ao mudar de posição, o banner irá para o final da nova posição.` : 'Ordem automática: o próximo banner será inserido depois dos banners existentes nessa posição.'}</p>
         </div>
+        ${painel({titulo:'Programar exibição automática',corpo:`
+          <p class="texto-pequeno texto-suave mt-0">O banner continua cadastrado e ativo, mas aparece no site somente no dia e nas datas escolhidos. Deixe em “Todos os dias” para um banner permanente.</p>
+          <div class="campo-linha">
+            ${campoAdmin({ nome: 'diaSemana', rotulo: 'Quando exibir', valor: editando?.diaSemana || 'todos', opcoes: DIAS_BANNER })}
+            ${campoAdmin({ nome: 'inicio', rotulo: 'Data inicial (opcional)', tipo: 'date', valor: editando?.inicio || '' })}
+            ${campoAdmin({ nome: 'fim', rotulo: 'Data final (opcional)', tipo: 'date', valor: editando?.fim || '' })}
+          </div>
+        `})}
         ${campoAdmin({ nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox', valor: editando ? editando.ativo !== false : true })}
         <button class="botao" type="submit">${editando ? 'Salvar alterações' : 'Salvar banner'}</button>
         ${editando ? '<a class="botao secundario" href="/admin/banners">Cancelar edição</a>' : ''}
