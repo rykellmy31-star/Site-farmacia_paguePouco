@@ -259,30 +259,68 @@
   });
 
   /* ---------------------------- carrossel --------------------------- */
+  // Após clicar nas setas/pontos, garantir tempo para ler o banner selecionado.
+  // Nunca usar setInterval fixo: ele pode disparar logo depois de um clique.
+  const INTERVALO_CARROSSEL_MS = 4000;
+  const PAUSA_CARROSSEL_MANUAL_MS = 10000;
+
   function iniciarCarrosseis() {
     $$('[data-carrossel]').forEach((carrossel) => {
+      if (carrossel.dataset.carrosselIniciado === '1') return;
       const trilha = $('[data-trilha]', carrossel);
       if (!trilha) return;
       const slides = Array.from(trilha.children);
+      if (!slides.length) return;
+      carrossel.dataset.carrosselIniciado = '1';
+
       const pontos = $$('[data-carrossel-ir]', carrossel);
+      const prox = $('[data-carrossel-proximo]', carrossel);
+      const ant = $('[data-carrossel-anterior]', carrossel);
+      const automatico = slides.length > 1 && carrossel.dataset.autoplay !== 'false' &&
+        !(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
       let indice = 0;
+      let timer = null;
+
+      const marcarPonto = () => pontos.forEach((p, k) => p.classList.toggle('ativo', k === indice));
       const ir = (i) => {
         indice = (i + slides.length) % slides.length;
         trilha.scrollTo({ left: slides[indice].offsetLeft, behavior: 'smooth' });
-        pontos.forEach((p, k) => p.classList.toggle('ativo', k === indice));
+        marcarPonto();
       };
-      const prox = $('[data-carrossel-proximo]', carrossel);
-      const ant = $('[data-carrossel-anterior]', carrossel);
-      if (prox) prox.addEventListener('click', () => ir(indice + 1));
-      if (ant) ant.addEventListener('click', () => ir(indice - 1));
-      pontos.forEach((p, k) => p.addEventListener('click', () => ir(k)));
-      if (slides.length > 1 && carrossel.dataset.autoplay !== 'false') {
-        setInterval(() => ir(indice + 1), 6000);
-      }
+      const agendar = (atraso = INTERVALO_CARROSSEL_MS) => {
+        clearTimeout(timer);
+        timer = null;
+        if (!automatico || document.visibilityState === 'hidden') return;
+        timer = setTimeout(() => {
+          ir(indice + 1);
+          agendar(INTERVALO_CARROSSEL_MS);
+        }, atraso);
+      };
+      const navegarManualmente = (destino) => {
+        ir(destino);
+        agendar(PAUSA_CARROSSEL_MANUAL_MS);
+      };
+
+      prox?.addEventListener('click', () => navegarManualmente(indice + 1));
+      ant?.addEventListener('click', () => navegarManualmente(indice - 1));
+      pontos.forEach((p, k) => p.addEventListener('click', () => navegarManualmente(k)));
+
+      // Também respeitar quem arrasta o carrossel no celular.
+      trilha.addEventListener('pointerdown', () => agendar(PAUSA_CARROSSEL_MANUAL_MS));
+      trilha.addEventListener('touchstart', () => agendar(PAUSA_CARROSSEL_MANUAL_MS), { passive: true });
+
+      document.addEventListener('visibilitychange', () => {
+        // Evita o avanço imediato ao voltar de outra aba.
+        agendar(INTERVALO_CARROSSEL_MS);
+      });
       trilha.addEventListener('scroll', () => {
         const novo = Math.round(trilha.scrollLeft / trilha.clientWidth);
-        if (novo !== indice) { indice = novo; pontos.forEach((p, k) => p.classList.toggle('ativo', k === indice)); }
+        if (Number.isFinite(novo) && novo >= 0 && novo < slides.length && novo !== indice) {
+          indice = novo;
+          marcarPonto();
+        }
       });
+      agendar();
     });
   }
 
