@@ -281,17 +281,19 @@ export function searchProducts(db, {
   return { produtos: itens, rows: itens, total, pagina: paginaAtual, porPagina };
 }
 
-export function vitrineProdutos(db, tipo, limite = 12) {
+export function vitrineProdutos(db, tipo, limite = 12, referencia = new Date()) {
   const base = db.collection('products').all().filter((p) => p.ativo && podeVender(p).ok);
   const filtros = {
-    ofertas: () => base.filter(temPromocao).sort((a, b) => descontoPercentual(b) - descontoPercentual(a)),
+    // Descontos InovaFarma só entram na vitrine durante as datas/dias válidos.
+    ofertas: () => base.filter((p) => temPromocao(p, referencia))
+      .sort((a, b) => descontoPercentual(b, referencia) - descontoPercentual(a, referencia)),
     destaques: () => base.filter((p) => p.destaque),
     mais_vendidos: () => base.slice().sort((a, b) => Number(b.vendas || 0) - Number(a.vendas || 0)),
     novidades: () => base.slice().sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))),
   };
   const fn = filtros[tipo] || filtros.destaques;
-  let rows = fn();
-  if (!rows.length) rows = base.slice(0, limite);
+  const rows = fn();
+  // Não preencher Ofertas/Destaques vazios com produtos comuns.
   return rows.slice(0, limite);
 }
 
