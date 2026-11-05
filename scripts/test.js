@@ -1129,6 +1129,43 @@ async function main() {
     return 'número e mensagem atualizados';
   });
 
+  await testar('Barra superior personalizável salva cores e pulsação com segurança', async () => {
+    const tela = await admin.get('/admin/configuracoes');
+    assert(tela.texto.includes('name="barraTopoCorFundo"'), 'seletor da cor de fundo ausente');
+    assert(tela.texto.includes('name="barraTopoCorTexto"'), 'seletor da cor do texto ausente');
+    assert(tela.texto.includes('name="barraTopoPulsante"'), 'seletor de pulsação ausente');
+    const dados = {
+      corPrimaria: '#8b0000', corPrimariaEscura: '#6b0000',
+      corSecundaria: '#8b0000', corTexto: '#8b0000', corFundo: '#fffafa',
+      logoAltura: '64', barraTopoAtiva: '1',
+      barraTopoTexto: 'Novembro Azul: cuidados com a saúde',
+      barraTopoCorFundo: '#003366', barraTopoCorTexto: '#ffffff',
+      barraTopoPulsanteDefinida: '1', barraTopoPulsante: '1',
+      mostrarConsultaCep: '1',
+    };
+    const salvo = await admin.post('/admin/api/config/tema', { form: dados });
+    assert([302, 303].includes(salvo.status), 'salvamento da barra não redirecionou');
+    let home = await anon.get('/');
+    assert(home.texto.includes('class="barra-topo barra-topo-pulsante"'), 'animação não ativada');
+    assert(home.texto.includes('--barra-topo-fundo:#003366;--barra-topo-texto:#ffffff'), 'cores não aplicadas');
+    assert(home.texto.includes('Novembro Azul: cuidados com a saúde'), 'texto não aplicado');
+    const interna = await anon.get('/busca?q=teste');
+    assert(interna.texto.includes('--barra-topo-fundo:#003366;--barra-topo-texto:#ffffff'), 'barra ausente nas páginas internas');
+    const invalido = await admin.post('/admin/api/config/tema', {
+      form: { ...dados, barraTopoCorFundo: '#fff000;bad' },
+    });
+    assert(invalido.status === 400, 'servidor aceitou cor insegura');
+    const desligado = await admin.post('/admin/api/config/tema', {
+      form: { ...dados, barraTopoPulsante: undefined },
+    });
+    assert([302, 303].includes(desligado.status), 'não conseguiu desativar a pulsação');
+    home = await anon.get('/');
+    assert(home.texto.includes('class="barra-topo" style='), 'pulsação deveria estar desligada');
+    const reativado = await admin.post('/admin/api/config/tema', { form: dados });
+    assert([302, 303].includes(reativado.status), 'não conseguiu reativar a pulsação');
+    return 'salvar, exibir, desativar, reativar e rejeitar cor inválida';
+  });
+
   await testar('Edição de página institucional aparece no site e sanitiza HTML perigoso', async () => {
     const r = await admin.post('/admin/api/paginas', {
       form: {
