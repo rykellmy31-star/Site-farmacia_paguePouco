@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS = () => ({
     corSecundaria: '#8b0000',
     corTexto: '#8b0000',
     corFundo: '#fffafa',
+    fundoHome: { modo: 'padrao', cor: '#fffafa', imagemUrl: '', posicao: 'centro' },
     logotipoVersao: 'logo-original-2026-10-20',
     logoUrl: '/img/logo-pague-pouco.png',
     logoAltura: 64,
