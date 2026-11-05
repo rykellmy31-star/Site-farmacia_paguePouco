@@ -47,6 +47,8 @@ jobs:
       - name: Validar robo local e sincronizacao automatica antes do deploy
         run: node --test tests/inovafarma-robo-windows.test.js tests/inovafarma-robo-auto.test.js
 
+      - name: Validar pulsação dos selos de desconto
+        run: node --test tests/descontos-pulsantes.test.js
       - name: Validar barra superior pulsante, cores e segurança
         run: node --test tests/barra-topo-pulsante.test.js
       - name: Validar fundo personalizável da página inicial
