@@ -88,7 +88,7 @@ function ambiente({ autoplay = true, reduzirMovimento = false, slides = 3 } = {}
     arrastar: () => trilha.emitir('pointerdown'),
     esconder: () => { documento.visibilityState = 'hidden'; documento.emitir('visibilitychange'); },
     mostrar: () => { documento.visibilityState = 'visible'; documento.emitir('visibilitychange'); },
-    reiniciar: () => vm.runInNewContext(codigoCarrossel + '\niniciarCarrosseis();', contexto),
+    reiniciar: () => vm.runInNewContext('iniciarCarrosseis();', contexto),
     indice: () => trilha.scrollLeft / 100,
     timers: () => tarefas.size,
     destacado: () => botoes.findIndex(p => p.classList.contains('ativo')),
