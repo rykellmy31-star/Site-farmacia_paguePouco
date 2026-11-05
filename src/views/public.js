@@ -24,6 +24,15 @@ function bannerImageUrl(value) {
     : value;
 }
 
+// O campo mobile legado pode conter só o fundo padrão, embora a arte principal
+// seja personalizada. Nesse caso o <img> principal deve prevalecer no celular.
+function sourceMobileBanner(banner) {
+  const mobile = String(banner.imagemMobile || '').trim();
+  const principal = String(banner.imagem || '').trim();
+  if (!mobile || (mobile === '/img/fundo-banner-vermelho.svg' &&
+      principal && principal !== '/img/fundo-banner-vermelho.svg')) return '';
+  return `<source media="(max-width: 640px)" srcset="${e(bannerImageUrl(mobile))}">`;
+}
 export function carrosselBanners(banners, id = 'carrosselPrincipal') {
   if (!banners.length) return '';
   return `
@@ -33,7 +42,7 @@ export function carrosselBanners(banners, id = 'carrosselPrincipal') {
         <div class="slide">
           ${b.link ? `<a href="${e(b.link)}">` : '<span>'}
             <picture>
-              ${b.imagemMobile ? `<source media="(max-width: 640px)" srcset="${e(bannerImageUrl(b.imagemMobile))}">` : ''}
+              ${sourceMobileBanner(b)}
               <img src="${e(bannerImageUrl(b.imagem))}" alt="${e(b.titulo || 'Banner promocional')}" ${i === 0 ? '' : 'loading="lazy"'} width="1200" height="420">
             </picture>
             ${b.imagem === '/img/fundo-banner-vermelho.svg' && (b.titulo || b.descricao) ? `
