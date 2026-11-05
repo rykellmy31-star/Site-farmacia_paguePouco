@@ -177,15 +177,41 @@ body .barra-topo, body .barra-topo * {
   color: var(--barra-topo-texto, #8b0000) !important;
 }
 body .barra-topo a { text-decoration: underline; }
+/* Pulso bem visível em fundos claros e escuros: brilho + batida de texto.
+   Filter atua mesmo com a cor escolhida pelo lojista marcada !important. */
 body .barra-topo-pulsante {
-  animation: pulso-barra-superior 2.8s ease-in-out infinite;
+  position: relative;
+  animation: pulso-barra-superior 1.55s ease-in-out infinite;
+  transform-origin: center;
+  will-change: filter;
+}
+body .barra-topo-conteudo {
+  display: inline-block;
+  max-width: 100%;
+  padding-inline: 12px;
+  font-weight: 800;
+}
+body .barra-topo-pulsante .barra-topo-conteudo {
+  animation: pulso-barra-texto 1.55s ease-in-out infinite;
+  transform-origin: center;
 }
 @keyframes pulso-barra-superior {
-  0%, 100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
-  50% { box-shadow: inset 0 0 0 90px rgba(255,255,255,.14); }
+  0%, 100% { filter: brightness(1); box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
+  22% { filter: brightness(.57) saturate(1.45); box-shadow: inset 0 0 0 2px rgba(255,255,255,.55); }
+  42% { filter: brightness(1.13); box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
+  62% { filter: brightness(.70) saturate(1.25); box-shadow: inset 0 0 0 2px rgba(255,255,255,.30); }
+  83% { filter: brightness(1.12); box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
+}
+@keyframes pulso-barra-texto {
+  0%, 100% { transform: scale(1); text-shadow: none; }
+  22% { transform: scale(1.065); text-shadow: 0 0 9px currentColor; }
+  42% { transform: scale(1); text-shadow: none; }
+  62% { transform: scale(1.04); text-shadow: 0 0 6px currentColor; }
+  83% { transform: scale(1); text-shadow: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  body .barra-topo-pulsante { animation: none !important; }
+  body .barra-topo-pulsante,
+  body .barra-topo-pulsante .barra-topo-conteudo { animation: none !important; filter: none !important; }
 }
 
 .cabecalho { background: var(--branco); border-bottom: 1px solid var(--borda); position: sticky; top: 0; z-index: 900; }
