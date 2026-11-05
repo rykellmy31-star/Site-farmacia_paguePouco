@@ -12,7 +12,7 @@ import { slugify } from './security.js';
 import {constaPsicotropicoExportadoInova} from './psicotropicos-inova-20261029.js';
 import {constaAntimicrobianoExportadoInova} from './antimicrobianos-inova-20261029.js';
 import { inovaAtiva, estoqueInovaDisponivel } from './inovafarma-stock.js';
-import { precoPromocaoInovaVigente } from './inovafarma-promocoes-precos.js';
+import { precoPromocaoInovaVigente, diaLocalFarmacia, diaSemanaLocalFarmacia } from './inovafarma-promocoes-precos.js';
 
 export const CLASSIFICACOES = {
   nao_aplicavel: { id: 'nao_aplicavel', nome: 'Não se aplica (não é medicamento)', exigeRegistro: false, vendaOnline: true },
@@ -154,6 +154,36 @@ export function descontoPercentual(produto, referencia = new Date()) {
     precoVigenteCentavos(produto, referencia)) / Number(produto.precoCentavos)) * 100);
 }
 
+/**
+ * Ordenação comercial: primeiro campanhas específicas do dia da semana,
+ * depois descontos gerais (ex.: Black Friday válida o mês inteiro).
+ * A marcação manual de organização também conta como "dia" quando o produto
+ * realmente tem desconto vigente; ela nunca concede ou altera preço.
+ */
+export function ordenarOfertasVigentes(produtos, referencia = new Date()) {
+  const hoje = diaLocalFarmacia(referencia);
+  const diaSemana = diaSemanaLocalFarmacia(hoje);
+  const prioridadeDia = (produto) => {
+    if (!temPromocao(produto, referencia)) return false;
+    const marcado = Array.isArray(produto.diasPromocaoOrganizacao) &&
+      produto.diasPromocaoOrganizacao.includes(diaSemana);
+    if (marcado) return true;
+    const precoInova = precoPromocaoInovaVigente(produto, referencia);
+    if (precoInova == null) return false;
+    // Somente uma campanha semanal efetivamente válida no checkout.
+    return (Array.isArray(produto.inovaPromocoes) ? produto.inovaPromocoes : [])
+      .some(r => r?.diaSemana === diaSemana && r.inicio <= hoje && r.fim >= hoje &&
+        r.precoPromocionalCentavos === precoInova &&
+        r.precoVendaCentavos === produto.precoCentavos);
+  };
+  const prioridades = new Map(produtos.map(p => [p, prioridadeDia(p) ? 1 : 0]));
+  return produtos.slice().sort((a, b) =>
+    prioridades.get(b) - prioridades.get(a) ||
+    descontoPercentual(b, referencia) - descontoPercentual(a, referencia) ||
+    String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR') ||
+    String(a.id || '').localeCompare(String(b.id || '')));
+}
+
 export function productUrl(produto) {
   return `/produto/${produto.slug || slugify(produto.nome)}`;
 }
@@ -269,9 +299,11 @@ export function searchProducts(db, {
     mais_vendidos: (a, b) => Number(b.vendas || 0) - Number(a.vendas || 0),
     nome: (a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'),
     maior_desconto: (a, b) => descontoPercentual(b) - descontoPercentual(a),
+    ofertas_do_dia: null, // Usa a mesma prioridade semanal da home.
   };
   const cmp = ordenadores[ordenar];
   if (cmp) rows = rows.slice().sort(cmp);
+  if (ordenar === 'ofertas_do_dia') rows = ordenarOfertasVigentes(rows);
 
   const total = rows.length;
   const inicio = (Math.max(1, Number(pagina) || 1) - 1) * porPagina;
@@ -285,8 +317,8 @@ export function vitrineProdutos(db, tipo, limite = 12, referencia = new Date()) 
   const base = db.collection('products').all().filter((p) => p.ativo && podeVender(p).ok);
   const filtros = {
     // Descontos InovaFarma só entram na vitrine durante as datas/dias válidos.
-    ofertas: () => base.filter((p) => temPromocao(p, referencia))
-      .sort((a, b) => descontoPercentual(b, referencia) - descontoPercentual(a, referencia)),
+    ofertas: () => ordenarOfertasVigentes(
+      base.filter((p) => temPromocao(p, referencia)), referencia),
     destaques: () => base.filter((p) => p.destaque),
     mais_vendidos: () => base.slice().sort((a, b) => Number(b.vendas || 0) - Number(a.vendas || 0)),
     novidades: () => base.slice().sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))),
