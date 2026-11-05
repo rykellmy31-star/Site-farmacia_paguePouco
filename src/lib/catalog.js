@@ -243,7 +243,7 @@ const normalize = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036
 export function searchProducts(db, {
   q = '', categoriaSlug = '', marca = '', ordenar = 'relevancia', pagina = 1,
   porPagina = 24, precoMin = null, precoMax = null, apenasDisponiveis = true,
-  apenasVendaveis = true, promocao = false, termos = null,
+  apenasVendaveis = true, promocao = false, termos = null, referencia = new Date(),
 } = {}) {
   let rows = db.collection('products').all().filter(p =>
     !p.inovaArquivado?.em && !p.bloqueioControladoInova?.ativo &&
