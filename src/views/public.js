@@ -396,7 +396,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
           <div class="bloco-preco">
             ${temPromocao(produto) ? `<span class="preco-antigo">${money(produto.precoCentavos)}</span>` : ''}
             <span class="preco">${money(preco)}</span>
-            ${temPromocao(produto) ? `<span class="etiqueta laranja">-${descontoPercentual(produto)}%</span>` : ''}
+            ${temPromocao(produto) ? `<span class="etiqueta laranja oferta-pulsante">-${descontoPercentual(produto)}%</span>` : ''}
             ${parcelamentoSemJuros ? `<p class="texto-pequeno texto-suave mb-0 mt-1">Em até ${parcelamentoSemJuros.numero}x sem juros nos cartões. Consulte as condições no checkout.</p>` : ''}
           </div>
 

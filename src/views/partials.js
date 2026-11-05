@@ -54,7 +54,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
 
   return `
   <article class="produto ${venda.ok ? '' : 'bloqueado'}">
-    ${promo ? `<span class="etiqueta-desconto">-${descontoPercentual(produto)}%</span>` : ''}
+    ${promo ? `<span class="etiqueta-desconto oferta-pulsante">-${descontoPercentual(produto)}%</span>` : ''}
     <a class="foto" href="${e(productUrl(produto))}" aria-label="${e(produto.nome)}">
       <img src="${e(img)}" alt="${e(produto.nome)}" loading="lazy" width="300" height="300">
     </a>
@@ -185,7 +185,7 @@ export function precoHtml(produto, { grande = false } = {}) {
   return `<div class="${grande ? 'bloco-preco' : ''}">
     ${promo ? `<span class="preco-antigo">${money(produto.precoCentavos)}</span>` : ''}
     <span class="preco" style="${grande ? 'font-size:1.85rem;font-weight:800' : ''}">${money(preco)}</span>
-    ${promo ? ` <span class="etiqueta laranja">-${descontoPercentual(produto)}%</span>` : ''}
+    ${promo ? ` <span class="etiqueta laranja oferta-pulsante">-${descontoPercentual(produto)}%</span>` : ''}
   </div>`;
 }
 
