@@ -42,6 +42,24 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+/* Fundo sazonal da home. Posição fixa evita esticar a imagem ao longo dos produtos.
+   O isolamento mantém a camada atrás de cabeçalho, cards e botões, inclusive no iPhone. */
+body.pagina-inicial.fundo-personalizado { background-color: var(--fundo-home-cor); }
+body.pagina-inicial.fundo-imagem { isolation: isolate; }
+body.pagina-inicial.fundo-imagem::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  pointer-events: none; background-repeat: no-repeat; background-size: cover;
+  background-position: center center; background-color: var(--fundo-home-cor);
+}
+body.pagina-inicial.fundo-personalizado .cabecalho-secao > h2,
+body.pagina-inicial.fundo-personalizado .cabecalho-secao > .ver-todos {
+  background: rgba(255, 255, 255, .94);
+  border-radius: 8px; padding: 5px 9px;
+}
+@media (max-width: 640px) {
+  body.pagina-inicial.fundo-imagem::before { background-size: cover; }
+}
+
 img { max-width: 100%; height: auto; display: block; }
 a { color: var(--primaria-escura); text-decoration: none; }
 a:hover { text-decoration: underline; }
