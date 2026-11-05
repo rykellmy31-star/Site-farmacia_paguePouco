@@ -9,6 +9,7 @@ import { UFS, UF_NAMES } from '../../lib/cep.js';
 import { formatDateTime, formatDate } from '../../lib/format.js';
 import { ROLES, ROLE_LIST } from '../../lib/permissions.js';
 import { uploadStats } from '../../lib/uploads.js';
+import { normalizarFundoHome } from '../../lib/fundo-home.js';
 
 /* ================================ FRETES ================================ */
 export function telaFretes(ctx, { frete, categorias, produtos }) {
@@ -236,6 +237,7 @@ export function telaWhatsApp(ctx, { whatsapp, linkExemplo }) {
 export function telaConfiguracoes(ctx, { settings }) {
   const emp = settings.empresa || {};
   const tema = settings.tema || {};
+  const fundoHome = normalizarFundoHome(tema.fundoHome);
   const loja = settings.loja || {};
   const seo = settings.seo || {};
   const rod = settings.rodape || {};
@@ -308,6 +310,39 @@ export function telaConfiguracoes(ctx, { settings }) {
           ${campoAdmin({ nome: 'barraTopoTexto', rotulo: 'Texto da barra superior', valor: tema.barraTopoTexto || '' })}
           ${campoAdmin({ nome: 'mostrarConsultaCep', rotulo: 'Exibir consulta de CEP no cabeçalho', tipo: 'checkbox', valor: tema.mostrarConsultaCep !== false })}
           <button class="botao" type="submit">Salvar aparência</button>`,
+      })}
+    </form>
+
+
+    <form method="post" action="/admin/api/config/fundo-home" enctype="multipart/form-data" id="formFundoHome">
+      <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+      ${painel({
+        titulo: 'Fundo da página inicial (cor ou imagem)',
+        corpo: [
+          '<p class="texto-pequeno">Personalize somente o fundo da página inicial. Banners, produtos, outras páginas e cores da marca não serão alterados.</p>',
+          '<div class="grade-form duas-colunas">',
+          campoAdmin({ nome: 'modoFundoHome', rotulo: 'Tipo de fundo', valor: fundoHome.modo, opcoes: [
+            { valor: 'padrao', texto: 'Padrão do site' },
+            { valor: 'cor', texto: 'Cor personalizada' },
+            { valor: 'imagem', texto: 'Imagem personalizada' },
+          ] }),
+          campoAdmin({ nome: 'corFundoHome', rotulo: 'Cor de fundo (também aparece se a imagem não carregar)', tipo: 'color', valor: fundoHome.cor }),
+          campoAdmin({ nome: 'posicaoFundoHome', rotulo: 'Enquadramento da imagem', valor: fundoHome.posicao, opcoes: [
+            { valor: 'centro', texto: 'Centralizar' },
+            { valor: 'topo', texto: 'Mostrar a parte superior' },
+            { valor: 'baixo', texto: 'Mostrar a parte inferior' },
+          ] }),
+          '<div class="campo"><label for="imagemFundoHome">Escolher imagem (PNG/JPG/WebP, até 8 MB)</label>',
+          '<input type="file" id="imagemFundoHome" name="imagemFundoHome" accept="image/png,image/jpeg,image/webp">',
+          '<span class="dica">Recomendamos 1920 × 1080 ou maior. A imagem cobre o fundo e pode ser recortada para se adaptar a cada tela.</span></div>',
+          '</div>',
+          fundoHome.imagemUrl ? '<p class="texto-pequeno">Imagem salva: <a href="' + e(fundoHome.imagemUrl) + '" target="_blank" rel="noopener">visualizar imagem atual</a></p>' : '',
+          fundoHome.imagemUrl ? campoAdmin({ nome: 'removerImagemFundoHome', rotulo: 'Remover a imagem salva', tipo: 'checkbox', valor: false }) : '',
+          '<div id="previewFundoHome" data-imagem-url="' + e(fundoHome.imagemUrl) + '" style="min-height:185px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:1px solid var(--borda);padding:16px;background:#fffafa center / cover no-repeat">',
+          '<span style="background:rgba(255,255,255,.94);padding:12px 18px;border-radius:9px;text-align:center;color:#282828"><strong>Prévia da página inicial</strong><br><small>O fundo ficará atrás do conteúdo, sem cobrir os produtos.</small></span>',
+          '</div>',
+          '<button class="botao destaque mt-2" type="submit">Salvar fundo da página inicial</button>',
+        ].join(''),
       })}
     </form>
 
