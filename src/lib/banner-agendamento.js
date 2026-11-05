@@ -14,7 +14,7 @@ const DATA_LOCAL = new Intl.DateTimeFormat('en-US', {
 
 export const DIAS_BANNER = [
   { valor: 'todos', texto: 'Todos os dias' },
-  ...DIAS.map(([valor, texto]) => ({ valor, texto: 'Toda ' + texto.toLowerCase() })),
+  ...DIAS.map(([valor, texto]) => ({ valor, texto: (valor === 'sabado' || valor === 'domingo' ? 'Todo ' : 'Toda ') + texto.toLowerCase() })),
 ];
 
 function dataValida(valor) {
@@ -58,7 +58,9 @@ export function bannerDeveAparecer(banner, referencia = new Date()) {
 }
 
 export function descricaoAgendamentoBanner(banner) {
-  const dia = NOMES.has(banner?.diaSemana) ? 'Toda ' + NOMES.get(banner.diaSemana).toLowerCase() : 'Todos os dias';
+  const dia = NOMES.has(banner?.diaSemana) ?
+    (['sabado', 'domingo'].includes(banner.diaSemana) ? 'Todo ' : 'Toda ') + NOMES.get(banner.diaSemana).toLowerCase() :
+    'Todos os dias';
   const formatar = data => data ? data.slice(8, 10) + '/' + data.slice(5, 7) + '/' + data.slice(0, 4) : '';
   if (banner?.inicio && banner?.fim) return dia + ' · ' + formatar(banner.inicio) + ' até ' + formatar(banner.fim);
   if (banner?.inicio) return dia + ' · a partir de ' + formatar(banner.inicio);
