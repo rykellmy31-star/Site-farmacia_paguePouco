@@ -53,7 +53,7 @@ test('editor oferece seletor de cor, controle de pulsação e prévia no painel'
   }
   assert.match(html, /id="previewBarraTopo"/);
   assert.match(html, /id="previewTextoBarraTopo"/);
-  assert.match(html, /Ativar pulsação suave na barra superior/);
+  assert.match(html, /Ativar pulsação forte na barra superior/);
 });
 
 test('CSS da barra é isolado e reduz o movimento quando solicitado', () => {
@@ -61,6 +61,11 @@ test('CSS da barra é isolado e reduz o movimento quando solicitado', () => {
   assert.match(css, /body \.barra-topo\s*\{[^}]+--barra-topo-fundo/);
   assert.match(css, /body \.barra-topo, body \.barra-topo \*[\s\S]*?--barra-topo-texto/);
   assert.match(css, /@keyframes pulso-barra-superior/);
+  assert.match(css, /brightness\(\.57\)/, 'a barra precisa ter pulso perceptível até em fundo branco');
+  assert.match(css, /@keyframes pulso-barra-texto/, 'texto precisa pulsar');
+  assert.match(css, /scale\(1\.065\)/, 'o texto precisa aumentar em cada batida');
+  const html = paginaPublica(ctx(), { conteudo: 'Loja' });
+  assert.match(html, /<span class="barra-topo-conteudo">/, 'deve renderizar o texto animável');
   assert.match(css, /prefers-reduced-motion: reduce/);
   const js = readFileSync(new URL('../public/js/admin.js', import.meta.url), 'utf8');
   assert.match(js, /atualizarPreviaBarra/);
