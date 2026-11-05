@@ -81,7 +81,7 @@ export function registrarRotasPublicas(app, db) {
   app.get('/ofertas', (req, res) => {
     const ctx = criarContexto(req, db);
     const pagina = Number(req.query.get('pagina')) || 1;
-    const resultado = searchProducts(db, { promocao: true, pagina, porPagina: POR_PAGINA, ordenar: 'maior_desconto' });
+    const resultado = searchProducts(db, { promocao: true, pagina, porPagina: POR_PAGINA, ordenar: 'ofertas_do_dia' });
     res.html(paginaOfertas(ctx, { ...resultado, pagina, porPagina: POR_PAGINA }));
   });
 
