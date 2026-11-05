@@ -8,14 +8,15 @@ const DATA_QUINTA = new Date('2026-11-05T15:00:00.000Z');
 const DATA_SEXTA = new Date('2026-11-06T15:00:00.000Z');
 
 function produto(id, { diaSemana = null, destaque = false, semPromocao = false,
-  estoque = 4, vendas = 0, criadoEm = '2026-11-01T10:00:00Z' } = {}) {
+  estoque = 4, vendas = 0, criadoEm = '2026-11-01T10:00:00Z',
+  inicio = '2020-01-01', fim = '2099-12-31' } = {}) {
   return {
     id, slug: id, nome: id, ativo: true, destaque,
     estoque: { quantidade: estoque, reservado: 0, quarentena: 0 },
     precoCentavos: 2000, precoPromocionalCentavos: 0, vendas, criadoEm,
     imagens: [], sanitario: { classificacao: 'nao_aplicavel' },
     inovaPromocoes: semPromocao ? [] : [{
-      inicio: '2026-11-01', fim: '2026-11-30', diaSemana,
+      inicio, fim, diaSemana,
       precoVendaCentavos: 2000, precoPromocionalCentavos: 1500,
     }],
   };
@@ -43,13 +44,14 @@ function contexto(db, secoes = ['ofertas', 'destaques']) {
 }
 
 test('ofertas seguem quarta do bebê, quinta do esmalte, sexta e mês vigente', () => {
+  const vigencia = { inicio: '2026-11-01', fim: '2026-11-30' };
   const db = banco([
-    produto('black-friday'),
-    produto('lenco-quarta', { diaSemana: 'quarta' }),
-    produto('esmalte-quinta', { diaSemana: 'quinta' }),
-    produto('beleza-sexta', { diaSemana: 'sexta' }),
+    produto('black-friday', vigencia),
+    produto('lenco-quarta', { ...vigencia, diaSemana: 'quarta' }),
+    produto('esmalte-quinta', { ...vigencia, diaSemana: 'quinta' }),
+    produto('beleza-sexta', { ...vigencia, diaSemana: 'sexta' }),
     produto('sem-desconto', { semPromocao: true }),
-    produto('sem-estoque', { estoque: 0 }),
+    produto('sem-estoque', { ...vigencia, estoque: 0 }),
   ]);
   assert.deepEqual(vitrineProdutos(db, 'ofertas', Infinity, DATA_QUARTA)
     .map((p) => p.id), ['black-friday', 'lenco-quarta']);
