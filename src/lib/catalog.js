@@ -303,7 +303,7 @@ export function searchProducts(db, {
   };
   const cmp = ordenadores[ordenar];
   if (cmp) rows = rows.slice().sort(cmp);
-  if (ordenar === 'ofertas_do_dia') rows = ordenarOfertasVigentes(rows);
+  if (ordenar === 'ofertas_do_dia') rows = ordenarOfertasVigentes(rows, referencia);
 
   const total = rows.length;
   const inicio = (Math.max(1, Number(pagina) || 1) - 1) * porPagina;
