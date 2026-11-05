@@ -9,6 +9,7 @@ import { inovaAtiva } from '../../lib/inovafarma-stock.js';
 import { statusOperacionalExibido } from '../../lib/orders.js';
 import {vigenciasPromocaoInova} from '../../lib/rotulos-vigencia-inova.js';
 import {DIAS_PROMOCAO,diasPromocaoMarcados,diasPromocaoInova} from '../../lib/promocoes-semanais-organizacao.js';
+import { DIAS_BANNER, bannerDeveAparecer, descricaoAgendamentoBanner, ordenarBanners } from '../../lib/banner-agendamento.js';
 
 /* ============================== PAINEL ============================== */
 export function telaDashboard(ctx, { metricas, grafico, pedidosRecentes, estoqueBaixo, topProdutos, infoPagamento }) {
@@ -789,6 +790,14 @@ export function telaBanners(ctx, { banners, midias, categorias = [], editando = 
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição', valor: editando?.posicao || 'principal', opcoes: [{ valor: 'principal', texto: 'Carrossel principal' }, { valor: 'secundario', texto: 'Faixa secundária' }] })}
           <p class="texto-pequeno texto-suave">${editando ? `Ordem atual: ${e(editando.ordem)}. Ao mudar de posição, o banner irá para o final da nova posição.` : 'Ordem automática: o próximo banner será inserido depois dos banners existentes nessa posição.'}</p>
         </div>
+        ${painel({titulo:'Programar exibição automática',corpo:`
+          <p class="texto-pequeno texto-suave mt-0">O banner continua cadastrado e ativo, mas aparece no site somente no dia e nas datas escolhidos. Deixe em “Todos os dias” para um banner permanente.</p>
+          <div class="campo-linha">
+            ${campoAdmin({ nome: 'diaSemana', rotulo: 'Quando exibir', valor: editando?.diaSemana || 'todos', opcoes: DIAS_BANNER })}
+            ${campoAdmin({ nome: 'inicio', rotulo: 'Data inicial (opcional)', tipo: 'date', valor: editando?.inicio || '' })}
+            ${campoAdmin({ nome: 'fim', rotulo: 'Data final (opcional)', tipo: 'date', valor: editando?.fim || '' })}
+          </div>
+        `})}
         ${campoAdmin({ nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox', valor: editando ? editando.ativo !== false : true })}
         <button class="botao" type="submit">${editando ? 'Salvar alterações' : 'Salvar banner'}</button>
         ${editando ? '<a class="botao secundario" href="/admin/banners">Cancelar edição</a>' : ''}
@@ -802,8 +811,12 @@ export function telaBanners(ctx, { banners, midias, categorias = [], editando = 
       titulo: 'Banners cadastrados',
       semPadding: true,
       corpo: tabelaAdmin({
-        colunas: ['Imagem', 'Título', 'Posição', 'Ordem', 'Situação', 'Ações'],
-        linhas: banners.map((b) => `<tr>
+        colunas: ['Imagem', 'Título', 'Posição', 'Ordem', 'Programação', 'Situação', 'Ações'],
+        linhas: banners.map((b) => {
+          const grupo = ordenarBanners(banners.filter(x =>
+            (x.posicao || 'principal') === (b.posicao || 'principal')));
+          const indice = grupo.findIndex(x => x.id === b.id);
+          return `<tr>
           <td><div class="banner-miniatura banner-miniatura-lista">
             <img src="${e(b.imagem)}" alt="Prévia de ${e(b.titulo)}">
             ${b.imagem === '/img/fundo-banner-vermelho.svg' ? `<div class="banner-miniatura-texto">
@@ -814,14 +827,23 @@ export function telaBanners(ctx, { banners, midias, categorias = [], editando = 
           </div></td>
           <td>${e(b.titulo)}<br><span class="texto-pequeno texto-suave">${e(b.link || '')}</span></td>
           <td>${e(b.posicao || 'principal')}</td>
-          <td>${e(String(b.ordem ?? 99))}</td>
-          <td>${b.ativo !== false ? etiquetaStatus('ativo') : etiquetaStatus('inativo')}</td>
+          <td><div class="linha centro" style="gap:5px;white-space:nowrap">
+            <strong>${e(String(b.ordem ?? 99))}</strong>
+            <button type="button" class="botao pequeno secundario" data-mover-banner="${e(b.id)}" data-direcao-banner="cima"
+              title="Subir banner na ordem" aria-label="Subir ${e(b.titulo)}" ${indice === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="botao pequeno secundario" data-mover-banner="${e(b.id)}" data-direcao-banner="baixo"
+              title="Descer banner na ordem" aria-label="Descer ${e(b.titulo)}" ${indice === grupo.length - 1 ? 'disabled' : ''}>↓</button>
+          </div></td>
+          <td><span class="texto-pequeno">${e(descricaoAgendamentoBanner(b))}</span></td>
+          <td>${b.ativo !== false ? etiquetaStatus('ativo') : etiquetaStatus('inativo')}
+            <br><span class="texto-pequeno texto-suave">${b.ativo === false ? 'Desativado' : bannerDeveAparecer(b) ? 'Visível hoje' : 'Fora da programação hoje'}</span>
+          </td>
           <td class="acoes-linha">
             <a class="botao pequeno secundario" href="/admin/banners?editar=${e(b.id)}#formNovoBanner">Editar</a>
             <button class="botao pequeno" data-alternar-banner="${e(b.id)}">${b.ativo !== false ? 'Desativar' : 'Ativar'}</button>
             <button class="botao pequeno perigo" data-excluir-banner="${e(b.id)}">Excluir</button>
           </td>
-        </tr>`),
+        </tr>`; }),
         vazio: 'Nenhum banner cadastrado.',
       }),
     })}`,

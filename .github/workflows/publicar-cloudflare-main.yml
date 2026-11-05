@@ -47,6 +47,8 @@ jobs:
       - name: Validar robo local e sincronizacao automatica antes do deploy
         run: node --test tests/inovafarma-robo-windows.test.js tests/inovafarma-robo-auto.test.js
 
+      - name: Validar agendamento semanal de banners e ordenação manual
+        run: node --test tests/banners-agendamento-ordem.test.js
       - name: Validar ofertas vigentes, vitrine completa e destaques sem repetição
         run: node --test tests/home-promocoes-vigentes.test.js
       - name: Testar bloqueio de controlados antes de publicar

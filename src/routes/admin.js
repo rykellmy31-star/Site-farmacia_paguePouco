@@ -25,6 +25,7 @@ import { prepararPromocoesInova, consultarPromocoesInova, aplicarPromocoesInova 
 import { prepararRelatorioEstoque, consultarRelatorioEstoque, aplicarRelatorioEstoque } from '../lib/inovafarma-csv-import.js';
 import { listarCandidatosInova, revisarCandidatoInova } from '../lib/inovafarma-catalog-import.js';
 import { can, ROLES, ROLE_LIST } from '../lib/permissions.js';
+import { validarAgendamentoBanner, moverBanner, ordenarBanners } from '../lib/banner-agendamento.js';
 import { createSession, destroySession, hashPassword, verifyPassword, randomToken, escapeHtml as e, validators as v, validate, cleanText, onlyDigits, slugify, csrfToken } from '../lib/security.js';
 import { paginaAdmin } from '../views/admin/layout.js';
 import {telaEvolutionWhatsapp} from '../views/admin/evolution.js';
@@ -839,7 +840,9 @@ export function registrarRotasAdmin(app, db) {
     if (!guard(req, res, 'banners.ver')) return;
     const ctx = ctxAdmin(req, db);
     res.html(telaBanners(ctx, {
-      banners: db.collection('banners').all().sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99)),
+      banners: ordenarBanners(db.collection('banners').all()).sort((a, b) =>
+        (a.posicao || 'principal').localeCompare(b.posicao || 'principal') ||
+        (a.ordem ?? 99) - (b.ordem ?? 99)),
       editando: can(req.adminUser, 'banners.editar') ? db.collection('banners').get(String(req.query.get('editar') || '')) : null,
       midias: db.collection('midia').all().filter((m) => m.tipo === 'image').slice(0, 40),
       categorias: db.collection('categories').all().sort((a,b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')),
@@ -2467,6 +2470,8 @@ function registrarApi(app, db) {
     const destinoExterno = /^https:\/\/[^\s/]+/i.test(linkBanner);
     if (!linkBanner || (!destinoLocal && !destinoExterno))
       return void res.json({ ok: false, erro: 'Destino inválido: use uma página interna ou endereço HTTPS.' }, 400);
+    const agendamento = validarAgendamentoBanner(req.body);
+    if (!agendamento.ok) return void res.json({ ok: false, erro: agendamento.erro }, 400);
     const posicao = ['principal', 'secundario'].includes(req.body.posicao) ? req.body.posicao : 'principal';
     const existentes = db.collection('banners').find(b => (b.posicao || 'principal') === posicao);
     const ultimaOrdem = existentes.reduce((max, b) => Math.max(max, Number.isFinite(Number(b.ordem)) ? Number(b.ordem) : 0), 0);
@@ -2480,10 +2485,19 @@ function registrarApi(app, db) {
       posicao,
       ordem: proximaOrdem,
       ativo: req.body.ativo === '1' || req.body.ativo === 'on',
-      inicio: null, fim: null,
+      inicio: agendamento.inicio, fim: agendamento.fim, diaSemana: agendamento.diaSemana,
     });
     logAdmin(db, req.adminUser, 'criou_banner', 'banner', null, { titulo: req.body.titulo }, req);
     res.json({ ok: true });
+  });
+
+  app.post('/admin/api/banners/:id/mover', (req, res) => {
+    if (!guardApi(req, res, 'banners.editar')) return;
+    const movimento = moverBanner(db, req.params.id, req.body?.direcao);
+    if (!movimento.ok) return void res.json(movimento, movimento.status);
+    if (movimento.alterado) logAdmin(db, req.adminUser, 'reordenou_banner', 'banner',
+      req.params.id, { direcao: req.body.direcao }, req);
+    res.json(movimento);
   });
 
   app.post('/admin/api/banners/:id/editar', (req, res) => {
@@ -2498,6 +2512,8 @@ function registrarApi(app, db) {
     const destinoExterno = /^https:\/\/[^\s/]+/i.test(link);
     if (!titulo || !imagem || !link || (!destinoLocal && !destinoExterno))
       return void res.json({ ok: false, erro: 'Informe título, imagem e destino válido.' }, 400);
+    const agendamento = validarAgendamentoBanner(req.body);
+    if (!agendamento.ok) return void res.json({ ok: false, erro: agendamento.erro }, 400);
     const posicao = ['principal','secundario'].includes(req.body.posicao) ? req.body.posicao : (antigo.posicao || 'principal');
     const novaPosicao = posicao !== (antigo.posicao || 'principal');
     const outros = db.collection('banners').find(b => b.id !== antigo.id && (b.posicao || 'principal') === posicao);
@@ -2507,6 +2523,7 @@ function registrarApi(app, db) {
     db.collection('banners').update(antigo.id, {
       titulo, descricao: cleanText(req.body.descricao, 240), imagem,
       imagemMobile: cleanText(req.body.imagemMobile, 300), link, posicao, ordem,
+      inicio: agendamento.inicio, fim: agendamento.fim, diaSemana: agendamento.diaSemana,
       ativo: req.body.ativo === '1' || req.body.ativo === 'on',
     });
     logAdmin(db, req.adminUser, 'editou_banner', 'banner', antigo.id, { titulo, posicao }, req);
