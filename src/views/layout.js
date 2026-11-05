@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { escapeHtml, sanitizeHtml } from '../lib/security.js';
 import { formatBRL, FUSO_LOJA } from '../lib/format.js';
 import { montarArvore } from '../lib/catalog.js';
+import { normalizarFundoHome } from '../lib/fundo-home.js';
 import { escapeHtml as e } from '../lib/security.js';
 
 export { escapeHtml, sanitizeHtml };
@@ -243,6 +244,9 @@ export function paginaPublica(ctx, { titulo, descricao, conteudo, headExtra = ''
   const empresa = settings.empresa || {};
   const tema = settings.tema || {};
   const seo = settings.seo || {};
+  const fundoHome = normalizarFundoHome(tema.fundoHome);
+  const classeFundoHome = corpoClasse === 'pagina-inicial' && fundoHome.modo !== 'padrao'
+    ? (fundoHome.modo === 'imagem' ? ' fundo-personalizado fundo-imagem' : ' fundo-personalizado fundo-cor') : '';
   const arvore = ctx.arvore || montarArvore(db);
   const tituloFinal = titulo ? `${titulo} | ${empresa.nomeFantasia || 'Farmácia Pague Pouco'}` : (seo.tituloPadrao || empresa.nomeFantasia);
   const descFinal = descricao || seo.descricaoPadrao || '';
@@ -276,12 +280,14 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
   --marca-texto:${e(tema.corTexto || '#8b0000')};
   --fundo:${e(tema.corFundo || '#fffafa')};
 }
+${classeFundoHome ? `body.pagina-inicial.fundo-personalizado{--fundo-home-cor:${fundoHome.cor};}` : ''}
+${fundoHome.modo === 'imagem' && classeFundoHome ? `body.pagina-inicial.fundo-imagem::before{background-image:url("${e(fundoHome.imagemUrl)}");background-position:${fundoHome.posicaoCss};}` : ''}
 </style>
 ${seo.googleAnalyticsId ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${e(seo.googleAnalyticsId)}"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${e(seo.googleAnalyticsId)}');</script>` : ''}
 ${headExtra}
 </head>
-<body class="com-menu-mobile ${corpoClasse}">
+<body class="com-menu-mobile ${corpoClasse}${classeFundoHome}">
 ${(tema.barraTopoAtiva && tema.barraTopoTexto) ? `<div class="barra-topo">${sanitizeHtml(tema.barraTopoTexto)}</div>` : ''}
 <div class="notificacao" id="notificacao" role="status" aria-live="polite"></div>
 ${cabecalho({ ...ctx, arvore })}
