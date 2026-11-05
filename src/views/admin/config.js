@@ -314,13 +314,13 @@ export function telaConfiguracoes(ctx, { settings }) {
             ${campoAdmin({ nome: 'barraTopoCorTexto', rotulo: 'Cor do texto da barra', tipo: 'color', valor: /^#[0-9a-f]{6}$/i.test(tema.barraTopoCorTexto || '') ? tema.barraTopoCorTexto : '#8b0000' })}
           </div>
           <input type="hidden" name="barraTopoPulsanteDefinida" value="1">
-          ${campoAdmin({ nome: 'barraTopoPulsante', rotulo: 'Ativar pulsação suave na barra superior', tipo: 'checkbox', valor: tema.barraTopoPulsante !== false })}
+          ${campoAdmin({ nome: 'barraTopoPulsante', rotulo: 'Ativar pulsação forte na barra superior', tipo: 'checkbox', valor: tema.barraTopoPulsante !== false })}
           <div class="campo">
             <label>Prévia da barra superior</label>
             <div id="previewBarraTopo" aria-hidden="true" class="barra-topo barra-topo-pulsante" style="padding:12px;border-radius:8px;">
-              <span id="previewTextoBarraTopo"></span>
+              <span id="previewTextoBarraTopo" class="barra-topo-conteudo"></span>
             </div>
-            <span class="dica">O efeito destaca o aviso sem piscar. As cores são independentes das demais partes da loja.</span>
+            <span class="dica">Pulso forte com brilho e movimento do texto; respeita acessibilidade. As cores são independentes das demais partes da loja.</span>
           </div>
           ${campoAdmin({ nome: 'mostrarConsultaCep', rotulo: 'Exibir consulta de CEP no cabeçalho', tipo: 'checkbox', valor: tema.mostrarConsultaCep !== false })}
           <button class="botao" type="submit">Salvar aparência</button>`,
