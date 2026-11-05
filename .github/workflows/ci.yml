@@ -52,6 +52,8 @@ jobs:
         run: node --test tests/salvar-google-imagem-png.test.js
       - name: Validar categorias existentes e classificação com confirmação
         run: node --test tests/categorizar-produtos-sem-categoria.test.js
+      - name: Validar ofertas vigentes, vitrine completa e destaques sem repetição
+        run: node --test tests/home-promocoes-vigentes.test.js
       - name: Validar rótulos semanais e datas das promoções InovaFarma
         run: node --test tests/vigencia-promocoes-categorias-listagem.test.js
       - name: Validar filtro de promoções por dia e seleção segura de produtos

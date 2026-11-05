@@ -138,6 +138,11 @@ export function homePage(ctx) {
   const arvore = ctx.arvore || montarArvore(db);
   const home = settings.home || {};
   const secoesAtivas = (home.secoes || []).filter((s) => s.ativo).sort((a, b) => a.ordem - b.ordem);
+  // As ofertas são recalculadas a cada acesso, respeitando a vigência do InovaFarma.
+  // A home exibe TODAS as ofertas válidas, sem preencher vagas com outros itens.
+  const ofertasDoDia = vitrineProdutos(db, 'ofertas', Infinity);
+  const ofertasVisiveis = secoesAtivas.some((s) => s.tipo === 'ofertas');
+  const idsNasOfertas = new Set(ofertasVisiveis ? ofertasDoDia.map((p) => p.id) : []);
   const banners = db.collection('banners').all()
     .filter((b) => b.ativo !== false && (b.posicao || 'principal') === 'principal')
     .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
@@ -154,8 +159,9 @@ export function homePage(ctx) {
           </div>` : ''}
         </section>`;
       case 'categorias': return secaoDepartamentos(arvore);
-      case 'ofertas': return secaoVitrina({ id: 'ofertas', titulo: s.titulo || 'Ofertas do dia', link: '/ofertas', produtos: vitrineProdutos(db, 'ofertas', s.limite || 12), db });
-      case 'destaques': return secaoVitrina({ id: 'destaques', titulo: s.titulo || 'Destaques', produtos: vitrineProdutos(db, 'destaques', s.limite || 8), db });
+      case 'ofertas': return secaoVitrina({ id: 'ofertas', titulo: s.titulo || 'Ofertas do dia', link: '/ofertas', produtos: ofertasDoDia, db });
+      case 'destaques': return secaoVitrina({ id: 'destaques', titulo: s.titulo || 'Destaques', produtos: vitrineProdutos(db, 'destaques', Infinity)
+        .filter((p) => !idsNasOfertas.has(p.id)).slice(0, s.limite || 8), db });
       case 'mais_vendidos': return secaoVitrina({ id: 'mais-vendidos', titulo: s.titulo || 'Mais vendidos', produtos: vitrineProdutos(db, 'mais_vendidos', s.limite || 8), db });
       case 'novidades': return secaoVitrina({ id: 'novidades', titulo: s.titulo || 'Novidades', produtos: vitrineProdutos(db, 'novidades', s.limite || 8), db });
       case 'vitrines': return vitrinesPersonalizadas(db, ctx);
