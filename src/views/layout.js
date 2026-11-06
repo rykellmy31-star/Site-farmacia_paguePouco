@@ -7,6 +7,7 @@ import { escapeHtml, sanitizeHtml } from '../lib/security.js';
 import { formatBRL, FUSO_LOJA } from '../lib/format.js';
 import { montarArvore } from '../lib/catalog.js';
 import { normalizarFundoHome } from '../lib/fundo-home.js';
+import { textoInstitucionalDinamico, dadosEmpresaVisiveis, campoCadastrado } from '../lib/dados-institucionais.js';
 import { escapeHtml as e } from '../lib/security.js';
 
 export { escapeHtml, sanitizeHtml };
@@ -169,6 +170,7 @@ function cabecalho(ctx) {
 function rodape(ctx) {
   const { settings, db } = ctx;
   const empresa = settings.empresa || {};
+  const dados = dadosEmpresaVisiveis(empresa);
   const rodapeCfg = settings.rodape || {};
   const whatsapp = settings.whatsapp || {};
   const link = linkWhatsApp(whatsapp);
@@ -179,11 +181,11 @@ function rodape(ctx) {
       <div class="rodape-grade">
         <div>
           <h4>${e(empresa.nomeFantasia || 'Farmácia Pague Pouco')}</h4>
-          <p>${e(rodapeCfg.textoInstitucional || '')}</p>
+          <p>${e(textoInstitucionalDinamico(rodapeCfg.textoInstitucional || '', empresa))}</p>
           <p class="mb-0">
-            ${empresa.endereco?.logradouro ? `${e(empresa.endereco.logradouro)}, ${e(empresa.endereco.numero || '')} — ${e(empresa.endereco.bairro || '')}<br>${e(empresa.endereco.cidade || '')}/${e(empresa.endereco.uf || '')} — CEP ${e(empresa.endereco.cep || '')}<br>` : ''}
-            ${empresa.telefone ? `Telefone: ${e(empresa.telefone)}<br>` : ''}
-            ${empresa.email ? `E-mail: ${e(empresa.email)}` : ''}
+            ${campoCadastrado(empresa.endereco?.logradouro) ? `${e(dados.enderecoLinha1)}<br>${e(dados.enderecoLinha2)}<br>` : ''}
+            ${campoCadastrado(empresa.telefone) ? `Telefone: ${e(dados.telefone)}<br>` : ''}
+            ${campoCadastrado(empresa.email) ? `E-mail: ${e(dados.email)}` : ''}
           </p>
           <div class="selos">
             ${(rodapeCfg.formasPagamento || []).map((f) => `<span class="selo">${e(f)}</span>`).join('')}
@@ -198,12 +200,12 @@ function rodape(ctx) {
           <h4>Atendimento</h4>
           <p>${e(empresa.horarioAtendimento || '')}</p>
           ${whatsapp.ativo && link ? `<p class="rodape-whatsapp-linha"><a class="rodape-whatsapp-link" href="${e(link)}" target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp"><span class="rodape-whatsapp-icone" aria-hidden="true">${ICONES.whatsapp}</span><span>Falar no WhatsApp</span></a></p>` : ''}
-          <p class="mb-0 texto-pequeno">${e(empresa.farmaceuticoResponsavel || '')} ${empresa.crf ? `— CRF ${e(empresa.crf)}` : ''}</p>
+          ${campoCadastrado(empresa.farmaceuticoResponsavel) ? `<p class="mb-0 texto-pequeno">Farmacêutico responsável: ${e(dados.farmaceuticoResponsavel)}${campoCadastrado(empresa.crf) ? ` — ${e(dados.crfCompleto)}` : ''}</p>` : ''}
         </div>
       </div>
       <div class="rodape-inferior">
         <div class="container" style="padding:0">
-          <p class="mb-0">${e(empresa.nomeFantasia || 'Farmácia Pague Pouco')} — CNPJ ${e(empresa.cnpj || '[PREENCHER]')}. Todos os direitos reservados.</p>
+          <p class="mb-0">${e(empresa.nomeFantasia || 'Farmácia Pague Pouco')}${campoCadastrado(empresa.cnpj) ? ` — CNPJ ${e(dados.cnpj)}` : ''}. Todos os direitos reservados.</p>
           <p class="mb-0 mt-1">Os preços e condições são válidos apenas para compras realizadas neste site. Venda de medicamentos conforme a legislação sanitária vigente (RDC 44/2009 e normas posteriores). Imagens meramente ilustrativas.</p>
         </div>
       </div>

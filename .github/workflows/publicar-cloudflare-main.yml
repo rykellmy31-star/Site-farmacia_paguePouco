@@ -47,6 +47,8 @@ jobs:
       - name: Validar robo local e sincronizacao automatica antes do deploy
         run: node --test tests/inovafarma-robo-windows.test.js tests/inovafarma-robo-auto.test.js
 
+      - name: Validar preenchimento automático de dados da empresa nas páginas
+        run: node --test tests/dados-institucionais-dinamicos.test.js
       - name: Validar botão compacto do WhatsApp no rodapé
         run: node --test tests/whatsapp-rodape-compacto.test.js
       - name: Validar pulsação dos selos de desconto

@@ -251,7 +251,7 @@ export function telaConfiguracoes(ctx, { settings }) {
       <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
       ${painel({
         titulo: 'Dados da empresa',
-        corpo: `<div class="grade-form duas-colunas">
+        corpo: `<p class="texto-pequeno">Preencha aqui uma única vez: as páginas institucionais e o rodapé exibem automaticamente os dados atualizados da farmácia, do farmacêutico e do endereço.</p><div class="grade-form duas-colunas">
           <div>
             ${campoAdmin({ nome: 'nomeFantasia', rotulo: 'Nome fantasia', valor: emp.nomeFantasia || '' })}
             ${campoAdmin({ nome: 'razaoSocial', rotulo: 'Razão social', valor: emp.razaoSocial || '' })}
@@ -460,6 +460,7 @@ export function telaPaginaForm(ctx, { pagina }) {
           ${campoAdmin({ nome: 'slug', rotulo: 'Endereço (slug)', valor: p.slug, dica: 'Ex.: quem-somos → /pagina/quem-somos' })}
         </div>
         ${campoAdmin({ nome: 'resumo', rotulo: 'Resumo (usado em buscas)', valor: p.resumo || '' })}
+        <p class="texto-pequeno">Os dados da farmácia vêm de Configurações gerais automaticamente. Em novos textos, utilize por exemplo <code>{{empresa.telefone}}</code>, <code>{{empresa.email}}</code>, <code>{{empresa.cnpj}}</code>, <code>{{empresa.farmaceuticoResponsavel}}</code> e <code>{{empresa.crfCompleto}}</code>.</p>
         <div class="editor-texto" data-editor>
           <div class="ferramentas">
             <button type="button" data-cmd="bold"><strong>N</strong></button>
