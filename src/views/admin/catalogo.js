@@ -693,8 +693,8 @@ export function telaMidia(ctx, { arquivos, stats, filtro }) {
       titulo: 'Enviar novos arquivos',
       corpo: `<div class="zona-upload" id="zonaUploadMidia" tabindex="0" role="button">
           <strong>Clique ou arraste arquivos aqui</strong>
-          <p class="texto-pequeno texto-suave mb-0">Imagens até 8 MB · Vídeos até 64 MB. Formatos aceitos: JPG, PNG, WEBP, SVG, MP4, WEBM, PDF.</p>
-          <input type="file" id="inputUploadMidia" multiple accept="image/*,video/*,application/pdf" style="display:none">
+          <p class="texto-pequeno texto-suave mb-0">Imagens até 8 MB · Vídeos até 64 MB. Formatos aceitos: JPG, PNG, WEBP, AVIF, SVG, MP4, WEBM, PDF.</p>
+          <input type="file" id="inputUploadMidia" multiple accept="image/*,image/avif,.avif,video/*,application/pdf" style="display:none">
         </div>`,
     })}
 
