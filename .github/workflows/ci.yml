@@ -52,6 +52,8 @@ jobs:
         run: node --test tests/salvar-google-imagem-png.test.js
       - name: Validar categorias existentes e classificação com confirmação
         run: node --test tests/categorizar-produtos-sem-categoria.test.js
+      - name: Validar upload e exibição de imagens AVIF em produtos
+        run: node --test tests/imagens-avif-produtos.test.js
       - name: Validar preenchimento automático de dados da empresa nas páginas
         run: node --test tests/dados-institucionais-dinamicos.test.js
       - name: Validar botão compacto do WhatsApp no rodapé

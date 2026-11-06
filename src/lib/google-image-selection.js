@@ -5,6 +5,7 @@
  * Google não concede licença comercial sobre imagens de terceiros.
  */
 import {createHmac,timingSafeEqual} from 'node:crypto';
+import { isAvif } from './uploads.js';
 import {eanValido,normalizarEAN} from './busca-medidas-ean.js';
 
 const TEMPO_TICKET=15*60*1000;
@@ -80,6 +81,7 @@ function detectarTipoImagem(bytes){
     return 'image/png';
   if(bytes.length>=12&&bytes.subarray(0,4).toString()==='RIFF'&&
      bytes.subarray(8,12).toString()==='WEBP')return 'image/webp';
+  if (isAvif(bytes)) return 'image/avif';
   return '';
 }
 async function lerImagemLimitada(resp){
@@ -160,7 +162,7 @@ export async function baixarFotoGoogleEscolhida(urls,{
         try{
           const bytes=await lerImagemLimitada(resp);
           const mime=detectarTipoImagem(bytes);
-          if(!mime){ultimaFalha='A fonte retornou conteúdo que não é imagem JPG, PNG ou WEBP.';break;}
+          if(!mime){ultimaFalha='A fonte retornou conteúdo que não é imagem JPG, PNG, WEBP ou AVIF.';break;}
           return {ok:true,bytes,mime,origem:atual,alternativa:origem!==permitidas[0]};
         }catch(e){
           ultimaFalha=e?.message==='grande'?

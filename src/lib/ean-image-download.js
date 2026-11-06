@@ -5,6 +5,8 @@
  * e foto exibida) e outras bases com o mesmo EAN. Nunca segue redirecionamento
  * para sites fora da lista de fontes permitidas.
  */
+import { isAvif } from './uploads.js';
+
 const ALLOWED=new Set([
  'images.openfoodfacts.org','static.openfoodfacts.org',
  'images.openbeautyfacts.org','static.openbeautyfacts.org',
@@ -21,19 +23,19 @@ export function origemImagemPermitida(url,ean=null){
       return false;
     if(ALLOWED.has(u.hostname.toLowerCase()))
       return u.pathname.startsWith('/images/products/')&&
-        /\.(?:jpe?g|png|webp)$/i.test(u.pathname);
+        /\.(?:jpe?g|png|webp|avif)$/i.test(u.pathname);
     // A API PreçoMelhor pode apontar para um CDN próprio, mas o proxy só
     // baixa o arquivo cujo nome corresponde EXATAMENTE ao EAN pesquisado.
     if(u.hostname==='upload.wikimedia.org')
-      return /^\/wikipedia\/commons\/[0-9a-f]\/[0-9a-f]{2}\/[a-z0-9_%()'!,+\-.]+\.(?:png|jpe?g|webp)$/i.test(u.pathname);
+      return /^\/wikipedia\/commons\/[0-9a-f]\/[0-9a-f]{2}\/[a-z0-9_%()'!,+\-.]+\.(?:png|jpe?g|webp|avif)$/i.test(u.pathname);
     // CDN da loja oficial Dailus (Shopify), restrita ao diretório da marca.
     // Nenhum endereço arbitrário nem query de redirecionamento é permitido.
     if(u.hostname==='cdn.shopify.com')
-      return /^\/s\/files\/1\/0936\/1702\/9411\/files\/[a-zA-Z0-9_%.\-]+\.(?:jpe?g|png|webp)$/i.test(u.pathname);
+      return /^\/s\/files\/1\/0936\/1702\/9411\/files\/[a-zA-Z0-9_%.\-]+\.(?:jpe?g|png|webp|avif)$/i.test(u.pathname);
     if(u.hostname==='live.staticflickr.com')
       return /^\/\d{2,6}\/\d{5,15}_[a-z0-9]{6,50}_(?:b|c|h|k|o)\.jpe?g$/i.test(u.pathname);
     return u.hostname===PRECOMELHOR_CDN&&/^\d{8}$|^\d{12,14}$/.test(String(ean||''))&&
-      new RegExp('^/'+ean+'(?:_w200)?\\.(?:webp|png|jpe?g)$','i').test(u.pathname);
+      new RegExp('^/'+ean+'(?:_w200)?\\.(?:webp|png|jpe?g|avif)$','i').test(u.pathname);
   }catch{return false;}
 }
 export function candidatosImagemEAN(imagem){
@@ -62,6 +64,7 @@ function mimePelosBytes(bytes){
     return 'image/png';
   if(bytes.length>=12&&bytes.subarray(0,4).toString()==='RIFF'&&
     bytes.subarray(8,12).toString()==='WEBP')return 'image/webp';
+  if (isAvif(bytes)) return 'image/avif';
   return '';
 }
 async function lerLimitado(resp,maxBytes){

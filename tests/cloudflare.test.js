@@ -226,6 +226,24 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const uploaded = await call('/admin/api/upload', { method: 'POST', body: form });
   assert.equal(uploaded.status, 200);
   const uploadResult = await uploaded.json();
+  // AVIF real de 2×2 pixels, enviado pela MESMA rota do painel e servido pelo
+  // armazenamento Cloudflare com Content-Type correto (não apenas extensão).
+  const avifBytes = Buffer.from('AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAADrbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAAAAAAAOcGl0bQAAAAAAAQAAAB5pbG9jAAAAAEQAAAEAAQAAAAEAAAETAAAAJwAAAChpaW5mAAAAAAABAAAAGmluZmUCAAAAAAEAAGF2MDFDb2xvcgAAAABqaXBycAAAAEtpcGNvAAAAFGlzcGUAAAAAAAAAAgAAAAIAAAAQcGl4aQAAAAADCAgIAAAADGF2MUOBAAwAAAAAE2NvbHJuY2x4AAEADQAGgAAAABdpcG1hAAAAAAAAAAEAAQQBAoMEAAAAL21kYXQSAAoIGAA2iAhoNCAyGRiHh4YhhhhhhpAAAABIVM2GHJT7eFxAauA=', 'base64');
+  const avifForm = new FormData();
+  avifForm.append('_csrf', adminToken);
+  avifForm.append('arquivo', new Blob([avifBytes], { type: 'image/avif' }), 'foto-produto.avif');
+  const avifUpload = await call('/admin/api/upload', { method: 'POST', body: avifForm });
+  assert.equal(avifUpload.status, 200);
+  const avifResult = await avifUpload.json();
+  assert.equal(avifResult.arquivos?.[0]?.ok, true, JSON.stringify(avifResult));
+  assert.equal(avifResult.arquivos[0].arquivo.mime, 'image/avif');
+  assert.equal(avifResult.arquivos[0].arquivo.ext, 'avif');
+  const avifUrl = avifResult.arquivos[0].arquivo.url;
+  const avifServido = await call(avifUrl);
+  assert.equal(avifServido.status, 200);
+  assert.equal(avifServido.headers.get('content-type'), 'image/avif');
+  assert.deepEqual(Buffer.from(await avifServido.arrayBuffer()), avifBytes);
+
   const backup = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: adminToken }) });
   assert.equal(backup.status, 200);
   const snapshot = await backup.json();
@@ -384,7 +402,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
     preco: '17.50', quantidade: '4', estoqueMinimo: '1',
     classificacao: 'nao_aplicavel', ativo: '1',
   })) edit.append(key, value);
-  edit.append('imagens[]', media.url);
+  edit.append('imagens[]', avifUrl);
   edit.append('imagemLegenda[]', 'Imagem do teste');
   const edited = await call('/admin/api/produtos/' + productCreated.id, { method: 'POST', body: edit });
   assert.equal(edited.status, 200, 'Editar produto não deve retornar 404.');
@@ -399,7 +417,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const updatedProduct = (await afterEdit.json()).collections.products.find(p => p.id === productCreated.id);
   assert.equal(updatedProduct.nome, 'Produto editado com imagem');
   assert.equal(updatedProduct.precoCentavos, 1750);
-  assert.equal(updatedProduct.imagens?.[0]?.url, media.url);
+  assert.equal(updatedProduct.imagens?.[0]?.url, avifUrl);
 
   // Reproduz as operações que abriram JSON cru no navegador do lojista.
   const stockPage = await call('/admin/estoque');
@@ -451,7 +469,7 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const persistedProduct = recovered.collections.products.find(p => p.id === productCreated.id);
   assert.equal(persistedProduct.nome, 'Produto editado com imagem', 'Edição de produto persiste após reiniciar.');
   assert.equal(persistedProduct.precoCentavos, 1750);
-  assert.equal(persistedProduct.imagens?.[0]?.url, media.url, 'Imagem associada continua persistente.');
+  assert.equal(persistedProduct.imagens?.[0]?.url, avifUrl, 'Imagem AVIF do produto persiste após reiniciar.');
   assert.equal(persistedProduct.estoque?.quantidade, 7, 'Movimentação de estoque persiste no SQLite.');
   assert.equal(recovered.collections.coupons.filter(c => c.codigo === 'REGRESSAOFORM2026').length, 1,
     'Cupom deve ser criado apenas uma vez e persistir após reinicialização.');

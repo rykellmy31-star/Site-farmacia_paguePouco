@@ -16,11 +16,26 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from '../config.js';
 
+// AVIF é um contêiner ISO-BMFF: exigir a caixa ftyp válida e a marca AVIF
+// (major ou compatible brand), sem confundir MP4 ou HEIC com foto AVIF.
+export function isAvif(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 16) return false;
+  const boxLength = buffer.readUInt32BE(0);
+  if (boxLength < 16 || boxLength > 4096 || boxLength > buffer.length ||
+      (boxLength - 16) % 4 !== 0 || buffer.toString('ascii', 4, 8) !== 'ftyp') return false;
+  if (['avif', 'avis'].includes(buffer.toString('ascii', 8, 12))) return true;
+  for (let offset = 16; offset + 4 <= boxLength; offset += 4) {
+    if (['avif', 'avis'].includes(buffer.toString('ascii', offset, offset + 4))) return true;
+  }
+  return false;
+}
+
 const SIGNATURES = [
   { ext: 'jpg', mime: 'image/jpeg', kind: 'image', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
   { ext: 'png', mime: 'image/png', kind: 'image', test: (b) => b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
   { ext: 'gif', mime: 'image/gif', kind: 'image', test: (b) => b.slice(0, 3).toString('latin1') === 'GIF' },
   { ext: 'webp', mime: 'image/webp', kind: 'image', test: (b) => b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WEBP' },
+  { ext: 'avif', mime: 'image/avif', kind: 'image', test: isAvif },
   { ext: 'svg', mime: 'image/svg+xml', kind: 'image', test: (b) => b.slice(0, 400).toString('latin1').includes('<svg') },
   { ext: 'mp4', mime: 'video/mp4', kind: 'video', test: (b) => b.slice(4, 8).toString('latin1') === 'ftyp' },
   { ext: 'webm', mime: 'video/webm', kind: 'video', test: (b) => b.slice(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3])) },
@@ -79,7 +94,7 @@ export async function saveUpload(db, file, opts = {}) {
   }
   const detected = detectFileType(file.data);
   if (!detected) {
-    throw new UploadError('Tipo de arquivo não permitido. Envie imagens (JPG, PNG, WEBP, SVG) ou vídeos (MP4, WEBM).');
+    throw new UploadError('Tipo de arquivo não permitido. Envie imagens (JPG, PNG, WEBP, AVIF, SVG) ou vídeos (MP4, WEBM).');
   }
   if (detected.kind !== kind) {
     throw new UploadError(`Arquivo enviado é do tipo "${detected.kind}", mas era esperado "${kind}".`);
