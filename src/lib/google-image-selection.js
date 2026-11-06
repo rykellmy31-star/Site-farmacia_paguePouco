@@ -5,6 +5,7 @@
  * Google não concede licença comercial sobre imagens de terceiros.
  */
 import {createHmac,timingSafeEqual} from 'node:crypto';
+import { isAvif } from './uploads.js';
 import {eanValido,normalizarEAN} from './busca-medidas-ean.js';
 
 const TEMPO_TICKET=15*60*1000;
@@ -73,8 +74,6 @@ export function validarTicketGoogle(ticket,{ean,adminId,segredo,agora=Date.now()
       titulo:String(p.titulo||'').slice(0,180)};
   }catch{return null}
 }
-
-import { isAvif } from './uploads.js';
 
 function detectarTipoImagem(bytes){
   if(bytes.length>3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff)return 'image/jpeg';
