@@ -308,7 +308,9 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   assert.equal(completeRestore.arquivos, manifest.files.length);
   assert.equal(completeRestore.bytes, manifest.bytes);
 
-  // Uma cópia adulterada com igual tamanho não pode gerar falso positivo.
+  // Adultera especificamente o SVG original; o AVIF permanece íntegro,
+  // assim verificamos que um único arquivo corrompido invalida o backup inteiro.
+  const mediaPath = path.join(restoreFolder, ...entry.caminho.split('/'));
   await writeFile(mediaPath, Buffer.alloc(Buffer.byteLength(svg), 0x21));
   await assert.rejects(ensaiarRestauracaoCloudflare({
     snapshot, manifest, mediaDir: restoreFolder,
