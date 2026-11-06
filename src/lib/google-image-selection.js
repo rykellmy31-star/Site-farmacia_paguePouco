@@ -74,12 +74,15 @@ export function validarTicketGoogle(ticket,{ean,adminId,segredo,agora=Date.now()
   }catch{return null}
 }
 
+import { isAvif } from './uploads.js';
+
 function detectarTipoImagem(bytes){
   if(bytes.length>3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff)return 'image/jpeg';
   if(bytes.length>=8&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))
     return 'image/png';
   if(bytes.length>=12&&bytes.subarray(0,4).toString()==='RIFF'&&
      bytes.subarray(8,12).toString()==='WEBP')return 'image/webp';
+  if (isAvif(bytes)) return 'image/avif';
   return '';
 }
 async function lerImagemLimitada(resp){
@@ -160,7 +163,7 @@ export async function baixarFotoGoogleEscolhida(urls,{
         try{
           const bytes=await lerImagemLimitada(resp);
           const mime=detectarTipoImagem(bytes);
-          if(!mime){ultimaFalha='A fonte retornou conteúdo que não é imagem JPG, PNG ou WEBP.';break;}
+          if(!mime){ultimaFalha='A fonte retornou conteúdo que não é imagem JPG, PNG, WEBP ou AVIF.';break;}
           return {ok:true,bytes,mime,origem:atual,alternativa:origem!==permitidas[0]};
         }catch(e){
           ultimaFalha=e?.message==='grande'?
