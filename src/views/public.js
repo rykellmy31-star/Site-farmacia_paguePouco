@@ -1,5 +1,6 @@
 /** views/public.js — Páginas do site: home, departamentos, categoria, produto, busca e conteúdo. */
 import { escapeHtml as e, sanitizeHtml } from '../lib/security.js';
+import { preencherDadosPagina } from '../lib/dados-institucionais.js';
 import {
   montarArvore, categoriaPorSlug, searchProducts, vitrineProdutos,
   produtosRelacionados, imagemPrincipal, precoVigenteCentavos, temPromocao,
@@ -486,7 +487,7 @@ export function paginaConteudo(ctx, { pagina }) {
       ${migalhas([{ texto: 'Início', url: '/' }, { texto: pagina.titulo }])}
       <div class="pagina-conteudo">
         <h1>${e(pagina.titulo)}</h1>
-        ${sanitizeHtml(pagina.conteudo || '')}
+        ${sanitizeHtml(preencherDadosPagina(pagina.conteudo || '', pagina.slug, ctx.settings?.empresa))}
         ${pagina.atualizadoEm ? `<p class="texto-pequeno texto-suave mb-0 mt-3">Atualizado em ${formatDate(pagina.atualizadoEm)}.</p>` : ''}
       </div>
     </div>`,
