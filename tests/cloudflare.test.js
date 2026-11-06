@@ -226,6 +226,24 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   const uploaded = await call('/admin/api/upload', { method: 'POST', body: form });
   assert.equal(uploaded.status, 200);
   const uploadResult = await uploaded.json();
+  // AVIF real de 2×2 pixels, enviado pela MESMA rota do painel e servido pelo
+  // armazenamento Cloudflare com Content-Type correto (não apenas extensão).
+  const avifBytes = Buffer.from('AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAADrbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAAAAAAAOcGl0bQAAAAAAAQAAAB5pbG9jAAAAAEQAAAEAAQAAAAEAAAETAAAAJwAAAChpaW5mAAAAAAABAAAAGmluZmUCAAAAAAEAAGF2MDFDb2xvcgAAAABqaXBycAAAAEtpcGNvAAAAFGlzcGUAAAAAAAAAAgAAAAIAAAAQcGl4aQAAAAADCAgIAAAADGF2MUOBAAwAAAAAE2NvbHJuY2x4AAEADQAGgAAAABdpcG1hAAAAAAAAAAEAAQQBAoMEAAAAL21kYXQSAAoIGAA2iAhoNCAyGRiHh4YhhhhhhpAAAABIVM2GHJT7eFxAauA=', 'base64');
+  const avifForm = new FormData();
+  avifForm.append('_csrf', adminToken);
+  avifForm.append('arquivo', new Blob([avifBytes], { type: 'image/avif' }), 'foto-produto.avif');
+  const avifUpload = await call('/admin/api/upload', { method: 'POST', body: avifForm });
+  assert.equal(avifUpload.status, 200);
+  const avifResult = await avifUpload.json();
+  assert.equal(avifResult.arquivos?.[0]?.ok, true, JSON.stringify(avifResult));
+  assert.equal(avifResult.arquivos[0].arquivo.mime, 'image/avif');
+  assert.equal(avifResult.arquivos[0].arquivo.ext, 'avif');
+  const avifUrl = avifResult.arquivos[0].arquivo.url;
+  const avifServido = await call(avifUrl);
+  assert.equal(avifServido.status, 200);
+  assert.equal(avifServido.headers.get('content-type'), 'image/avif');
+  assert.deepEqual(Buffer.from(await avifServido.arrayBuffer()), avifBytes);
+
   const backup = await call('/admin/api/sistema/backup', { method: 'POST', body: new URLSearchParams({ _csrf: adminToken }) });
   assert.equal(backup.status, 200);
   const snapshot = await backup.json();
