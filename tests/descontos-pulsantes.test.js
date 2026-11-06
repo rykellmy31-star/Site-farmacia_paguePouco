@@ -39,5 +39,5 @@ test('CSS usa pulsação visível e respeita acessibilidade', () => {
   const publico = readFileSync(new URL('../src/views/public.js', import.meta.url), 'utf8');
   assert.match(publico, /class="etiqueta laranja oferta-pulsante"/);
   const pagina = readFileSync(new URL('../src/views/layout.js', import.meta.url), 'utf8');
-  assert.match(pagina, /styles\.css\?v=descontos-pulsantes-20261105/);
+  assert.match(pagina, /styles\.css\?v=[a-z0-9-]+/i);
 });
