@@ -289,11 +289,15 @@ test('Workers local: site, login, uploads e dados sobrevivem à reinicializaçã
   // Nada é enviado à Cloudflare de produção ou salvo em artefato público do CI.
   const restoreFolder = await mkdtemp(path.join(os.tmpdir(), 'pp-restauracao-real-local-'));
   t.after(async () => rm(restoreFolder, { recursive: true, force: true }));
-  const mediaPath = path.join(restoreFolder, ...entry.caminho.split('/'));
-  await mkdir(path.dirname(mediaPath), { recursive: true });
-  const authenticatedMedia = await call('/admin/api/sistema/backup/arquivo/' + entry.chave);
-  assert.equal(authenticatedMedia.status, 200);
-  await writeFile(mediaPath, Buffer.from(await authenticatedMedia.arrayBuffer()));
+  // A restauração exige TODAS as mídias do manifesto, não apenas o SVG:
+  // AVIF e quaisquer formatos adicionados também precisam ser reconstituídos.
+  for (const arquivo of manifest.files) {
+    const mediaPath = path.join(restoreFolder, ...arquivo.caminho.split('/'));
+    await mkdir(path.dirname(mediaPath), { recursive: true });
+    const authenticatedMedia = await call('/admin/api/sistema/backup/arquivo/' + arquivo.chave);
+    assert.equal(authenticatedMedia.status, 200, 'backup de mídia deve permitir download: ' + arquivo.caminho);
+    await writeFile(mediaPath, Buffer.from(await authenticatedMedia.arrayBuffer()));
+  }
   const completeRestore = await ensaiarRestauracaoCloudflare({
     snapshot, manifest, mediaDir: restoreFolder,
   });
