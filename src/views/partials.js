@@ -34,6 +34,22 @@ export function creditoFotoDailus(produto){
     'Foto oficial: Dailus · direitos da fabricante</a>';
 }
 
+/**
+ * Aviso universal do catálogo público. Não anuncia uma imagem ilustrativa
+ * quando o produto está inativo ou ainda usa o desenho de "sem foto".
+ * A mesma função é usada nas vitrines e na galeria do detalhe.
+ */
+export function avisoImagemProduto(produto) {
+  if (!produto || produto.ativo === false) return '';
+  const temFotoReal = Array.isArray(produto.imagens) && produto.imagens.some(imagem => {
+    const url = typeof imagem === 'string' ? imagem : imagem?.url;
+    return typeof url === 'string' && url.trim() && !/\/img\/produto-sem-foto\.svg(?:\?|$)/i.test(url);
+  });
+  return temFotoReal
+    ? '<p class="aviso-imagem-produto"><span aria-hidden="true">ⓘ</span> Imagem meramente ilustrativa. A embalagem pode variar.</p>'
+    : '';
+}
+
 export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}) {
   const venda = podeVender(produto);
   const preco = precoVigenteCentavos(produto);
@@ -58,6 +74,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
     <a class="foto" href="${e(productUrl(produto))}" aria-label="${e(produto.nome)}">
       <img src="${e(img)}" alt="${e(produto.nome)}" loading="lazy" width="300" height="300">
     </a>
+    ${avisoImagemProduto(produto)}
     ${creditoImagemPrecoMelhor}
     ${creditoFotoOpenverse(produto)}
     ${creditoFotoDailus(produto)}

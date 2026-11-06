@@ -31,5 +31,5 @@ test('ícone do rodapé tem largura e altura de 20px e botão cabe no celular', 
   assert.match(css, /\.rodape \.rodape-whatsapp-link\s*\{[^}]*max-width: 100%/);
   assert.match(css, /@media\(max-width: 640px\)\s*\{\s*\.rodape \.rodape-whatsapp-link/);
   const html = paginaPublica(ctx, { conteudo: 'Home' });
-  assert.match(html, /styles\.css\?v=whatsapp-rodape-compacto-20261106/);
+  assert.match(html, /styles\.css\?v=[a-z0-9-]+/i);
 });

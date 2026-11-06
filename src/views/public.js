@@ -8,7 +8,7 @@ import {
 } from '../lib/catalog.js';
 import { paginaPublica, money, ICONES } from './layout.js';
 import {
-  vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, enderecoHtml, creditoFotoOpenverse, creditoFotoDailus,
+  vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, avisoImagemProduto, enderecoHtml, creditoFotoOpenverse, creditoFotoDailus,
 } from './partials.js';
 import { formatDate } from '../lib/format.js';
 import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
@@ -344,6 +344,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
     <div class="principal">
       <img id="imagemPrincipal" src="${e(imagens[0]?.url || '/img/produto-sem-foto.svg')}" alt="${e(produto.nome)}" width="500" height="500">
     </div>
+    ${avisoImagemProduto(produto)}
     <div class="miniaturas">
       ${imagens.map((img, i) => `
         <button type="button" class="${i === 0 ? 'ativo' : ''}" data-miniatura="${e(img.url)}" aria-label="Ver imagem ${i + 1} de ${e(produto.nome)}">
