@@ -25,6 +25,7 @@ export const MIME = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.avif': 'image/avif',
   '.gif': 'image/gif',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
@@ -400,7 +401,7 @@ async function serveStatic(req, res, dir, prefix, opts = {}) {
     res.status(304).set('ETag', etag);
     return void res.end('');
   }
-  const cacheable = opts.cache !== false && /\.(css|js|png|jpe?g|webp|gif|svg|woff2|mp4|webm|ico)$/i.test(filePath);
+  const cacheable = opts.cache !== false && /\.(css|js|png|jpe?g|webp|avif|gif|svg|woff2|mp4|webm|ico)$/i.test(filePath);
   res.set('Content-Type', type);
   res.set('ETag', etag);
   res.set('X-Content-Type-Options', 'nosniff');
