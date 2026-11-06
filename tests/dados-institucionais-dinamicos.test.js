@@ -63,7 +63,7 @@ test('rodapé exibe dados reais e nunca repete [PREENCHER] em textos antigos', (
   const settings = DEFAULT_SETTINGS();
   settings.empresa = empresa;
   const html = paginaPublica(ctx(empresa), { conteudo:'Página pública' });
-  assert.match(html, /Exemplo Farma LTDA/);
+  assert.match(html, /Farmácia Exemplo Atualizada/);
   assert.match(html, /CNPJ 12\.345\.678\/0001-90/);
   assert.match(html, /Dra\. Maria Silva/);
   assert.match(html, /Avenida Testes, 214/);
