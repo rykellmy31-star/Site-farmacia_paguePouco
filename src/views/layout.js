@@ -197,7 +197,7 @@ function rodape(ctx) {
         <div>
           <h4>Atendimento</h4>
           <p>${e(empresa.horarioAtendimento || '')}</p>
-          ${whatsapp.ativo && link ? `<p><a href="${e(link)}" target="_blank" rel="noopener noreferrer">${ICONES.whatsapp} WhatsApp (dúvidas)</a></p>` : ''}
+          ${whatsapp.ativo && link ? `<p class="rodape-whatsapp-linha"><a class="rodape-whatsapp-link" href="${e(link)}" target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp"><span class="rodape-whatsapp-icone" aria-hidden="true">${ICONES.whatsapp}</span><span>Falar no WhatsApp</span></a></p>` : ''}
           <p class="mb-0 texto-pequeno">${e(empresa.farmaceuticoResponsavel || '')} ${empresa.crf ? `— CRF ${e(empresa.crf)}` : ''}</p>
         </div>
       </div>
@@ -272,7 +272,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=descontos-pulsantes-20261105">
+<link rel="stylesheet" href="/styles.css?v=whatsapp-rodape-compacto-20261106">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
