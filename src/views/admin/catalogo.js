@@ -426,8 +426,8 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
             corpo: `
             <div class="zona-upload" id="zonaUpload" tabindex="0" role="button" aria-label="Enviar arquivos">
               <strong>Clique ou arraste arquivos aqui</strong>
-              <p class="texto-pequeno texto-suave mb-0">Imagens (JPG, PNG, WEBP) até 8 MB · Vídeos (MP4, WEBM) até 64 MB.</p>
-              <input type="file" id="inputUpload" multiple accept="image/*,video/*" style="display:none">
+              <p class="texto-pequeno texto-suave mb-0">Imagens (JPG, PNG, WEBP, AVIF) até 8 MB · Vídeos (MP4, WEBM) até 64 MB.</p>
+              <input type="file" id="inputUpload" multiple accept="image/jpeg,image/png,image/webp,image/avif,.avif,image/gif,image/svg+xml,video/*" style="display:none">
             </div>
             <div id="galeriaProduto" class="galeria-midia">
               ${imagens.map((img, i) => `
