@@ -115,7 +115,7 @@ export function registrarRotasApi(app, db) {
     // são necessários pesos, dimensões e preços atuais do catálogo.
     const cart = normalizeCart(db, getCart(db, req)).cart;
     const calc = await calcularFreteIntegrado({
-      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
+      db, config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep, uf, cidade,
       items: cart.itens || [],
       subtotalCents: (cart.itens || []).reduce((a, i) => a + i.precoUnitarioCentavos * i.quantidade, 0),
