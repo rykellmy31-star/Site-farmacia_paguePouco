@@ -134,8 +134,12 @@ function vitrinesPersonalizadas(db, ctx, idsExibidos = new Set()) {
       produtos = (v.produtosIds || []).map((id) => db.collection('products').get(id)).filter(Boolean);
     }
     // Vitrines extras respeitam os itens que já apareceram na home.
-    const unicos = produtos.filter(p => p && !idsExibidos.has(p.id));
-    for (const p of unicos) idsExibidos.add(p.id);
+    const unicos = [];
+    for (const p of produtos) {
+      if (!p || idsExibidos.has(p.id)) continue;
+      idsExibidos.add(p.id);
+      unicos.push(p);
+    }
     return secaoVitrina({
       id: `vitrine-${v.id}`,
       titulo: v.titulo,
