@@ -116,8 +116,9 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
         <strong>📦 Dimensões dos produtos em lote — busca pelo nome</strong>
         <p class="texto-pequeno">Pesquisa automaticamente todos os produtos com medidas incompletas,
         grava somente campos vazios e marca os resultados para conferência.
-        Produtos sem correspondência segura ficam sem medidas. Usa a API Google,
-        com limite de segurança de até 90 consultas por mês; interrompe ao atingir a cota.
+        Produtos sem correspondência segura ficam sem medidas. A pesquisa utiliza
+        páginas públicas da internet e o catálogo já cadastrado — sem API, chave ou mensalidade.
+        Fontes públicas podem limitar buscas automáticas; nesse caso a execução é pausada.
         Mantenha esta página aberta enquanto estiver executando; é possível retomar.</p>
         <div class="linha" style="gap:8px;flex-wrap:wrap">
           <button class="botao secundario" type="button" id="botaoBuscarMedidasTodos">
@@ -361,7 +362,8 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
             <div class="alerta info" id="painelBuscaEAN">
               <strong>📦 Ferramenta de dimensões — nome do produto</strong>
               <p class="texto-pequeno mt-1">Pesquisa pelo nome e apresentação, não pelo código EAN.
-              Aceita apenas dimensões explícitas da embalagem e resultados que correspondam ao produto.
+              Pesquisa automaticamente em páginas públicas e no catálogo, sem configurar API.
+              Aceita apenas medidas explícitas da embalagem e resultados compatíveis com o nome.
               Confira as medidas sugeridas antes de calcular fretes.</p>
               <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">📐 Buscar dimensões pelo nome</button>
               <a id="linkPesquisaEAN" class="botao pequeno secundario mt-1" target="_blank"
