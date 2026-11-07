@@ -113,7 +113,7 @@ export async function buscarDimensoesInternetPublica(nomeBruto,{
     nome+' "altura" "largura" "comprimento" embalagem',
   ];
   const candidatos=[],vistos=new Set();
-  let teveFeed=false,bloqueado=false;
+  let teveFeed=false,bloqueado=false,paginasAbertas=0;
   for(const q of buscas){
     const u=new URL('https://www.bing.com/search');
     u.searchParams.set('q',q);
@@ -135,7 +135,8 @@ export async function buscarDimensoesInternetPublica(nomeBruto,{
       if(!resultadoPertenceAoProduto(nome,item.titulo+' '+item.descricao))continue;
       const direto=candidatosDeItem(nome,item);
       if(direto){candidatos.push(direto);continue;}
-      if(!siteConfiavel(item.link)||vistos.size>6)continue;
+      if(!siteConfiavel(item.link)||paginasAbertas>=2)continue;
+      paginasAbertas++;
       // Busca só 2 páginas públicas no máximo, sem redirecionar para outros hosts.
       const pagina=await lerTextoPublico(item.link,fetcher,Math.min(timeoutMs,4000));
       if(!pagina.ok)continue;
