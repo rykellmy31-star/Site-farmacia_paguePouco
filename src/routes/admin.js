@@ -55,7 +55,7 @@ import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
-import { buscarMedidasPorNome, buscaLogisticaPendente, medidasCompletas } from '../lib/busca-medidas-nome.js';
+import { buscarMedidasPorNome, buscaLogisticaPendente, nomeMedidasValido } from '../lib/busca-medidas-nome.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { consultarGoogleImagensEAN } from '../lib/brightdata-google-imagens.js';
@@ -1769,6 +1769,7 @@ function registrarApi(app, db) {
   app.post('/admin/api/produtos/dimensoes-nome',async(req,res)=>{
     if(!guardApi(req,res,'produtos.editar'))return;
     const nome=String(req.body?.nome||'').trim().slice(0,170);
+    if(!nomeMedidasValido(nome))return void res.json({ok:false,erro:'Informe o nome completo do produto.'},400);
     const resultado=await consultarMedidasNomeComLimite(nome);
     res.set('Cache-Control','no-store');
     res.json(resultado,resultado.ok===false?400:200);
@@ -1783,7 +1784,7 @@ function registrarApi(app, db) {
     const jobs=db.collection('jobsMedidasNome');
     const existente=jobs.get(JOB_NOME_MEDIDAS);
     if(existente&&existente.status!=='concluido'&&req.body?.reiniciar!==true){
-      return void res.json({ok:true,job:existente});
+      return void res.json({ok:true,job:{...existente,ids:undefined}});
     }
     if(!config.googleEan?.key||!config.googleEan?.cx)
       return void res.json({ok:false,erro:'Configure a API Google para buscar dimensões por nome.'},400);
@@ -1793,7 +1794,7 @@ function registrarApi(app, db) {
       status:ids.length?'executando':'concluido',ultimo:'',iniciadoEm:new Date().toISOString()};
     if(existente)jobs.update(JOB_NOME_MEDIDAS,job);
     else jobs.insert({id:JOB_NOME_MEDIDAS,...job});
-    res.json({ok:true,job:{id:JOB_NOME_MEDIDAS,...job}});
+    res.json({ok:true,job:{id:JOB_NOME_MEDIDAS,...job,ids:undefined}});
   });
   app.post('/admin/api/produtos/medidas-lote/proximo',async(req,res)=>{
     if(!guardApi(req,res,'produtos.editar'))return;
@@ -1801,10 +1802,10 @@ function registrarApi(app, db) {
     const jobs=db.collection('jobsMedidasNome');
     const job=jobs.get(JOB_NOME_MEDIDAS);
     if(!job)return void res.json({ok:false,erro:'Inicie a atualização em lote primeiro.'},400);
-    if(job.status!=='executando')return void res.json({ok:true,job});
+    if(job.status!=='executando')return void res.json({ok:true,job:{...job,ids:undefined}});
     // Uma requisição por vez, para evitar duplicações em duas abas.
     if(job.executandoAte&&job.executandoAte>Date.now())
-      return void res.json({ok:true,ocupado:true,job});
+      return void res.json({ok:true,ocupado:true,job:{...job,ids:undefined}});
     jobs.update(JOB_NOME_MEDIDAS,{executandoAte:Date.now()+20000});
     let indice=job.indice,gravados=job.gravados,semDados=job.semDados,
       ignorados=job.ignorados,status='executando',ultimo='';
@@ -1849,6 +1850,22 @@ function registrarApi(app, db) {
     const status=job.indice>=job.total?'concluido':'executando';
     const atualizado=col.update(JOB_NOME_MEDIDAS,{status,executandoAte:0});
     res.json({ok:true,job:{...atualizado,ids:undefined}});
+  });
+
+  // Ao ativar individualmente, aproveitar exatamente a mesma busca por nome,
+  // sem depender de EAN, sem trocar dimensões já preenchidas.
+  app.post('/admin/api/produtos/:id/buscar-medidas-nome',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível.'},404);
+    if(!buscaLogisticaPendente(p))return void res.json({ok:true,encontrado:false,
+      mensagem:'Medidas existentes preservadas.'});
+    const r=await consultarMedidasNomeComLimite(p.nome);
+    if(!r.ok)return void res.json({ok:false,erro:r.mensagem||'Busca indisponível.'},429);
+    const salvou=gravarMedidasPesquisa(p,r,req.adminUser,req,'consultou_medidas_nome');
+    res.json({ok:true,encontrado:salvou,medidasAdicionadas:salvou,
+      mensagem:salvou?'Medidas sugeridas gravadas; confirme a embalagem.':
+        r.mensagem||'Nenhuma medida confiável encontrada pelo nome.'});
   });
 
   // Pesquisa por EAN exato: apenas dados logísticos, sem buscar imagens.
