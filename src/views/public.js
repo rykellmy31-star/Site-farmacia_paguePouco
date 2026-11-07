@@ -133,10 +133,15 @@ function vitrinesPersonalizadas(db, ctx, idsExibidos = new Set()) {
     } else {
       produtos = (v.produtosIds || []).map((id) => db.collection('products').get(id)).filter(Boolean);
     }
-    // Vitrines extras respeitam os itens que já apareceram na home.
-    const unicos = [];
+    // Vitrines geradas automaticamente não repetem a home.
+    // Vitrines de seleção MANUAL respeitam os itens escolhidos pelo
+    // administrador, mesmo que já tenham aparecido em outra seção.
+    const escolhaManual = !['categoria', 'marca', 'dinamica'].includes(v.tipo);
+    const unicos = [], idsDaVitrine = new Set();
     for (const p of produtos) {
-      if (!p || idsExibidos.has(p.id)) continue;
+      if (!p || idsDaVitrine.has(p.id) ||
+          (!escolhaManual && idsExibidos.has(p.id))) continue;
+      idsDaVitrine.add(p.id);
       idsExibidos.add(p.id);
       unicos.push(p);
     }
