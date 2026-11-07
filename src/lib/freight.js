@@ -164,7 +164,7 @@ export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidad
   // 1) Bloqueios por produto / categoria
   const bloqProd = new Set((cfg.bloqueios?.produtos || []).map(String));
   const bloqCat = new Set((cfg.bloqueios?.categorias || []).map(String));
-  const bloqueado = items.find((it) => bloqProd.has(String(it.productId)) || (it.categoriaId && bloqCat.has(String(it.categoriaId))));
+  const bloqueado = items.find((it) => bloqProd.has(String(it.produtoId ?? it.productId)) || (it.categoriaId && bloqCat.has(String(it.categoriaId))));
   if (bloqueado) {
     result.motivo = 'Este pedido contém itens com restrição de transporte (ex.: produtos hospitalares/aerossóis). Remova o item ou fale com nossa farmácia.';
     return result;
