@@ -93,7 +93,7 @@ function guard(req, res, permission) {
     return false;
   }
   if (!can(req.adminUser, permission)) {
-    res.status(403).html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="/styles.css?v=confirmacao-pix-20261021"></head>
+    res.status(403).html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="/styles.css?v=senha-olhinho-20261107"></head>
       <body><div class="container mt-3"><div class="pagina-conteudo">
       <h1>403 — Sem permissão</h1>
       <p>Seu perfil (<strong>${e(ROLES[req.adminUser.role]?.nome || req.adminUser.role)}</strong>) não tem permissão para esta área.</p>
@@ -181,7 +181,7 @@ export function registrarRotasAdmin(app, db) {
     const loginLogoUrl = getAllSettings(db).tema?.logoUrl || '';
     res.html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Painel — Farmácia Pague Pouco</title><link rel="stylesheet" href="/styles.css?v=confirmacao-pix-20261021">
+      <title>Painel — Farmácia Pague Pouco</title><link rel="stylesheet" href="/styles.css?v=senha-olhinho-20261107">
       <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho"></head>
       <body style="background:var(--fundo);display:flex;align-items:center;justify-content:center;min-height:100vh">
       <div style="width:100%;max-width:420px;padding:14px">
@@ -190,6 +190,7 @@ export function registrarRotasAdmin(app, db) {
           <h1 class="texto-centro">Painel administrativo</h1>
           <p class="texto-centro texto-pequeno texto-suave">Farmácia Pague Pouco</p>
           ${req.query.get('erro') ? `<div class="alerta erro">${e(req.query.get('erro'))}</div>` : ''}
+          <script src="/js/password-toggle.js?v=20261107" defer></script>
           <form method="post" action="/admin/login">
             <input type="hidden" name="_csrf" value="${e(csrfToken(req))}">
             <input type="hidden" name="next" value="${e(req.query.get('next') || '')}">
@@ -242,13 +243,14 @@ export function registrarRotasAdmin(app, db) {
     res.html(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       <title>Alterar senha — Farmácia Pague Pouco</title>
-      <link rel="stylesheet" href="/styles.css?v=confirmacao-pix-20261021">
+      <link rel="stylesheet" href="/styles.css?v=senha-olhinho-20261107">
       <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho"></head>
       <body style="background:var(--fundo);display:flex;align-items:center;justify-content:center;min-height:100vh">
       <main class="pagina-conteudo" style="max-width:480px;width:100%">
         <h1>${obrigatoria ? 'Troca de senha obrigatória' : 'Alterar minha senha'}</h1>
         <p>${obrigatoria ? 'Sua senha é provisória. Defina uma senha pessoal antes de acessar o painel.'
           : 'Para continuar com segurança, confirme a senha atual.'}</p>
+        <script src="/js/password-toggle.js?v=20261107" defer></script>
         <form method="post" action="/admin/alterar-senha">
           <input type="hidden" name="_csrf" value="${e(csrfToken(req))}">
           <div class="campo"><label for="senhaAtual">Senha atual</label>

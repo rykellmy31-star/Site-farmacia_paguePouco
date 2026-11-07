@@ -1346,3 +1346,24 @@ body.admin #previewBotaoWhatsApp.whatsapp-pulso-suave {
     transform: none !important;
   }
 }
+
+
+/* Campo de senha com olhinho: foco acessível e área de toque 44px. */
+.campo-senha-visivel { position:relative; width:100%; min-width:0; }
+.campo-senha-visivel > input:is([type="password"],[type="text"]) {
+  width:100%; min-width:0; padding-right:58px !important; font-size:max(16px,1rem);
+}
+.campo-senha-visivel > .alternar-visibilidade-senha {
+  position:absolute; right:3px; top:50%; transform:translateY(-50%);
+  width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center;
+  padding:0; border:0; border-radius:7px; background:transparent; color:#555 !important;
+  -webkit-text-fill-color:#555; cursor:pointer; z-index:1;
+}
+.campo-senha-visivel > .alternar-visibilidade-senha svg {
+  width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round;
+}
+.campo-senha-visivel > .alternar-visibilidade-senha:hover { background:rgba(0,0,0,.06); }
+.campo-senha-visivel > .alternar-visibilidade-senha:focus-visible {
+  outline:2px solid var(--primaria); outline-offset:-3px;
+}
