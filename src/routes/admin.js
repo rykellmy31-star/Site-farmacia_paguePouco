@@ -1728,37 +1728,20 @@ function registrarApi(app, db) {
     res.json({ok:true,adicionada:true});
   });
 
-  // Limite conservador COMPARTILHADO entre busca individual e execução em lote.
-  // O Google pode cobrar por requisições adicionais: não consumir cota sem controle.
-  const LIMITE_MEDIDAS_GOOGLE_MES=90;
-  function autorizarPesquisaNome(){
-    if(!config.googleEan?.key||!config.googleEan?.cx)
-      return {ok:false,semIntegracao:true,mensagem:'Configure a pesquisa Google no painel para consultar medidas por nome.'};
-    const mes=new Date().toISOString().slice(0,7);
-    const col=db.collection('cotasMedidasNome');
-    const uso=col.get(mes);
-    if(Number(uso?.consultas||0)>=LIMITE_MEDIDAS_GOOGLE_MES)
-      return {ok:false,cotaEsgotada:true,mensagem:'Limite de segurança de 90 pesquisas de dimensões por mês atingido. Retome no próximo mês; outras pesquisas Google podem ter cota própria.'};
-    if(uso)col.update(mes,{consultas:uso.consultas+1});
-    else col.insert({id:mes,consultas:1});
-    return {ok:true};
-  }
+  // Busca pública automática, sem credenciais. Primeiro o catálogo próprio.
   async function consultarMedidasNomeComLimite(nome, {produtoId=null}={}) {
     if(!nomeMedidasValido(nome))return {ok:false,
       mensagem:'Informe o nome completo e a apresentação do produto.'};
-    // Primeiro fontes locais por NOME (gratuito, sem precisar de chave).
     const local=buscarMedidasNoCatalogoPorNome(db,nome,{ignorarId:produtoId});
     if(local)return local;
-    const autorizado=autorizarPesquisaNome();
-    return autorizado.ok?buscarMedidasPorNome(nome):autorizado;
+    return buscarMedidasPorNome(nome);
   }
   function responderConsultaMedidas(res,resultado) {
     res.set('Cache-Control','no-store');
     if(resultado.ok===false){
       // O frontend precisa de "erro" (não apenas "mensagem"),
       // senão mostra o texto genérico "Não foi possível concluir".
-      const status=resultado.cotaEsgotada?429:
-        resultado.semIntegracao||resultado.credencialInvalida?503:502;
+      const status=resultado.temporario?503:502;
       return res.json({...resultado,erro:resultado.erro||resultado.mensagem||
         'Pesquisa de medidas indisponível. Confira a integração.'},status);
     }
@@ -1802,8 +1785,6 @@ function registrarApi(app, db) {
     if(existente&&existente.status!=='concluido'&&req.body?.reiniciar!==true){
       return void res.json({ok:true,job:{...existente,ids:undefined}});
     }
-    if(!config.googleEan?.key||!config.googleEan?.cx)
-      return void res.json({ok:false,erro:'O lote exige GOOGLE_CSE_API_KEY e GOOGLE_CSE_CX configurados na Cloudflare; a API de imagens é independente. Consultas individuais podem aproveitar medidas locais.'},503);
     const ids=db.collection('products').all().filter(buscaLogisticaPendente)
       .sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(p=>p.id);
     const job={ids,indice:0,total:ids.length,gravados:0,semDados:0,ignorados:0,
@@ -1826,8 +1807,8 @@ function registrarApi(app, db) {
     let indice=job.indice,gravados=job.gravados,semDados=job.semDados,
       ignorados=job.ignorados,status='executando',ultimo='';
     try{
-      // Duas chamadas no máximo por requisição. Seguro para execução no Worker.
-      for(let tentativas=0;tentativas<2&&indice<job.ids.length;tentativas++){
+      // Um produto por requisição: respeita limites dos sites públicos e do Worker.
+      for(let tentativas=0;tentativas<1&&indice<job.ids.length;tentativas++){
         const p=db.collection('products').get(job.ids[indice]);
         if(!buscaLogisticaPendente(p)){
           ignorados++;indice++;continue;
@@ -1835,7 +1816,8 @@ function registrarApi(app, db) {
         // O lote também usa nome completo. Nunca inferir medidas só pelo EAN.
         const resultado=await consultarMedidasNomeComLimite(p.nome,{produtoId:p.id});
         if(!resultado.ok){
-          status='pausado';ultimo=resultado.mensagem||'Pesquisa indisponível.';break;
+          // Bloqueio de fonte pública: interromper sem pular produtos.
+          status='pausado';ultimo=resultado.mensagem||'Pesquisa pública indisponível.';break;
         }
         if(gravarMedidasPesquisa(p,resultado,req.adminUser,req,'consultou_medidas_nome_lote'))gravados++;
         else semDados++;
