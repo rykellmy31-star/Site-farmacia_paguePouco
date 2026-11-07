@@ -89,6 +89,8 @@ jobs:
         run: node --test tests/relatorio-vendas-presencial.test.js
       - name: Conferir pagamento presencial por CEP com dinheiro e troco
         run: node --test tests/pagamento-presencial-local.test.js
+      - name: Validar OAuth Melhor Envio e tokens cifrados
+        run: node --test tests/melhor-envio-oauth.test.js
       - name: Conferir cotação Melhor Envio sem compras nem etiquetas
         run: node --test tests/melhor-envio.test.js
       - name: Conferir correção segura de receita automática Inova

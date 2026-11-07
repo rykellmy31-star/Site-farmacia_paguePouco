@@ -35,3 +35,27 @@ Documentação: https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-
 - O botão **Testar cotação** não habilita a integração nem cria despesa; a conta real precisa ter serviços autorizados no Melhor Envio. Nenhuma credencial é enviada ao navegador.
 - Cotação não implica que a transportadora aceite o medicamento. Verifique restrições, autorizações sanitárias e embalagem apropriada antes da postagem.
 - Após ativação, o checkout distingue claramente a cotação dinâmica da tabela fixa; se a API falhar, a compra não recebe um frete de valor inventado.
+
+## Autorização OAuth2 no domínio oficial (novembro de 2026)
+
+O retorno do cadastro do aplicativo no Melhor Envio é
+`https://site.farmaciapaguepouco.app/admin/melhor-envio/callback`.
+Use essa URL **exatamente** na URL de redirecionamento (callback). O próprio
+Melhor Envio informa que o campo URL do ambiente para testes pode receber
+a mesma URL de callback. Cadastre o app na produção para esta loja.
+
+Configurar no Worker via **Secrets**, jamais no git, em logs ou em conversas:
+- `MELHOR_ENVIO_CLIENT_ID` — ID do aplicativo fornecido na Área Dev.
+- `MELHOR_ENVIO_CLIENT_SECRET` — segredo do aplicativo fornecido na Área Dev.
+- `MELHOR_ENVIO_CREDENTIALS_KEY` — chave aleatória de 32+ caracteres, exclusiva.
+- `MELHOR_ENVIO_CONTATO_EMAIL` — e-mail técnico do aplicativo.
+
+Depois disso, a equipe acessa **Painel → Fretes → Conectar conta Melhor Envio**,
+autoriza somente `shipping-calculate`, recebe retorno no callback e testa a
+cotação. Os tokens ficam cifrados no banco e renovam automaticamente sob
+demanda. A cotação para clientes ainda deve ser ativada manualmente. Um
+botão no painel permite desconectar; isso remove os tokens e desativa a cotação.
+
+Se `MELHOR_ENVIO_CREDENTIALS_KEY` for perdida, os dados cifrados não poderão
+ser recuperados e será necessária nova autorização. Não ative os serviços de
+etiquetas/checkout, que não estão implementados.

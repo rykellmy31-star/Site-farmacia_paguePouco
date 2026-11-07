@@ -69,6 +69,8 @@ import { estadoCredenciaisMercadoPago, salvarCredenciaisMercadoPago, removerCred
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
 import { testarCotacaoMelhorEnvio } from '../lib/melhor-envio.js';
+import { iniciarOAuthMelhorEnvio, consumirEstadoOAuthMelhorEnvio, autorizarOAuthMelhorEnvio,
+  tokenOAuthMelhorEnvio, estadoOAuthMelhorEnvio, desconectarOAuthMelhorEnvio } from '../lib/melhor-envio-oauth.js';
 import { normalizeCep, isValidCep } from '../lib/cep.js';
 import { revogarSessoes } from '../lib/session-revocation.js';
 import { cadastrarVendedor, editarVendedor, metricasVendedores } from '../lib/sellers.js';
@@ -2767,12 +2769,49 @@ function registrarApi(app, db) {
     res.redirect('/admin/whatsapp?salvo=1');
   });
 
+
+  /* OAuth Melhor Envio — o mesmo callback registrado no app do provedor. */
+  app.get('/admin/melhor-envio/conectar', (req, res) => {
+    if (!guard(req, res, 'fretes.editar')) return;
+    res.set('Cache-Control', 'no-store');
+    const inicio = iniciarOAuthMelhorEnvio(db, req.adminSession);
+    if (!inicio.ok) return void res.redirect('/admin/fretes?erro=' + encodeURIComponent(inicio.erro));
+    res.redirect(inicio.url);
+  });
+
+  app.get('/admin/melhor-envio/callback', async (req, res) => {
+    if (!guard(req, res, 'fretes.editar')) return;
+    res.set('Cache-Control', 'no-store');
+    res.set('Referrer-Policy', 'no-referrer');
+    const state = req.query.get('state') || '';
+    if (!consumirEstadoOAuthMelhorEnvio(db, req.adminSession, state))
+      return void res.redirect('/admin/fretes?erro=' + encodeURIComponent('Autorização expirada ou inválida. Inicie novamente no painel.'));
+    if (req.query.has('error')) return void res.redirect('/admin/fretes?erro=' +
+      encodeURIComponent('Permissão negada ou cancelada no Melhor Envio.'));
+    const result = await autorizarOAuthMelhorEnvio(db, req.query.get('code') || '');
+    if (!result.ok) return void res.redirect('/admin/fretes?erro=' + encodeURIComponent(result.erro));
+    logAdmin(db, req.adminUser, 'conectou_melhor_envio_oauth', 'configuracao', 'fretes',
+      {escopo:'shipping-calculate'}, req);
+    res.redirect('/admin/fretes?salvo=melhor-envio-conectado');
+  });
+
+  app.post('/admin/api/fretes/melhor-envio/desconectar', (req, res) => {
+    if (!guardApi(req, res, 'fretes.editar')) return;
+    desconectarOAuthMelhorEnvio(db);
+    const atual = normalizeFreightConfig(getSetting(db,'frete'));
+    atual.melhorEnvio = {ativo:false};
+    setSetting(db,'frete',atual,req.adminUser,req);
+    logAdmin(db,req.adminUser,'desconectou_melhor_envio_oauth','configuracao','fretes',{},req);
+    res.json({ok:true, mensagem:'Conta desvinculada e cotação pelo Melhor Envio desativada.'});
+  });
+
   /* Teste somente de cotação; exclusivo de quem pode editar os fretes. */
   app.post('/admin/api/fretes/melhor-envio/testar', async (req, res) => {
     if (!guardApi(req, res, 'fretes.editar')) return;
     res.set('Cache-Control', 'no-store');
-    if (!config.melhorEnvio?.token || !config.melhorEnvio?.contato)
-      return void res.json({ok:false,erro:'Configure o token e o e-mail técnico nos segredos da Cloudflare.'},400);
+    const tokenCotacao = await tokenOAuthMelhorEnvio(db) || config.melhorEnvio?.token;
+    if (!tokenCotacao || !config.melhorEnvio?.contato)
+      return void res.json({ok:false,erro:'Conecte sua conta Melhor Envio no painel, ou configure um token válido na Cloudflare.'},400);
     const cepOrigem = normalizeCep(getSetting(db,'empresa')?.endereco?.cep);
     const cepDestino = normalizeCep(req.body?.cepDestino);
     if (!isValidCep(cepOrigem))
@@ -2781,7 +2820,7 @@ function registrarApi(app, db) {
       return void res.json({ok:false,erro:'Informe um CEP de destino válido e diferente do CEP da farmácia.'},400);
     const cotacao = await testarCotacaoMelhorEnvio({
       origem:cepOrigem, destino:cepDestino,
-      token:config.melhorEnvio.token, contato:config.melhorEnvio.contato,
+      token:tokenCotacao, contato:config.melhorEnvio.contato,
       sandbox:config.melhorEnvio.sandbox,
     });
     if (!cotacao.ok) return void res.json({ok:false,erro:cotacao.erro},502);
@@ -2795,9 +2834,10 @@ function registrarApi(app, db) {
     const cfg = normalizeFreightConfig(getSetting(db, 'frete'));
     // Somente permite ativar a cotação com credenciais do servidor.
     const solicitarMelhorEnvio = req.body.me_ativo === '1';
-    if (solicitarMelhorEnvio && (!config.melhorEnvio?.token || !config.melhorEnvio?.contato))
+    if (solicitarMelhorEnvio && (!config.melhorEnvio?.contato ||
+        !(estadoOAuthMelhorEnvio(db).conectado || config.melhorEnvio?.token)))
       return void res.redirect('/admin/fretes?erro='+encodeURIComponent(
-        'Configure MELHOR_ENVIO_TOKEN e MELHOR_ENVIO_CONTATO_EMAIL na Cloudflare antes de ativar.'));
+        'Conecte o Melhor Envio pelo botão do painel antes de ativar as cotações.'));
     cfg.melhorEnvio = {ativo: solicitarMelhorEnvio};
     for (const u of UFS) {
       const st = cfg.states[u.uf];

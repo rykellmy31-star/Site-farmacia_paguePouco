@@ -1330,6 +1330,22 @@
     }
   });
 
+  // Desvinculação voluntária com autorização administrativa e CSRF.
+  const botaoDesconectarMelhorEnvio = $('#desconectarMelhorEnvio');
+  if (botaoDesconectarMelhorEnvio) {
+    botaoDesconectarMelhorEnvio.addEventListener('click', async () => {
+      if (!confirm('Desconectar Melhor Envio? A cotação automática será desativada, sem mexer nos pedidos existentes.')) return;
+      botaoDesconectarMelhorEnvio.disabled = true;
+      try {
+        await post('/admin/api/fretes/melhor-envio/desconectar', {});
+        location.assign('/admin/fretes?salvo=desconectado');
+      } catch (err) {
+        botaoDesconectarMelhorEnvio.disabled = false;
+        notificar(err.message || 'Não foi possível desconectar.', 'erro');
+      }
+    });
+  }
+
   /* Teste de Melhor Envio: usa o servidor e não expõe credenciais no navegador. */
   const botaoTesteMelhorEnvio = $('#botaoTesteMelhorEnvio');
   if (botaoTesteMelhorEnvio) {

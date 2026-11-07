@@ -1,4 +1,5 @@
 import { config } from '../../config.js';
+import { estadoOAuthMelhorEnvio, MELHOR_ENVIO_CALLBACK } from '../../lib/melhor-envio-oauth.js';
 /** views/admin/config.js — Fretes, WhatsApp, configurações, páginas, usuários, auditoria, sistema e editor visual. */
 import { escapeHtml as e, sanitizeHtml } from '../../lib/security.js';
 import {
@@ -56,15 +57,35 @@ export function telaFretes(ctx, { frete, categorias, produtos }) {
         titulo: 'Melhor Envio — somente cálculo de frete',
         corpo: `
           <p>Consulta de preços e prazos, sem contratar transporte, criar etiqueta ou movimentar a carteira do Melhor Envio.</p>
-          <p><strong>Credenciais Cloudflare:</strong> ${config.melhorEnvio?.token && config.melhorEnvio?.contato
-            ? '<span class="etiqueta verde">Configuradas</span>'
-            : '<span class="etiqueta cinza">Ainda não configuradas</span>'}
-            — token e e-mail técnico são segredos no servidor; não aparecem neste painel.</p>
+          <p><strong>Conta Melhor Envio:</strong>
+            ${estadoOAuthMelhorEnvio(ctx.db).conectado
+              ? '<span class="etiqueta verde">Conta conectada com segurança</span>'
+              : '<span class="etiqueta cinza">Ainda não conectada</span>'}</p>
+          <p><strong>URL de retorno OAuth (cadastrar no Melhor Envio):</strong><br>
+            <code>${e(MELHOR_ENVIO_CALLBACK)}</code></p>
+          <p class="texto-pequeno">O Melhor Envio permite usar essa mesma URL no campo “ambiente para testes”.
+            Informe o e-mail técnico ${e(config.melhorEnvio?.contato || 'paguepoucofarmacia@gmail.com')} no cadastro do aplicativo.</p>
+          <p><strong>Credenciais do aplicativo Cloudflare:</strong>
+            ${estadoOAuthMelhorEnvio(ctx.db).credenciaisAplicativo &&
+              estadoOAuthMelhorEnvio(ctx.db).cofrePreparado && estadoOAuthMelhorEnvio(ctx.db).contatoConfigurado
+              ? '<span class="etiqueta verde">Configuradas</span>'
+              : '<span class="etiqueta cinza">Pendente: Client ID, Secret, chave AES e e-mail técnico</span>'}
+            — segredos nunca aparecem no painel.</p>
+          <div class="linha" style="gap:8px;flex-wrap:wrap;align-items:center">
+            <a class="botao secundario" href="/admin/melhor-envio/conectar">Conectar conta Melhor Envio</a>
+            ${estadoOAuthMelhorEnvio(ctx.db).conectado
+              ? '<button class="botao secundario" id="desconectarMelhorEnvio" type="button">Desconectar conta</button>'
+              : ''}
+          </div>
+          <p class="texto-pequeno">A conexão não ativa a cotação automaticamente. Autorize no Melhor Envio
+          apenas a permissão <code>shipping-calculate</code>.</p>
           ${campoAdmin({nome:'me_ativo',rotulo:'Ativar somente consulta Melhor Envio para outros CEPs',
             tipo:'checkbox',valor:!!frete.melhorEnvio?.ativo})}
-          <p class="texto-pequeno">Para ativar, configure <code>MELHOR_ENVIO_TOKEN</code> (segredo) e
-          <code>MELHOR_ENVIO_CONTATO_EMAIL</code> na Cloudflare. O único escopo necessário é <code>shipping-calculate</code>.
-          Os tokens OAuth expiram e precisam ser renovados. Não compartilhe o token por mensagens ou no GitHub.</p>
+          <p class="texto-pequeno">Depois de cadastrar o aplicativo Melhor Envio, informe no Worker
+          <code>MELHOR_ENVIO_CLIENT_ID</code>, <code>MELHOR_ENVIO_CLIENT_SECRET</code> e
+          <code>MELHOR_ENVIO_CREDENTIALS_KEY</code> (chave exclusiva com 32+ caracteres), além de
+          <code>MELHOR_ENVIO_CONTATO_EMAIL</code>. Conecte sua conta por OAuth no botão acima.
+          O token e o refresh token serão armazenados criptografados; nunca cole segredos em chats ou no GitHub.</p>
           <p class="texto-pequeno">O CEP de origem vem de Configurações gerais → Empresa. Cadastre em cada produto
           o peso real (kg) e altura/largura/comprimento (cm). Enquanto a integração estiver desligada,
           a tabela de fretes atual continua funcionando.</p>
