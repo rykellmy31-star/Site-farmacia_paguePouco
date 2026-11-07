@@ -4,6 +4,7 @@
  * A chave permanece exclusivamente no servidor (Cloudflare secret).
  */
 import { config } from '../config.js';
+import { tokenOAuthMelhorEnvio } from './melhor-envio-oauth.js';
 import { calcularFrete, normalizeFreightConfig } from './freight.js';
 import { isValidCep, normalizeCep } from './cep.js';
 
@@ -107,9 +108,10 @@ export async function calcularFreteIntegrado(params,{fetcher,token,contato,sandb
   if(!base.disponivel)return base;
   if(normalizeCep(params.cep)===normalizeCep(params.cepFarmacia)||
       !cfg.melhorEnvio?.ativo)return base;
+  const tokenAtual = token ?? (await tokenOAuthMelhorEnvio(params.db, {fetcher}) || config.melhorEnvio?.token);
   const cotacao=await consultarMelhorEnvio({
     origem:params.cepFarmacia,destino:params.cep,
-    items:params.items,token:token??config.melhorEnvio?.token,
+    items:params.items,token:tokenAtual,
     contato:contato??config.melhorEnvio?.contato,
     sandbox:sandbox??config.melhorEnvio?.sandbox,
     fetcher,
