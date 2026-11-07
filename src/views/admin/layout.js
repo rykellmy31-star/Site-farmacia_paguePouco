@@ -54,7 +54,7 @@ export function paginaAdmin(ctx, { titulo, conteudo, ativo = '', headExtra = '',
 <title>${e(titulo)} — Painel | ${e(empresa.nomeFantasia || 'Pague Pouco')}</title>
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#8b0000">
-<link rel="stylesheet" href="/styles.css?v=whatsapp-suave-novidades-20261107">
+<link rel="stylesheet" href="/styles.css?v=senha-olhinho-20261107">
 <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho">
 <style>
 :root{--marca-texto:${e(ctx.settings.tema?.corTexto || '#8b0000')};--primaria:${e(ctx.settings.tema?.corPrimaria || '#8b0000')};--primaria-escura:${e(ctx.settings.tema?.corPrimariaEscura || '#6b0000')};--secundaria:${e(ctx.settings.tema?.corSecundaria || '#8b0000')};}
@@ -91,6 +91,7 @@ ${headExtra}
 <div class="notificacao" id="notificacaoAdmin" role="status"></div>
 <script>window.PP_ADMIN=${JSON.stringify({ csrf: ctx.csrf, role: usuario.role })};</script>
 <script src="/js/admin.js?v=preview-whatsapp-suave-20261107" defer></script>
+<script src="/js/password-toggle.js?v=20261107" defer></script>
 <script src="/js/barcode-scanner.js?v=20261103-iphone-foto-v3" defer></script>
 ${can(usuario, 'pedidos.ver') ? '<script src="/js/avisos-vendas.js?v=20261025" defer></script>' : ''}
 ${corpoExtra}
