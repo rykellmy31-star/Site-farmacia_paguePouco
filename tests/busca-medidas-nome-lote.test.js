@@ -112,26 +112,27 @@ test('lote escolhe só produtos incompletos e não inclui arquivados',()=>{
   assert.equal(buscaLogisticaPendente({...incompleto,inovaArquivado:{em:'2026-10-28'}}),false);
 });
 
-test('painel e rotas do lote exigem permissão sem integração do Google',()=>{
+test('opção de busca de dimensões e lote removidos sem retirar campos manuais',()=>{
   const root=new URL('../',import.meta.url);
   const rotas=readFileSync(new URL('src/routes/admin.js',root),'utf8');
   const tela=readFileSync(new URL('src/views/admin/catalogo.js',root),'utf8');
   const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
-  assert.match(tela,/Buscar dimensões pelo nome/);
-  assert.match(tela,/id="botaoBuscarMedidasTodos"/);
-  assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/dimensoes-nome'/);
-  assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/medidas-lote\/iniciar'/);
-  assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/medidas-lote\/proximo'/);
-  assert.match(rotas,/guardApi\(req,res,'produtos\.editar'\)/);
-  assert.match(rotas,/role!=='super_admin'/);
-  assert.doesNotMatch(rotas,/LIMITE_MEDIDAS_GOOGLE_MES|GOOGLE_CSE_API_KEY/);
-  assert.doesNotMatch(rotas,/autorizarPesquisaNome/);
-  assert.match(rotas,/aplicarMedidasAusentes\(atual,resultado\)/);
-  assert.match(js,/post\('\/admin\/api\/produtos\/dimensoes-nome'/);
-  assert.match(js,/post\('\/admin\/api\/produtos\/medidas-lote\/proximo'/);
-  assert.doesNotMatch(js,/post\('\/admin\/api\/produtos\/dimensoes-ean'/);
+  for(const codigo of [
+    'botaoBuscarMedidasEAN','botaoBuscarMedidasTodos',
+    'painelMedidasNomeLote','linkPesquisaEAN',
+  ]) {
+    assert.doesNotMatch(tela,new RegExp(codigo));
+    assert.doesNotMatch(js,new RegExp(codigo));
+  }
+  assert.doesNotMatch(rotas,/app\.post\('\/admin\/api\/produtos\/dimensoes-nome'/);
+  assert.doesNotMatch(rotas,/app\.post\('\/admin\/api\/produtos\/medidas-lote/);
+  assert.doesNotMatch(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/buscar-medidas-nome'/);
+  assert.doesNotMatch(js,/post\('\/admin\/api\/produtos\/dimensoes-nome'/);
+  assert.doesNotMatch(js,/buscar-medidas-nome|medidas-lote/);
+  for(const campo of ['peso','largura','altura','comprimento'])
+    assert.match(tela,new RegExp("nome: '"+campo+"'"));
+  assert.match(tela,/confirmouMedidasLogisticas/);
 });
-
 
 test('nome completo consulta o catálogo antes do Google e sem reutilizar apresentação diferente',()=>{
   const db={collection:()=>({all:()=>[
@@ -172,25 +173,10 @@ test('conteúdo falso e fontes conflitantes não são aceitos',async()=>{
   assert.equal(conflito.encontrado,false);
 });
 
-test('falha de busca por nome devolve erro ao painel em vez de mensagem genérica',()=>{
-  const root=new URL('../',import.meta.url);
-  const routes=readFileSync(new URL('src/routes/admin.js',root),'utf8');
-  const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
-  const layout=readFileSync(new URL('src/views/admin/layout.js',root),'utf8');
-  assert.match(routes,/responderConsultaMedidas\(res,resultado\)/);
-  assert.match(routes,/erro:resultado\.erro\|\|resultado\.mensagem/);
-  assert.match(routes,/buscarMedidasNoCatalogoPorNome\(db,nome/);
-  assert.match(js,/dados\.erro \|\| dados\.mensagem/);
-  assert.match(layout,/admin\.js\?v=medidas-web-publica-20261106/);
-});
-
-test('a ferramenta não exige API Google, credenciais ou token',()=>{
+test('interface administrativa sem comandos de consulta por nome',()=>{
  const root=new URL('../',import.meta.url);
- const service=readFileSync(new URL('src/lib/busca-medidas-nome.js',root),'utf8');
- const rssService=readFileSync(new URL('src/lib/busca-medidas-web-publica.js',root),'utf8');
  const ui=readFileSync(new URL('src/views/admin/catalogo.js',root),'utf8');
- assert.doesNotMatch(service,/GOOGLE_CSE|googleapis\.com|googleKey/);
- assert.doesNotMatch(rssService,/googleapis\.com|apiKey|clientSecret/);
- assert.match(rssService,/www\.bing\.com\/search/);
- assert.match(ui,/sem API, chave ou mensalidade/);
+ const layout=readFileSync(new URL('src/views/admin/layout.js',root),'utf8');
+ assert.doesNotMatch(ui,/Buscar dimensões pelo nome|Buscar dimensões de todos/);
+ assert.match(layout,/admin\.js\?v=remover-busca-medidas-20261106/);
 });
