@@ -111,25 +111,6 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       </div>
     </div>
 
-    ${ctx.adminUser?.role === 'super_admin' ? `
-      <div class="painel mb-2" id="painelMedidasNomeLote" style="padding:14px">
-        <strong>📦 Dimensões dos produtos em lote — busca pelo nome</strong>
-        <p class="texto-pequeno">Pesquisa automaticamente todos os produtos com medidas incompletas,
-        grava somente campos vazios e marca os resultados para conferência.
-        Produtos sem correspondência segura ficam sem medidas. A pesquisa utiliza
-        páginas públicas da internet e o catálogo já cadastrado — sem API, chave ou mensalidade.
-        Fontes públicas podem limitar buscas automáticas; nesse caso a execução é pausada.
-        Mantenha esta página aberta enquanto estiver executando; é possível retomar.</p>
-        <div class="linha" style="gap:8px;flex-wrap:wrap">
-          <button class="botao secundario" type="button" id="botaoBuscarMedidasTodos">
-            📐 Buscar dimensões de todos os produtos e gravar
-          </button>
-          <button class="botao pequeno secundario" type="button" id="botaoPausarMedidas" disabled>Pausar</button>
-        </div>
-        <p class="texto-pequeno mt-2" id="progressoMedidasNome" role="status" aria-live="polite">
-          Aguardando início. Nenhum preço ou produto será alterado.</p>
-      </div>` : ''}
-
     ${/^[0-9]{1,2}$/.test(String(filtros.promosOrganizadas||'')) ?
       '<div class="alerta info">'+e(filtros.promosOrganizadas)+
       ' produto(s) tiveram marcação organizacional atualizada. Descontos não foram modificados.</div>' : ''}
@@ -359,25 +340,13 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               </p>
               <div id="listaGoogleImagensEAN" class="campo-linha" aria-label="Resultados do Google Imagens"></div>
             </div>
-            <div class="alerta info" id="painelBuscaEAN">
-              <strong>📦 Ferramenta de dimensões — nome do produto</strong>
-              <p class="texto-pequeno mt-1">Pesquisa pelo nome e apresentação, não pelo código EAN.
-              Pesquisa automaticamente em páginas públicas e no catálogo, sem configurar API.
-              Aceita apenas medidas explícitas da embalagem e resultados compatíveis com o nome.
-              Confira as medidas sugeridas antes de calcular fretes.</p>
-              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">📐 Buscar dimensões pelo nome</button>
-              <a id="linkPesquisaEAN" class="botao pequeno secundario mt-1" target="_blank"
-                rel="noopener noreferrer" style="display:none">🌐 Procurar medidas deste produto na web</a>
-              <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaEAN" role="status">
-                ${p.logisticaFonte?.origem
-                  ? `Fonte: ${e(p.logisticaFonte.origem)} · ${p.logisticaFonte.revisaoPendente ? 'Conferência da embalagem pendente' : 'Medidas revisadas'}`
-                  : 'Nenhuma pesquisa de medidas realizada.'}
-              </p>
-              ${p.logisticaFonte?.revisaoPendente ? `<label class="check mt-1">
+            ${p.logisticaFonte?.revisaoPendente ? `<div class="alerta info">
+              <p class="texto-pequeno">Medidas previamente cadastradas exigem conferência antes do envio.</p>
+              <label class="check mt-1">
                 <input type="checkbox" name="confirmouMedidasLogisticas" value="1">
                 <span>Conferi as medidas e o peso da embalagem que será enviada.</span>
-              </label>` : ''}
-            </div>
+              </label>
+            </div>` : ''}
             <div class="campo-linha">
               ${campoAdmin({ nome: 'peso', rotulo: 'Peso (kg)', tipo: 'number', step: '0.001', min: '0', valor: p.peso ?? 0 })}
               ${campoAdmin({ nome: 'largura', rotulo: 'Largura (cm)', tipo: 'number', step: '0.1', min: '0', valor: p.dimensoes?.largura ?? 0 })}
