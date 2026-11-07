@@ -11,6 +11,7 @@ import { formatDateTime, formatDate } from '../../lib/format.js';
 import { ROLES, ROLE_LIST } from '../../lib/permissions.js';
 import { uploadStats } from '../../lib/uploads.js';
 import { normalizarFundoHome } from '../../lib/fundo-home.js';
+import { coresBarraTopo } from '../layout.js';
 
 /* ================================ FRETES ================================ */
 export function telaFretes(ctx, { frete, categorias, produtos }) {
@@ -277,6 +278,7 @@ export function telaConfiguracoes(ctx, { settings }) {
   const emp = settings.empresa || {};
   const tema = settings.tema || {};
   const fundoHome = normalizarFundoHome(tema.fundoHome);
+  const coresBarra = coresBarraTopo(tema);
   const loja = settings.loja || {};
   const seo = settings.seo || {};
   const rod = settings.rodape || {};
@@ -345,18 +347,19 @@ export function telaConfiguracoes(ctx, { settings }) {
             <input type="file" id="logoArquivo" name="logo" accept="image/*">
           </div>
           ${tema.logoUrl ? `<p class="texto-pequeno">Logo atual: <a href="${e(tema.logoUrl)}" target="_blank">${e(tema.logoUrl)}</a></p>` : ''}
-          <h4 class="mt-2">Barra superior de avisos</h4>
-          ${campoAdmin({ nome: 'barraTopoAtiva', rotulo: 'Exibir barra superior', tipo: 'checkbox', valor: tema.barraTopoAtiva !== false })}
-          ${campoAdmin({ nome: 'barraTopoTexto', rotulo: 'Texto da barra superior', valor: tema.barraTopoTexto || '' })}
+          <h4 class="mt-2">Faixa de avisos abaixo do menu (fixa na rolagem)</h4>
+          <p class="texto-pequeno texto-suave">Aparece entre os departamentos e os banners, permanece visível na rolagem e pode ser personalizada sem mudar as cores da loja.</p>
+          ${campoAdmin({ nome: 'barraTopoAtiva', rotulo: 'Exibir faixa de avisos', tipo: 'checkbox', valor: tema.barraTopoAtiva !== false })}
+          ${campoAdmin({ nome: 'barraTopoTexto', rotulo: 'Texto da faixa de avisos', valor: tema.barraTopoTexto || '' })}
           <div class="campo-linha">
-            ${campoAdmin({ nome: 'barraTopoCorFundo', rotulo: 'Cor de fundo da barra', tipo: 'color', valor: /^#[0-9a-f]{6}$/i.test(tema.barraTopoCorFundo || '') ? tema.barraTopoCorFundo : '#fff0f0' })}
-            ${campoAdmin({ nome: 'barraTopoCorTexto', rotulo: 'Cor do texto da barra', tipo: 'color', valor: /^#[0-9a-f]{6}$/i.test(tema.barraTopoCorTexto || '') ? tema.barraTopoCorTexto : '#8b0000' })}
+            ${campoAdmin({ nome: 'barraTopoCorFundo', rotulo: 'Cor de fundo da barra', tipo: 'color', valor: coresBarra.fundo })}
+            ${campoAdmin({ nome: 'barraTopoCorTexto', rotulo: 'Cor do texto da barra', tipo: 'color', valor: coresBarra.texto })}
           </div>
           <input type="hidden" name="barraTopoPulsanteDefinida" value="1">
-          ${campoAdmin({ nome: 'barraTopoPulsante', rotulo: 'Ativar pulsação forte na barra superior', tipo: 'checkbox', valor: tema.barraTopoPulsante !== false })}
+          ${campoAdmin({ nome: 'barraTopoPulsante', rotulo: 'Ativar pulsação na faixa de avisos', tipo: 'checkbox', valor: tema.barraTopoPulsante !== false })}
           <div class="campo">
-            <label>Prévia da barra superior</label>
-            <div id="previewBarraTopo" aria-hidden="true" class="barra-topo barra-topo-pulsante" style="padding:12px;border-radius:8px;">
+            <label>Prévia da faixa de avisos</label>
+            <div id="previewBarraTopo" aria-hidden="true" class="barra-topo${tema.barraTopoPulsante !== false ? ' barra-topo-pulsante' : ''}" style="padding:6px 10px;border-radius:6px;">
               <span id="previewTextoBarraTopo" class="barra-topo-conteudo"></span>
             </div>
             <span class="dica">Pulso forte com brilho e movimento do texto; respeita acessibilidade. As cores são independentes das demais partes da loja.</span>

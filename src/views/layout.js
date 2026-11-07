@@ -121,6 +121,25 @@ function menuDepartamentos(arvore, whatsapp) {
   </div>`;
 }
 
+// A migração visual aplica verde/branco só às antigas cores padrão.
+// Depois de uma edição no painel, as cores escolhidas pelo lojista prevalecem.
+export function coresBarraTopo(tema = {}) {
+  const legado = tema.barraTopoEstiloVersao !== 'abaixo-menu-verde-20261107';
+  const valido = cor => /^#[0-9a-f]{6}$/i.test(String(cor || ''));
+  const fundo = tema.barraTopoCorFundo;
+  const texto = tema.barraTopoCorTexto;
+  return {
+    fundo: valido(fundo) && !(legado && fundo.toLowerCase() === '#fff0f0') ? fundo : '#16803c',
+    texto: valido(texto) && !(legado && texto.toLowerCase() === '#8b0000') ? texto : '#ffffff',
+  };
+}
+
+function barraAvisos(tema) {
+  if (tema.barraTopoAtiva !== true || !String(tema.barraTopoTexto || '').trim()) return '';
+  const cores = coresBarraTopo(tema);
+  return `<div class="barra-topo${tema.barraTopoPulsante !== false ? ' barra-topo-pulsante' : ''}" style="--barra-topo-fundo:${e(cores.fundo)};--barra-topo-texto:${e(cores.texto)}"><span class="barra-topo-conteudo">${sanitizeHtml(tema.barraTopoTexto)}</span></div>`;
+}
+
 function cabecalho(ctx) {
   const { settings, cartCount = 0, usuario, arvore } = ctx;
   const empresa = settings.empresa || {};
@@ -164,6 +183,7 @@ function cabecalho(ctx) {
       </div>
     </div>
     ${menuDepartamentos(arvore, whatsapp)}
+    ${barraAvisos(tema)}
   </header>`;
 }
 
@@ -246,8 +266,6 @@ export function paginaPublica(ctx, { titulo, descricao, conteudo, headExtra = ''
   const empresa = settings.empresa || {};
   const tema = settings.tema || {};
   const seo = settings.seo || {};
-  const corBarraTopoFundo = /^#[0-9a-f]{6}$/i.test(tema.barraTopoCorFundo || '') ? tema.barraTopoCorFundo : '#fff0f0';
-  const corBarraTopoTexto = /^#[0-9a-f]{6}$/i.test(tema.barraTopoCorTexto || '') ? tema.barraTopoCorTexto : '#8b0000';
   const fundoHome = normalizarFundoHome(tema.fundoHome);
   const classeFundoHome = corpoClasse === 'pagina-inicial' && fundoHome.modo !== 'padrao'
     ? (fundoHome.modo === 'imagem' ? ' fundo-personalizado fundo-imagem' : ' fundo-personalizado fundo-cor') : '';
@@ -274,7 +292,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=oferta-preco-vendas-20261106">
+<link rel="stylesheet" href="/styles.css?v=barra-verde-sticky-20261107">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
@@ -292,7 +310,6 @@ ${seo.googleAnalyticsId ? `<script async src="https://www.googletagmanager.com/g
 ${headExtra}
 </head>
 <body class="com-menu-mobile ${corpoClasse}${classeFundoHome}">
-${(tema.barraTopoAtiva && tema.barraTopoTexto) ? `<div class="barra-topo${tema.barraTopoPulsante !== false ? ' barra-topo-pulsante' : ''}" style="--barra-topo-fundo:${corBarraTopoFundo};--barra-topo-texto:${corBarraTopoTexto}"><span class="barra-topo-conteudo">${sanitizeHtml(tema.barraTopoTexto)}</span></div>` : ''}
 <div class="notificacao" id="notificacao" role="status" aria-live="polite"></div>
 ${cabecalho({ ...ctx, arvore })}
 <main id="conteudo">${conteudo}</main>

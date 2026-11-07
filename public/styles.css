@@ -773,7 +773,7 @@ input::placeholder, textarea::placeholder {
   opacity: .75;
 }
 :root { accent-color: #8b0000; }
-.barra-topo, .menu-departamentos, .menu-departamentos .todos,
+.menu-departamentos, .menu-departamentos .todos,
 .rodape, .barra-cookies, .admin-topo {
   background: #fff0f0;
   border-color: #ecd7d7;
@@ -1270,4 +1270,41 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
 }
 @media (prefers-reduced-motion: reduce) {
   .preco-oferta .etiqueta-desconto.oferta-pulsante { animation: none !important; }
+}
+
+
+/* Barra de avisos na posição solicitada: imediatamente abaixo do menu.
+   Como filha do cabeçalho sticky, acompanha a rolagem sem cobrir a busca,
+   os departamentos ou os banners. Também funciona com menu mobile oculto. */
+body .cabecalho > .barra-topo {
+  position: relative;
+  width: 100%;
+  min-height: 24px;
+  padding: 4px 10px;
+  line-height: 1.2;
+  border: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+  background: var(--barra-topo-fundo, #16803c) !important;
+  color: var(--barra-topo-texto, #ffffff) !important;
+}
+body .cabecalho > .barra-topo,
+body .cabecalho > .barra-topo * {
+  color: var(--barra-topo-texto, #ffffff) !important;
+}
+body .cabecalho > .barra-topo .barra-topo-conteudo {
+  display: inline-block;
+  max-width: 100%;
+  font-size: clamp(.7rem, 1.1vw, .8rem);
+  line-height: 1.2;
+  padding: 0;
+}
+body .cabecalho {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+}
+@media (max-width: 767px) {
+  body .cabecalho > .barra-topo { padding: 5px 12px; min-height: 26px; }
+  body .cabecalho > .barra-topo .barra-topo-conteudo { font-size: .72rem; }
 }
