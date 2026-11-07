@@ -478,7 +478,7 @@
   renderCaracteristicas();
 
   /* --- Ferramentas EAN independentes: imagem PNG e medidas logísticas --- */
-  let buscaImagemAntesDeSalvar=null, buscaMedidasAntesDeSalvar=null,
+  let buscaImagemAntesDeSalvar=null,
     buscaDescricaoAntesDeSalvar=null;
   // A escolha do Google aparece imediatamente na galeria; o PNG será
   // baixado e validado somente quando Salvar alterações for pressionado.
