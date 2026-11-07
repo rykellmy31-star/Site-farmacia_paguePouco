@@ -145,15 +145,15 @@ test('EAN identificado sem peso logístico retorna diagnóstico claro das fontes
   assert.match(r.mensagem,/Produto identificado/);
   assert.equal(r.consultadas.length,4);
 });
-test('botão repete busca mesmo com resultado anterior e oferece pesquisa assistida na web',()=>{
+test('busca de dimensões não aparece na interface nem executa ao ativar',()=>{
   const base=new URL('../',import.meta.url);
   const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
   const rotas=readFileSync(new URL('src/routes/admin.js',base),'utf8');
   const tela=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
-  assert.match(js,/consultarMedidasEAN\(\{forcar:true\}\)/);
-  assert.match(js,/dimensões da embalagem pelo nome/);
-  assert.match(js,/google\.com\/search\?q=/);
-  assert.match(tela,/id="linkPesquisaEAN"/);
+  assert.doesNotMatch(js,/consultarMedidasEAN\(\{forcar:true\}\)/);
+  assert.doesNotMatch(js,/dimensões da embalagem pelo nome/);
+  assert.doesNotMatch(js,/google\.com\/search\?q=/);
+  assert.doesNotMatch(tela,/id="linkPesquisaEAN"/);
   assert.match(rotas,/buscarMedidasNoCatalogo\(db,ean/);
   assert.match(rotas,/buscarMedidasPorEAN\(ean,\{forcar:req\.body\?\.forcar===true\}\)/);
 });
