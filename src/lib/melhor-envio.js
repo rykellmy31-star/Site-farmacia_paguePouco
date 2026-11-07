@@ -37,6 +37,20 @@ export function prepararCotacaoMelhorEnvio({origem,destino,items=[]}) {
     products,options:{receipt:false,own_hand:false}}};
 }
 
+/** Diagnóstico de integração: somente cotação de UM pacote fictício; jamais cria etiqueta. */
+export async function testarCotacaoMelhorEnvio({ origem, destino, token, contato, sandbox=false, fetcher=globalThis.fetch }) {
+  const calculo = await consultarMelhorEnvio({ origem, destino, token, contato, sandbox, fetcher,
+    items: [{ produtoId:'simulacao-integracao', quantidade:1, peso:0.5,
+      largura:15, altura:10, comprimento:20, precoUnitarioCentavos:3000 }],
+    timeoutMs:7000,
+  });
+  if (!calculo.ok) return calculo;
+  return { ok:true, ambiente:sandbox?'sandbox':'producao',
+    opcoes:calculo.opcoes.slice(0,3).map(o=>({
+      label:o.label, valor:o.valor, prazo:o.prazo,
+    })) };
+}
+
 export async function consultarMelhorEnvio({origem,destino,items=[],token,contato,
   sandbox=false,fetcher=globalThis.fetch,timeoutMs=7000}) {
   if(!token||!contato||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contato))
