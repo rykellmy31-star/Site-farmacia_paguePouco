@@ -65,14 +65,15 @@ test('não executa HTML externo nem inventa indicações terapêuticas',async()=
  assert.doesNotMatch(r.descricao,/<script|<img|onerror/i);
  assert.doesNotMatch(r.descricao,/indicado para|cura|trata doenças/i);
 });
-test('painel oferece terceira ferramenta independente para descrição',()=>{
+test('painel preserva ferramentas de descrição e imagens sem busca de dimensões',()=>{
  const base=new URL('../',import.meta.url);
  const layout=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
  const routes=readFileSync(new URL('src/routes/admin.js',base),'utf8');
  const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
  assert.match(layout,/botaoBuscarDescricaoEAN/);
  assert.match(layout,/botaoBuscarImagemEAN/);
- assert.match(layout,/botaoBuscarMedidasEAN/);
+ assert.doesNotMatch(layout,/botaoBuscarMedidasEAN/);
+ assert.match(layout,/nome: 'peso'/);
  assert.match(routes,/app\.post\('\/admin\/api\/produtos\/descricao-ean'/);
  assert.match(routes,/app\.post\('\/admin\/api\/produtos\/:id\/buscar-descricao-ean'/);
  assert.match(routes,/preencherDescricaoAusente\(p,dados\)/);
