@@ -1391,7 +1391,7 @@
       if(executando)return;
       if(!confirm('Pesquisar dimensões de todos os produtos com campos vazios? '+
         'Apenas correspondências seguras serão gravadas e ficarão pendentes de revisão. '+
-        'A API Google tem limite de 90 pesquisas de dimensões por mês.'))return;
+        'A pesquisa pública pode limitar consultas automáticas; você poderá retomar.'))return;
       executando=true;botaoLoteMedidas.disabled=true;
       if(botaoPausar)botaoPausar.disabled=false;
       try{
@@ -1403,10 +1403,10 @@
           const r=await post('/admin/api/produtos/medidas-lote/proximo',{});
           job=r.job;atualizar(job);
           if(r.ocupado)await new Promise(ok=>setTimeout(ok,1500));
-          else if(job.status==='executando')await new Promise(ok=>setTimeout(ok,900));
+          else if(job.status==='executando')await new Promise(ok=>setTimeout(ok,2200));
         }
         if(job.status==='concluido')notificar('Busca em lote concluída. Consulte os produtos pendentes de revisão.');
-        else if(job.status==='pausado')notificar('Busca em lote pausada. Confira a cota de consultas.', 'erro');
+        else if(job.status==='pausado')notificar('Busca pausada. Confira a mensagem e tente retomar depois.', 'erro');
       }catch(err){
         if(aviso)aviso.textContent='Busca interrompida: '+(err.message||'falha na consulta')+
           '. Clique no botão para retomar.';

@@ -1,12 +1,9 @@
 /**
  * Busca de medidas logísticas pelo NOME, não pelo EAN.
- * O Google Programmable Search fornece resultado textual; aceitamos somente
- * medidas explícitas da embalagem e identificação consistente do produto.
+ * Fontes públicas acessíveis na internet, sem cadastrar API ou chave.
+ * Aceita apenas medidas explícitas da embalagem e produto identificado.
  * Não supõe peso a partir de conteúdo líquido ou quantidade comercial.
  */
-import { config } from '../config.js';
-
-const CACHE = new Map();
 const limpar = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const tokens = name => limpar(name).split(/\s+/).filter(Boolean);
@@ -84,79 +81,15 @@ export function buscarMedidasNoCatalogoPorNome(db, nomeBruto, {ignorarId=null}={
     aviso:'Medidas encontradas em outro cadastro. Confira a embalagem real antes de usar no frete.'};
 }
 
-export async function buscarMedidasPorNome(nomeBruto,{
-  fetcher=globalThis.fetch,googleKey=config.googleEan?.key,
-  googleCx=config.googleEan?.cx,timeoutMs=5000,forcar=false,
-}={}) {
-  const nome=String(nomeBruto||'').trim().slice(0,170);
-  if(!nomeMedidasValido(nome))return {ok:false,encontrado:false,mensagem:'Informe o nome completo do produto, incluindo apresentação e quantidade.'};
-  if(!googleKey||!googleCx)return {ok:false,encontrado:false,semIntegracao:true,
-    mensagem:'Pesquisa por nome sem acesso ao Google. Configure GOOGLE_CSE_API_KEY e GOOGLE_CSE_CX nos segredos da Cloudflare. A busca de imagens usa uma integração diferente.'};
-  const chave=limpar(nome);
-  const cacheAtivo=fetcher===globalThis.fetch;
-  const cached=CACHE.get(chave);
-  if(!forcar&&cacheAtivo&&cached&&cached.expira>Date.now())return {...cached.res,cache:true};
-  const url=new URL('https://www.googleapis.com/customsearch/v1');
-  url.searchParams.set('key',googleKey);
-  url.searchParams.set('cx',googleCx);
-  url.searchParams.set('q','"'+nome+'" dimensões da embalagem cm');
-  url.searchParams.set('num','5');
-  const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),Math.max(1000,Math.min(7000,timeoutMs)));
-  let ret;
-  try{
-    const response=await fetcher(url.href,{signal:ctrl.signal,headers:{Accept:'application/json'}});
-    if(!response.ok){
-      // A chave de imagens/Photos ou outro provedor não habilita automaticamente
-      // a Custom Search JSON API. Nunca mostrar credenciais ou corpo bruto.
-      if(response.status===429)return {ok:false,encontrado:false,cotaEsgotada:true,
-        mensagem:'Limite de consultas do Google atingido. Aguarde a renovação da cota.'};
-      if([400,401,403].includes(response.status)){
-        let motivo='';
-        try {
-          const erro=await response.json();
-          motivo=String(erro?.error?.errors?.[0]?.reason||erro?.error?.status||'').slice(0,80);
-        } catch { /* sem corpo JSON */ }
-        if(/quota|rate|resource_exhausted|dailyLimit/i.test(motivo))
-          return {ok:false,encontrado:false,cotaEsgotada:true,
-            mensagem:'A cota da pesquisa Google está esgotada. Consulte os limites da sua API.'};
-        return {ok:false,encontrado:false,credencialInvalida:true,
-          mensagem:'O Google não autorizou a pesquisa por nome. Verifique a chave GOOGLE_CSE_API_KEY, o identificador GOOGLE_CSE_CX e se a Custom Search JSON API está habilitada para essa chave.'};
-      }
-      return {ok:false,encontrado:false,temporario:true,
-        mensagem:'Pesquisa externa indisponível (HTTP '+response.status+'). Tente novamente.'};
-    }
-    const json=await response.json();
-    const candidatos=[];
-    for(const item of Array.isArray(json.items)?json.items:[]){
-      const titulo=String(item.title||'').slice(0,250);
-      const resumo=String(item.snippet||'').slice(0,1400);
-      if(!resultadoPertenceAoProduto(nome,titulo+' '+resumo))continue;
-      const medidas=extrairMedidasEmbalagem(resumo)||extrairMedidasEmbalagem(titulo);
-      if(!medidas)continue;
-      candidatos.push({dimensoes:medidas,peso:extrairPesoBruto(resumo),origem:'Google — resultado por nome',
-        nome,campos:['largura','altura','comprimento'],
-        url:/^https?:\/\//.test(item.link||'')?item.link:null});
-    }
-    // Se duas fontes trazem medidas diferentes, nenhuma medida será salva.
-    const chaves=[...new Set(candidatos.map(c=>JSON.stringify(c.dimensoes)))];
-    if(chaves.length>1){
-      ret={ok:true,encontrado:false,divergencia:true,
-        mensagem:'Fontes apresentam medidas divergentes. Confira a embalagem antes de preencher.'};
-    }else if(candidatos.length){
-      const c=candidatos[0];
-      ret={ok:true,encontrado:true,...c,
-        aviso:'Dados de terceiros localizados pelo nome. Confirme dimensões do pacote usado para envio.',
-        peso:candidatos.every(v=>v.peso===c.peso)?c.peso:0};
-    }else ret={ok:true,encontrado:false,
-      mensagem:'Não foram encontradas dimensões de embalagem identificadas com segurança pelo nome.'};
-  }catch{
-    ret={ok:false,encontrado:false,temporario:true,mensagem:'A busca de dimensões não respondeu. Tente novamente.'};
-  }finally{clearTimeout(timeout);}
-  if(cacheAtivo&&!ret.temporario&&!ret.cotaEsgotada){
-    if(CACHE.size>=300)CACHE.delete(CACHE.keys().next().value);
-    CACHE.set(chave,{res:ret,expira:Date.now()+(ret.encontrado?86400000:300000)});
-  }
-  return ret;
+/**
+ * Não depende de Google Cloud, CSE, credenciais ou serviços pagos.
+ * Mantém o nome público anterior para compatibilidade com o painel.
+ */
+export async function buscarMedidasPorNome(nomeBruto, options={}) {
+  if(!nomeMedidasValido(nomeBruto))return {ok:false,encontrado:false,
+    mensagem:'Informe o nome completo do produto, incluindo apresentação e quantidade.'};
+  const {buscarDimensoesInternetPublica}=await import('./busca-medidas-web-publica.js');
+  return buscarDimensoesInternetPublica(nomeBruto,options);
 }
 
 export function medidasCompletas(produto) {
