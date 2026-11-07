@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {
   nomeMedidasValido,resultadoPertenceAoProduto,extrairMedidasEmbalagem,
-  extrairPesoBruto,buscarMedidasPorNome,medidasCompletas,buscaLogisticaPendente,
+  extrairPesoBruto,buscarMedidasPorNome,buscarMedidasNoCatalogoPorNome,
+  medidasCompletas,buscaLogisticaPendente,
 } from '../src/lib/busca-medidas-nome.js';
 import {aplicarMedidasAusentes} from '../src/lib/busca-medidas-ean.js';
 
@@ -103,4 +104,61 @@ test('painel e rotas do lote exigem permissão e usam limite de consultas',()=>{
   assert.match(js,/post\('\/admin\/api\/produtos\/dimensoes-nome'/);
   assert.match(js,/post\('\/admin\/api\/produtos\/medidas-lote\/proximo'/);
   assert.doesNotMatch(js,/post\('\/admin\/api\/produtos\/dimensoes-ean'/);
+});
+
+
+test('nome completo consulta o catálogo antes do Google e sem reutilizar apresentação diferente',()=>{
+  const db={collection:()=>({all:()=>[
+    {id:'p1',nome:'Absorvente Intimus Days 80UN',peso:0.4,
+      dimensoes:{largura:10,altura:7,comprimento:22}},
+    {id:'p2',nome:'Absorvente Intimus Days 40UN',peso:0.2,
+      dimensoes:{largura:8,altura:6,comprimento:18}},
+    {id:'p3',nome:'Absorvente Intimus Days 80UN',peso:0,
+      dimensoes:{}},
+  ]})};
+  const local=buscarMedidasNoCatalogoPorNome(db,'Absorvente Intimus Days 80UN',{ignorarId:'p3'});
+  assert.equal(local.ok,true);
+  assert.equal(local.encontrado,true);
+  assert.deepEqual(local.dimensoes,{largura:10,altura:7,comprimento:22});
+  assert.equal(local.peso,0.4);
+  assert.match(local.origem,/Catálogo da farmácia/);
+  assert.equal(buscarMedidasNoCatalogoPorNome(db,'Absorvente Intimus Days 60UN'),null);
+});
+
+test('nomes iguais com medidas divergentes exigem revisão e não inventam dimensões',()=>{
+  const db={collection:()=>({all:()=>[
+    {id:'p1',nome:'Absorvente Intimus Days 80UN',dimensoes:{largura:10,altura:7,comprimento:22}},
+    {id:'p2',nome:'Absorvente Intimus Days 80UN',dimensoes:{largura:11,altura:7,comprimento:22}},
+  ]})};
+  const local=buscarMedidasNoCatalogoPorNome(db,'Absorvente Intimus Days 80UN');
+  assert.equal(local.encontrado,false);
+  assert.equal(local.divergencia,true);
+  assert.match(local.mensagem,/diferentes/i);
+});
+
+test('diagnósticos do Google distinguem configuração, cota e permissão',async()=>{
+  const sem=await buscarMedidasPorNome(nome,{googleKey:'',googleCx:''});
+  assert.equal(sem.semIntegracao,true);
+  assert.match(sem.mensagem,/GOOGLE_CSE_API_KEY/);
+  const auth=await buscarMedidasPorNome(nome,{googleKey:'key',googleCx:'cx',
+    fetcher:async()=>({ok:false,status:403,
+      json:async()=>({error:{errors:[{reason:'accessNotConfigured'}]}})})});
+  assert.equal(auth.credencialInvalida,true);
+  assert.match(auth.mensagem,/GOOGLE_CSE_CX/);
+  const quota=await buscarMedidasPorNome(nome,{googleKey:'key',googleCx:'cx',
+    fetcher:async()=>({ok:false,status:403,
+      json:async()=>({error:{errors:[{reason:'quotaExceeded'}]}})})});
+  assert.equal(quota.cotaEsgotada,true);
+});
+
+test('falha de busca por nome devolve erro ao painel em vez de mensagem genérica',()=>{
+  const root=new URL('../',import.meta.url);
+  const routes=readFileSync(new URL('src/routes/admin.js',root),'utf8');
+  const js=readFileSync(new URL('public/js/admin.js',root),'utf8');
+  const layout=readFileSync(new URL('src/views/admin/layout.js',root),'utf8');
+  assert.match(routes,/responderConsultaMedidas\(res,resultado\)/);
+  assert.match(routes,/erro:resultado\.erro\|\|resultado\.mensagem/);
+  assert.match(routes,/buscarMedidasNoCatalogoPorNome\(db,nome/);
+  assert.match(js,/dados\.erro \|\| dados\.mensagem/);
+  assert.match(layout,/admin\.js\?v=medidas-nome-diagnostico-20261106/);
 });
