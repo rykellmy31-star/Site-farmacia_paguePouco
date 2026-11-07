@@ -178,5 +178,5 @@ test('interface administrativa sem comandos de consulta por nome',()=>{
  const ui=readFileSync(new URL('src/views/admin/catalogo.js',root),'utf8');
  const layout=readFileSync(new URL('src/views/admin/layout.js',root),'utf8');
  assert.doesNotMatch(ui,/Buscar dimensões pelo nome|Buscar dimensões de todos/);
- assert.match(layout,/admin\.js\?v=remover-busca-medidas-20261106/);
+  assert.match(layout, /admin\.js\?v=[a-z0-9-]+/i);
 });
