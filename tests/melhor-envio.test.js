@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { defaultFreightConfig } from '../src/lib/freight.js';
-import { prepararCotacaoMelhorEnvio, consultarMelhorEnvio,
+import { prepararCotacaoMelhorEnvio, consultarMelhorEnvio, testarCotacaoMelhorEnvio,
   calcularFreteIntegrado, resolverFreteIntegrado } from '../src/lib/melhor-envio.js';
 
 const cart=[{produtoId:'p1',quantidade:2,peso:0.5,largura:12,altura:8,
@@ -114,4 +114,55 @@ test('integração é estritamente só cotação em API, checkout e pedido',()=>
  const conf=readFileSync(new URL('src/config.js',baseUrl),'utf8');
  assert.match(conf,/env\.MELHOR_ENVIO_TOKEN/);
  assert.match(conf,/env\.MELHOR_ENVIO_CONTATO_EMAIL/);
+});
+
+
+test('diagnóstico de conexão usa uma única cotação ilustrativa sem comprar etiqueta',async()=>{
+  const {calls,fetcher}=provedor();
+  const r=await testarCotacaoMelhorEnvio({
+    origem:'45970000',destino:'29885000',token:'chave-de-teste',
+    contato:'tecnico@example.com',fetcher,
+  });
+  assert.equal(r.ok,true);
+  assert.equal(r.ambiente,'producao');
+  assert.equal(r.opcoes[0].valor,2250);
+  assert.equal(r.opcoes[0].label,'Correios — PAC');
+  assert.equal(calls.length,1);
+  assert.match(calls[0].url,/\/api\/v2\/me\/shipment\/calculate$/);
+  const pacote=JSON.parse(calls[0].opt.body).products;
+  assert.equal(pacote.length,1);
+  assert.deepEqual(pacote[0],{
+    id:'simulacao-integracao',width:15,height:10,length:20,
+    weight:0.5,insurance_value:30,quantity:1,
+  });
+  assert.doesNotMatch(JSON.stringify(r),/chave-de-teste|tecnico@example.com/);
+});
+
+test('sem token, teste não chama a API nem altera fretes',async()=>{
+  let chamadas=0;
+  const r=await testarCotacaoMelhorEnvio({
+    origem:'45970000',destino:'29885000',token:'',contato:'',
+    fetcher:async()=>{chamadas++;throw Error('não chamar');},
+  });
+  assert.equal(r.ok,false);
+  assert.equal(chamadas,0);
+});
+
+test('painel protegido tem teste de cotação, evita dados secretos e identifica frete real',()=>{
+  const root=new URL('../',import.meta.url);
+  const view=readFileSync(new URL('src/views/admin/config.js',root),'utf8');
+  const routes=readFileSync(new URL('src/routes/admin.js',root),'utf8');
+  const frontend=readFileSync(new URL('public/js/admin.js',root),'utf8');
+  const checkout=readFileSync(new URL('src/views/checkout.js',root),'utf8');
+  const home=readFileSync(new URL('src/views/public.js',root),'utf8');
+  assert.match(view,/id="botaoTesteMelhorEnvio"/);
+  assert.match(view,/id="resultadoTesteMelhorEnvio"/);
+  assert.match(view,/shipping-calculate/);
+  assert.match(routes,/app\.post\('\/admin\/api\/fretes\/melhor-envio\/testar'/);
+  assert.match(routes,/guardApi\(req, res, 'fretes\.editar'\)/);
+  assert.match(routes,/testarCotacaoMelhorEnvio/);
+  assert.match(frontend,/post\('\/admin\/api\/fretes\/melhor-envio\/testar'/);
+  assert.match(frontend,/replace\(\/\\D\/g, ''\)/);
+  assert.match(checkout,/calculo\.fonte === 'melhor-envio'/);
+  assert.match(home,/Frete calculado pelo CEP/);
 });
