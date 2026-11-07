@@ -1335,7 +1335,7 @@
   if (botaoTesteMelhorEnvio) {
     botaoTesteMelhorEnvio.addEventListener('click', async () => {
       const area = $('#resultadoTesteMelhorEnvio');
-      const cepDestino = String($('#cepTesteMelhorEnvio')?.value || '').replace(/\\D/g, '');
+      const cepDestino = String($('#cepTesteMelhorEnvio')?.value || '').replace(/\D/g, '');
       if (cepDestino.length !== 8) {
         if (area) area.textContent = 'Informe um CEP válido de 8 dígitos.';
         return;
