@@ -1,7 +1,7 @@
 /** views/partials.js — Componentes reutilizados pelas páginas. */
 import { escapeHtml as e } from '../lib/security.js';
 import { formatBRL } from '../lib/format.js';
-import { precoVigenteCentavos, temPromocao, descontoPercentual, imagemPrincipal, productUrl, podeVender, estoqueDisponivel } from '../lib/catalog.js';
+import { precoVigenteCentavos, temPromocao, descontoPercentual, imagemPrincipal, productUrl, podeVender, estoqueDisponivel, rankingVendasPagas } from '../lib/catalog.js';
 import { ICONES, money } from './layout.js';
 import { STATUS_FINANCEIRO, STATUS_OPERACIONAL } from '../lib/orders.js';
 import { melhorParcelamentoSemJuros } from '../lib/payments/index.js';
@@ -50,11 +50,9 @@ export function avisoImagemProduto(produto) {
     : '';
 }
 
-export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}) {
+export function cartaoProduto(produto, { mostrarParcela = true, db = null, vendasPagas = null } = {}) {
   const venda = podeVender(produto);
   const preco = precoVigenteCentavos(produto);
-  const original = Number(produto.precoCentavos || 0);
-  const promo = temPromocao(produto);
   const disponivel = estoqueDisponivel(produto);
   const img = imagemPrincipal(produto);
   const commonsLegenda=(produto.imagens||[]).find(f=>String(f.legenda||'').includes('Wikimedia Commons'))?.legenda||'';
@@ -70,7 +68,6 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
 
   return `
   <article class="produto ${venda.ok ? '' : 'bloqueado'}">
-    ${promo ? `<span class="etiqueta-desconto oferta-pulsante">-${descontoPercentual(produto)}%</span>` : ''}
     <a class="foto" href="${e(productUrl(produto))}" aria-label="${e(produto.nome)}">
       <img src="${e(img)}" alt="${e(produto.nome)}" loading="lazy" width="300" height="300">
     </a>
@@ -80,8 +77,7 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
     ${creditoFotoDailus(produto)}
     ${produto.marca ? `<span class="marca">${e(produto.marca)}</span>` : ''}
     <h3 class="nome"><a href="${e(productUrl(produto))}">${e(produto.nome)}</a></h3>
-    ${promo ? `<span class="preco-antigo">${money(original)}</span>` : ''}
-    <span class="preco">${money(preco)}</span>
+    ${precoHtml(produto, { db, vendasPagas })}
     ${parcelamentoSemJuros ? `<span class="parcela">ou até ${parcelamentoSemJuros.numero}x sem juros</span>` : ''}
     <div class="acoes">
       ${bloqueio
@@ -96,7 +92,8 @@ export function cartaoProduto(produto, { mostrarParcela = true, db = null } = {}
 export function vitrina(produtos, { rolagem = false, vazia = 'Nenhum produto encontrado.', db = null } = {}) {
   const itens = Array.isArray(produtos) ? produtos.filter(Boolean) : [];
   if (!itens.length) return `<div class="estado-vazio">${e(vazia)}</div>`;
-  return `<div class="vitrine ${rolagem ? 'rolagem' : ''}">${itens.map((p) => cartaoProduto(p, { db })).join('')}</div>`;
+  const vendasPagas = db ? rankingVendasPagas(db) : null;
+  return `<div class="vitrine ${rolagem ? 'rolagem' : ''}">${itens.map((p) => cartaoProduto(p, { db, vendasPagas })).join('')}</div>`;
 }
 
 export function secaoVitrina({ id, titulo, link, produtos, rolagem = true, db = null }) {
@@ -196,13 +193,21 @@ export function campoForm({ nome, rotulo, tipo = 'text', valor = '', obrigatorio
   </div>`;
 }
 
-export function precoHtml(produto, { grande = false } = {}) {
+export function precoHtml(produto, { grande = false, db = null, vendasPagas = null } = {}) {
   const preco = precoVigenteCentavos(produto);
   const promo = temPromocao(produto);
-  return `<div class="${grande ? 'bloco-preco' : ''}">
-    ${promo ? `<span class="preco-antigo">${money(produto.precoCentavos)}</span>` : ''}
-    <span class="preco" style="${grande ? 'font-size:1.85rem;font-weight:800' : ''}">${money(preco)}</span>
-    ${promo ? ` <span class="etiqueta laranja oferta-pulsante">-${descontoPercentual(produto)}%</span>` : ''}
+  // Considerar somente unidades efetivamente pagas; nunca o contador legado do catálogo.
+  const unidades = (vendasPagas || (db ? rankingVendasPagas(db) : null))?.get(String(produto.id)) || 0;
+  const vendidos = Number.isSafeInteger(unidades) && unidades > 0 ? unidades : 0;
+  return `<div class="preco-oferta${grande ? ' bloco-preco' : ''}">
+    ${promo ? `<div class="preco-oferta-topo">
+      <span class="etiqueta-desconto oferta-pulsante">${descontoPercentual(produto)}% OFF</span>
+      <span class="preco-antigo">${money(produto.precoCentavos)}</span>
+    </div>` : ''}
+    <div class="preco-oferta-base">
+      <span class="preco"${grande ? ' style="font-size:1.85rem;font-weight:800"' : ''}>${money(preco)}</span>
+      ${vendidos > 0 ? `<span class="produto-vendidos" aria-label="${vendidos} ${vendidos === 1 ? 'unidade vendida' : 'unidades vendidas'}">+${vendidos.toLocaleString('pt-BR')} ${vendidos === 1 ? 'vendido' : 'vendidos'}</span>` : ''}
+    </div>
   </div>`;
 }
 

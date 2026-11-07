@@ -1240,3 +1240,34 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
     will-change: auto;
   }
 }
+
+
+/* Oferta junto ao preço: selo verde, preço anterior riscado e vendas pagas reais. */
+.preco-oferta { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.preco-oferta-topo, .preco-oferta-base {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 6px; min-width: 0;
+}
+.preco-oferta-topo { align-items: center; }
+.preco-oferta .etiqueta-desconto.oferta-pulsante {
+  position: static; top: auto; left: auto; display: inline-flex; align-items: center;
+  padding: 2px 4px; border: none; border-radius: 2px; background: #188d4b !important;
+  color: #fff !important; -webkit-text-fill-color: #fff;
+  font-size: .66rem; font-weight: 800; line-height: 1.1; white-space: nowrap; z-index: 1;
+  animation: oferta-desconto-pulsar 1.35s ease-in-out infinite;
+}
+.preco-oferta .preco-antigo {
+  display: inline; font-size: .76rem; color: #777 !important;
+  text-decoration: line-through; white-space: nowrap;
+}
+.preco-oferta .preco { line-height: 1.15; }
+.preco-oferta .produto-vendidos {
+  font-size: .69rem; font-weight: 500; color: #777 !important;
+  line-height: 1.2; white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .produto .preco-oferta .preco { font-size: 1.05rem; }
+  .produto .preco-oferta .produto-vendidos { font-size: .64rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .preco-oferta .etiqueta-desconto.oferta-pulsante { animation: none !important; }
+}
