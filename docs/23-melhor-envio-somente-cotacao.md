@@ -11,7 +11,7 @@ Objetivo: exibir preços/prazos reais dos transportadores para CEPs diferentes d
    - `MELHOR_ENVIO_CONTATO_EMAIL`: email técnico real da farmácia/projeto, exigido no User-Agent.
    - `MELHOR_ENVIO_SANDBOX`: opcional, `true` apenas para teste; produção usa `false`.
 3. Cadastrar CEP da sede em Configurações → Empresa e, para cada produto vendido, **peso (kg), altura, largura e comprimento (cm)** medidos corretamente.
-4. Em **Painel → Fretes**, ativar **Melhor Envio — somente cálculo**. A cotação permanecerá desligada até essa ativação.
+4. Em **Painel → Fretes**, use primeiro **Testar cotação** (CEP diferente do da farmácia). O teste utiliza 1 pacote ilustrativo de 500 g, 20 × 15 × 10 cm, sem comprar etiqueta. Com retorno válido, marque **Ativar somente consulta Melhor Envio** e salve. A cotação permanecerá desligada até essa ativação.
 5. Validar cenários de mesmo CEP (retirada + entrega local), CEP diferente (transportadoras reais), indisponibilidade, item sem peso/dimensões e mudança de preço entre as telas.
 
 ## Comportamento
@@ -28,3 +28,10 @@ Objetivo: exibir preços/prazos reais dos transportadores para CEPs diferentes d
 Nenhum endpoint de cart, checkout, etiquetas, compra, rastreio ou agendamento no Melhor Envio está implementado. A **cotação não garante contratação da transportadora**: a farmácia continuará responsável por viabilizar a entrega real por procedimento próprio.
 
 Documentação: https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-produtos
+
+## Observações operacionais
+
+- Tokens OAuth2 de acesso têm validade de cerca de 30 dias, e o refresh token de 45 dias (consulte o painel e a documentação vigente do provedor). A versão com segredo manual exige atualizar `MELHOR_ENVIO_TOKEN` quando vencer. A renovação OAuth automática **não está implementada**.
+- O botão **Testar cotação** não habilita a integração nem cria despesa; a conta real precisa ter serviços autorizados no Melhor Envio. Nenhuma credencial é enviada ao navegador.
+- Cotação não implica que a transportadora aceite o medicamento. Verifique restrições, autorizações sanitárias e embalagem apropriada antes da postagem.
+- Após ativação, o checkout distingue claramente a cotação dinâmica da tabela fixa; se a API falhar, a compra não recebe um frete de valor inventado.
