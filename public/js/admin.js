@@ -1330,6 +1330,33 @@
     }
   });
 
+  /* Teste de Melhor Envio: usa o servidor e não expõe credenciais no navegador. */
+  const botaoTesteMelhorEnvio = $('#botaoTesteMelhorEnvio');
+  if (botaoTesteMelhorEnvio) {
+    botaoTesteMelhorEnvio.addEventListener('click', async () => {
+      const area = $('#resultadoTesteMelhorEnvio');
+      const cepDestino = String($('#cepTesteMelhorEnvio')?.value || '').replace(/\D/g, '');
+      if (cepDestino.length !== 8) {
+        if (area) area.textContent = 'Informe um CEP válido de 8 dígitos.';
+        return;
+      }
+      botaoTesteMelhorEnvio.disabled = true;
+      if (area) area.textContent = 'Consultando transportadoras pelo Melhor Envio...';
+      try {
+        const resposta = await post('/admin/api/fretes/melhor-envio/testar', { cepDestino });
+        const formatar = valor => (Number(valor) / 100).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+        if (area) area.textContent = resposta.mensagem + ' ' + (resposta.opcoes || [])
+          .map(opcao => opcao.label + ': ' + formatar(opcao.valor) + ' (' + opcao.prazo + ')').join(' | ');
+        notificar('Conexão Melhor Envio validada. Cotação recebida.');
+      } catch (erro) {
+        if (area) area.textContent = erro.message || 'Cotação não disponível.';
+        notificar(erro.message || 'Cotação não disponível.', 'erro');
+      } finally {
+        botaoTesteMelhorEnvio.disabled = false;
+      }
+    });
+  }
+
   /* ---------- pré-visualização do fundo sazonal da página inicial ---------- */
   const formFundoHome = document.querySelector('#formFundoHome');
   if (formFundoHome) {

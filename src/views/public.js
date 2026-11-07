@@ -90,7 +90,7 @@ function secaoEntregas(settings) {
         <h2 class="mb-0">${e(home.entregaTitulo || 'Entregas para todo o Brasil')}</h2>
         <p class="mb-0">${e(home.entregaTexto || '')}</p>
         <div class="beneficios-entrega" aria-label="Benefícios de entrega e compra">
-          <span class="beneficio-entrega">${ICONES.caminhao} Frete fixo por estado</span>
+          <span class="beneficio-entrega">${ICONES.caminhao} ${settings.frete?.melhorEnvio?.ativo ? 'Frete calculado pelo CEP' : 'Frete fixo por estado'}</span>
           <span class="beneficio-entrega">${ICONES.cadeado} Compra segura</span>
           <a class="beneficio-entrega beneficio-link" href="/pagina/entregas-e-fretes">Como calculamos o frete</a>
         </div>
@@ -523,7 +523,11 @@ export function paginaCep(ctx, { cepInfo, fretes, produtosExemplo }) {
                  ${cepInfo.cidade ? `Cidade: ${e(cepInfo.cidade)}.` : ''}</p>`}
           </div>
         </div>` : ''}
-      <div class="painel mt-3">
+      ${ctx.settings.frete?.melhorEnvio?.ativo
+        ? `<div class="alerta info mt-3">O preço e o prazo de entrega dependem do CEP e das medidas dos produtos.
+          Adicione os itens à cesta para consultar as transportadoras pelo Melhor Envio antes de pagar.
+          A cotação não garante a aceitação de mercadorias com restrição de transporte.</div>`
+        : `<div class="painel mt-3">
         <header><h3>Valores de frete por estado (fixos, definidos pela farmácia)</h3></header>
         <div class="corpo sem-padding">
           <div class="tabela-rolagem">
@@ -543,7 +547,7 @@ export function paginaCep(ctx, { cepInfo, fretes, produtosExemplo }) {
       </div>
       <p class="texto-pequeno texto-suave">Os valores são definidos pela Farmácia Pague Pouco no painel administrativo e
       não correspondem necessariamente ao custo real de postagem. Consulte também a página
-      <a href="/pagina/entregas-e-fretes">Entregas e Fretes</a>.</p>
+      <a href="/pagina/entregas-e-fretes">Entregas e Fretes</a>.</p>`}
     </div>`,
   });
 }

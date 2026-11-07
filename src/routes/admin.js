@@ -68,6 +68,8 @@ import { diagnosticoFinanceiro } from '../lib/payments/ops-health.js';
 import { estadoCredenciaisMercadoPago, salvarCredenciaisMercadoPago, removerCredenciaisMercadoPago } from '../lib/payments/credentials.js';
 import { toCents, formatBRL } from '../lib/format.js';
 import { normalizeFreightConfig } from '../lib/freight.js';
+import { testarCotacaoMelhorEnvio } from '../lib/melhor-envio.js';
+import { normalizeCep, isValidCep } from '../lib/cep.js';
 import { revogarSessoes } from '../lib/session-revocation.js';
 import { cadastrarVendedor, editarVendedor, metricasVendedores } from '../lib/sellers.js';
 import { telaVendedores } from '../views/admin/sellers.js';
@@ -2763,6 +2765,28 @@ function registrarApi(app, db) {
     }, req.adminUser, req);
     logAdmin(db, req.adminUser, 'alterou_whatsapp', 'configuracao', 'whatsapp', { numero }, req);
     res.redirect('/admin/whatsapp?salvo=1');
+  });
+
+  /* Teste somente de cotação; exclusivo de quem pode editar os fretes. */
+  app.post('/admin/api/fretes/melhor-envio/testar', async (req, res) => {
+    if (!guardApi(req, res, 'fretes.editar')) return;
+    res.set('Cache-Control', 'no-store');
+    if (!config.melhorEnvio?.token || !config.melhorEnvio?.contato)
+      return void res.json({ok:false,erro:'Configure o token e o e-mail técnico nos segredos da Cloudflare.'},400);
+    const cepOrigem = normalizeCep(getSetting(db,'empresa')?.endereco?.cep);
+    const cepDestino = normalizeCep(req.body?.cepDestino);
+    if (!isValidCep(cepOrigem))
+      return void res.json({ok:false,erro:'Informe o CEP da farmácia em Configurações gerais → Empresa.'},400);
+    if (!isValidCep(cepDestino) || cepDestino === cepOrigem)
+      return void res.json({ok:false,erro:'Informe um CEP de destino válido e diferente do CEP da farmácia.'},400);
+    const cotacao = await testarCotacaoMelhorEnvio({
+      origem:cepOrigem, destino:cepDestino,
+      token:config.melhorEnvio.token, contato:config.melhorEnvio.contato,
+      sandbox:config.melhorEnvio.sandbox,
+    });
+    if (!cotacao.ok) return void res.json({ok:false,erro:cotacao.erro},502);
+    res.json({ok:true,ambiente:cotacao.ambiente,opcoes:cotacao.opcoes,
+      mensagem:'Cotação recebida. Exemplo de pacote: 500 g, 20 × 15 × 10 cm. Nenhuma etiqueta foi comprada.'});
   });
 
   /* -------------------------------- FRETES ------------------------------ */
