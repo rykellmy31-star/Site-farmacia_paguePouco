@@ -52,7 +52,7 @@ test('contagem aparece somente após pagamentos aprovados e soma unidades reais'
     { statusFinanceiro: 'recusado', itens: [{ produtoId: 'oferta', quantidade: 600 }] },
     { statusFinanceiro: 'estornado', itens: [{ produtoId: 'oferta', quantidade: 700 }] },
   ];
-  const db = { collection: (name) => ({ all: () => name === 'orders' ? pedidos : [] }) };
+  const db = { collection: (name) => ({ get: () => null, all: () => name === 'orders' ? pedidos : [] }) };
   const oferta = { ...p('oferta', 1000), vendas: 9999 };
   const html = cartaoProduto(oferta, { db, mostrarParcela: false });
   assert.match(html, /\+25 vendidos/);
@@ -63,7 +63,7 @@ test('contagem aparece somente após pagamentos aprovados e soma unidades reais'
 });
 
 test('zero vendas oculto e uma venda usa singular, sem promoção mantém preço normal', () => {
-  const db = { collection: () => ({ all: () => [
+  const db = { collection: () => ({ get: () => null, all: () => [
     { statusFinanceiro: 'aprovado', itens: [{ produtoId: 'normal', quantidade: 1 }] },
   ] }) };
   const html = cartaoProduto({ ...p('normal'), vendas: 80 }, { db, mostrarParcela: false });
