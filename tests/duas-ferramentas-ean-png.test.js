@@ -56,7 +56,7 @@ test('ferramenta de fotos EAN permanece funcional após remover pesquisa de dime
  assert.match(js,/formatoEAN\(ean\)/);
  assert.match(js,/imagemNaAtivacao\(id\)/);
  assert.match(js,/buscarFotoEAN/);
- assert.match(js,/consultarMedidasEAN/);
+ assert.doesNotMatch(js,/consultarMedidasEAN/);
  assert.match(upload,/pngEAN/);
 });
 test('método de foto por EAN impede imagens ruins em vez de ampliar baixa resolução',()=>{
