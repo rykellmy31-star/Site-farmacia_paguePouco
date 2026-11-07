@@ -55,7 +55,7 @@ import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
-import { buscarMedidasPorNome, buscaLogisticaPendente, nomeMedidasValido } from '../lib/busca-medidas-nome.js';
+import { buscarMedidasPorNome, buscarMedidasNoCatalogoPorNome, buscaLogisticaPendente, nomeMedidasValido } from '../lib/busca-medidas-nome.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { consultarGoogleImagensEAN } from '../lib/brightdata-google-imagens.js';
@@ -1743,9 +1743,26 @@ function registrarApi(app, db) {
     else col.insert({id:mes,consultas:1});
     return {ok:true};
   }
-  async function consultarMedidasNomeComLimite(nome){
+  async function consultarMedidasNomeComLimite(nome, {produtoId=null}={}) {
+    if(!nomeMedidasValido(nome))return {ok:false,
+      mensagem:'Informe o nome completo e a apresentação do produto.'};
+    // Primeiro fontes locais por NOME (gratuito, sem precisar de chave).
+    const local=buscarMedidasNoCatalogoPorNome(db,nome,{ignorarId:produtoId});
+    if(local)return local;
     const autorizado=autorizarPesquisaNome();
     return autorizado.ok?buscarMedidasPorNome(nome):autorizado;
+  }
+  function responderConsultaMedidas(res,resultado) {
+    res.set('Cache-Control','no-store');
+    if(resultado.ok===false){
+      // O frontend precisa de "erro" (não apenas "mensagem"),
+      // senão mostra o texto genérico "Não foi possível concluir".
+      const status=resultado.cotaEsgotada?429:
+        resultado.semIntegracao||resultado.credencialInvalida?503:502;
+      return res.json({...resultado,erro:resultado.erro||resultado.mensagem||
+        'Pesquisa de medidas indisponível. Confira a integração.'},status);
+    }
+    return res.json(resultado,200);
   }
   function gravarMedidasPesquisa(p,resultado,adminUser,req,origemAcao){
     if(!p||!resultado?.encontrado)return false;
@@ -1770,9 +1787,8 @@ function registrarApi(app, db) {
     if(!guardApi(req,res,'produtos.editar'))return;
     const nome=String(req.body?.nome||'').trim().slice(0,170);
     if(!nomeMedidasValido(nome))return void res.json({ok:false,erro:'Informe o nome completo do produto.'},400);
-    const resultado=await consultarMedidasNomeComLimite(nome);
-    res.set('Cache-Control','no-store');
-    res.json(resultado,resultado.ok===false?400:200);
+    const resultado=await consultarMedidasNomeComLimite(nome,{produtoId:req.body?.produtoId});
+    responderConsultaMedidas(res,resultado);
   });
 
   // Iniciar ou retomar a busca automática por TODOS os produtos incompletos.
@@ -1787,7 +1803,7 @@ function registrarApi(app, db) {
       return void res.json({ok:true,job:{...existente,ids:undefined}});
     }
     if(!config.googleEan?.key||!config.googleEan?.cx)
-      return void res.json({ok:false,erro:'Configure a API Google para buscar dimensões por nome.'},400);
+      return void res.json({ok:false,erro:'O lote exige GOOGLE_CSE_API_KEY e GOOGLE_CSE_CX configurados na Cloudflare; a API de imagens é independente. Consultas individuais podem aproveitar medidas locais.'},503);
     const ids=db.collection('products').all().filter(buscaLogisticaPendente)
       .sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(p=>p.id);
     const job={ids,indice:0,total:ids.length,gravados:0,semDados:0,ignorados:0,
@@ -1816,14 +1832,10 @@ function registrarApi(app, db) {
         if(!buscaLogisticaPendente(p)){
           ignorados++;indice++;continue;
         }
-        let resultado=null;
-        if(eanValido(p.ean))
-          resultado=buscarMedidasNoCatalogo(db,p.ean,p.id);
-        if(!resultado){
-          resultado=await consultarMedidasNomeComLimite(p.nome);
-          if(!resultado.ok&&(resultado.cotaEsgotada||resultado.semIntegracao||resultado.temporario)){
-            status='pausado';ultimo=resultado.mensagem||'Pesquisa indisponível.';break;
-          }
+        // O lote também usa nome completo. Nunca inferir medidas só pelo EAN.
+        const resultado=await consultarMedidasNomeComLimite(p.nome,{produtoId:p.id});
+        if(!resultado.ok){
+          status='pausado';ultimo=resultado.mensagem||'Pesquisa indisponível.';break;
         }
         if(gravarMedidasPesquisa(p,resultado,req.adminUser,req,'consultou_medidas_nome_lote'))gravados++;
         else semDados++;
@@ -1860,8 +1872,8 @@ function registrarApi(app, db) {
     if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível.'},404);
     if(!buscaLogisticaPendente(p))return void res.json({ok:true,encontrado:false,
       mensagem:'Medidas existentes preservadas.'});
-    const r=await consultarMedidasNomeComLimite(p.nome);
-    if(!r.ok)return void res.json({ok:false,erro:r.mensagem||'Busca indisponível.'},429);
+    const r=await consultarMedidasNomeComLimite(p.nome,{produtoId:p.id});
+    if(!r.ok)return void responderConsultaMedidas(res,r);
     const salvou=gravarMedidasPesquisa(p,r,req.adminUser,req,'consultou_medidas_nome');
     res.json({ok:true,encontrado:salvou,medidasAdicionadas:salvou,
       mensagem:salvou?'Medidas sugeridas gravadas; confirme a embalagem.':
