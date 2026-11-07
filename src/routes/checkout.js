@@ -93,7 +93,7 @@ export function registrarRotasCheckout(app, db) {
     const salvo=enderecos.find(en=>en.padrao)||enderecos[0]||null;
     // Ao abrir o checkout com um endereço salvo, já mostra cotação atual.
     const calculo=salvo ? await calcularFreteIntegrado({
-      config:ctx.settings.frete,cepFarmacia:ctx.settings.empresa?.endereco?.cep,
+      db, config:ctx.settings.frete,cepFarmacia:ctx.settings.empresa?.endereco?.cep,
       cep:salvo.cep,uf:salvo.uf,cidade:salvo.cidade,
       items:cart.itens,subtotalCents:totais.subtotalCentavos,
       cupomFreteGratis:!!cart.cupom?.freteGratis,
@@ -159,7 +159,7 @@ export function registrarRotasCheckout(app, db) {
 
     // frete sempre recalculado no servidor
     const calc = await calcularFreteIntegrado({
-      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
+      db, config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep: endereco.cep, uf: endereco.uf, cidade: endereco.cidade,
       items: cart.itens, subtotalCents: totais.subtotalCentavos,
       cupomFreteGratis: !!cart.cupom?.freteGratis,
@@ -210,7 +210,7 @@ export function registrarRotasCheckout(app, db) {
     const uf = String(req.body.uf || '').toUpperCase();
     const totais = calcularTotais(db, cart, {});
     const calc = await calcularFreteIntegrado({
-      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep, cep, uf, cidade,
+      db, config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep, cep, uf, cidade,
       items: cart.itens || [], subtotalCents: totais.subtotalCentavos,
       cupomFreteGratis: !!cart.cupom?.freteGratis,
     });
@@ -228,7 +228,7 @@ export function registrarRotasCheckout(app, db) {
 
     // revalida o frete no servidor (preços/estoque podem ter mudado)
     const revalidado = await resolverFreteIntegrado({
-      config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
+      db, config: ctx.settings.frete, cepFarmacia: ctx.settings.empresa?.endereco?.cep,
       cep: cart.frete.endereco.cep, uf: cart.frete.endereco.uf, cidade: cart.frete.endereco.cidade,
       items: cart.itens, subtotalCents: calcularTotais(db, cart, {}).subtotalCentavos,
       opcaoId: cart.frete.opcaoId, cupomFreteGratis: !!cart.cupom?.freteGratis,
