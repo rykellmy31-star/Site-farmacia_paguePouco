@@ -34,14 +34,15 @@ test('dimensões EAN isoladas não consultam catálogo de imagens',async()=>{
  assert.equal(urls.some(url=>url.includes('openfoodfacts')),false);
  assert.equal(urls.filter(url=>url.includes('googleapis')).length,1);
 });
-test('duas ferramentas EAN têm endpoints e botões próprios; PNG é gerado e armazenado',()=>{
+test('ferramenta de fotos EAN permanece funcional após remover pesquisa de dimensões',()=>{
  const base=new URL('../',import.meta.url);
  const route=readFileSync(new URL('src/routes/admin.js',base),'utf8');
  const tela=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
  const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
  const upload=readFileSync(new URL('src/lib/uploads.js',base),'utf8');
- for(const id of ['botaoBuscarImagemEAN','botaoBuscarMedidasEAN',
-   'resultadoBuscaImagemEAN','resultadoBuscaEAN'])assert.ok(tela.includes('id="'+id+'"'),id);
+ for(const id of ['botaoBuscarImagemEAN','resultadoBuscaImagemEAN'])
+   assert.ok(tela.includes('id="'+id+'"'),id);
+ assert.doesNotMatch(tela,/botaoBuscarMedidasEAN|resultadoBuscaEAN/);
  assert.match(route,/app\.post\('\/admin\/api\/produtos\/imagem-ean'/);
  assert.match(route,/app\.post\('\/admin\/api\/produtos\/dimensoes-ean'/);
  assert.match(route,/app\.get\('\/admin\/api\/produtos\/imagem-ean\/arquivo'/);
@@ -55,7 +56,7 @@ test('duas ferramentas EAN têm endpoints e botões próprios; PNG é gerado e a
  assert.match(js,/formatoEAN\(ean\)/);
  assert.match(js,/imagemNaAtivacao\(id\)/);
  assert.match(js,/buscarFotoEAN/);
- assert.match(js,/consultarMedidasEAN/);
+ assert.doesNotMatch(js,/consultarMedidasEAN/);
  assert.match(upload,/pngEAN/);
 });
 test('método de foto por EAN impede imagens ruins em vez de ampliar baixa resolução',()=>{

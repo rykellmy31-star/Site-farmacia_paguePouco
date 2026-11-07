@@ -91,8 +91,12 @@ test('integração exige permissão admin e não altera pagamento, preço nem re
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/ativar', \(req, res\)/);
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/buscar-medidas-ean',async/);
   assert.match(rotas,/aplicarMedidasAusentes\(p,encontrados\)/);
-  assert.match(js,/buscar-medidas-nome/);
-  assert.match(tela,/id="botaoBuscarMedidasEAN"/);
+  assert.doesNotMatch(js,/buscar-medidas-nome|botaoBuscarMedidasEAN/);
+  assert.doesNotMatch(tela,/id="botaoBuscarMedidasEAN"/);
+  assert.match(tela,/nome: 'peso'|nome: "peso"/);
+  assert.match(tela,/nome: 'largura'|nome: "largura"/);
+  assert.match(tela,/nome: 'altura'|nome: "altura"/);
+  assert.match(tela,/nome: 'comprimento'|nome: "comprimento"/);
   assert.match(js,/campo\('ean'\)\?\.addEventListener\('change'/);
 });
 
@@ -141,15 +145,15 @@ test('EAN identificado sem peso logístico retorna diagnóstico claro das fontes
   assert.match(r.mensagem,/Produto identificado/);
   assert.equal(r.consultadas.length,4);
 });
-test('botão repete busca mesmo com resultado anterior e oferece pesquisa assistida na web',()=>{
+test('busca de dimensões não aparece na interface nem executa ao ativar',()=>{
   const base=new URL('../',import.meta.url);
   const js=readFileSync(new URL('public/js/admin.js',base),'utf8');
   const rotas=readFileSync(new URL('src/routes/admin.js',base),'utf8');
   const tela=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
-  assert.match(js,/consultarMedidasEAN\(\{forcar:true\}\)/);
-  assert.match(js,/dimensões da embalagem pelo nome/);
-  assert.match(js,/google\.com\/search\?q=/);
-  assert.match(tela,/id="linkPesquisaEAN"/);
+  assert.doesNotMatch(js,/consultarMedidasEAN\(\{forcar:true\}\)/);
+  assert.doesNotMatch(js,/dimensões da embalagem pelo nome/);
+  assert.doesNotMatch(js,/google\.com\/search\?q=/);
+  assert.doesNotMatch(tela,/id="linkPesquisaEAN"/);
   assert.match(rotas,/buscarMedidasNoCatalogo\(db,ean/);
   assert.match(rotas,/buscarMedidasPorEAN\(ean,\{forcar:req\.body\?\.forcar===true\}\)/);
 });
