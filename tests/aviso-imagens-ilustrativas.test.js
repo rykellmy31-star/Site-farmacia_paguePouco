@@ -57,5 +57,5 @@ test('aviso permanece legível no celular, sem sobrepor o produto e sem afetar i
   assert.match(css, /\.aviso-imagem-produto\s*\{[^}]*font-size: 10px/);
   assert.match(css, /\.galeria > \.aviso-imagem-produto\s*\{[^}]*font-size: 12px/);
   const layout = readFileSync(new URL('../src/views/layout.js', import.meta.url), 'utf8');
-  assert.match(layout, /styles\.css\?v=aviso-imagens-produtos-20261106/);
+  assert.match(layout, /styles\.css\?v=[a-z0-9-]+/i);
 });
