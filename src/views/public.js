@@ -133,10 +133,10 @@ function vitrinesPersonalizadas(db, ctx, idsExibidos = new Set()) {
     } else {
       produtos = (v.produtosIds || []).map((id) => db.collection('products').get(id)).filter(Boolean);
     }
-    // Vitrines geradas automaticamente não repetem a home.
-    // Vitrines de seleção MANUAL respeitam os itens escolhidos pelo
-    // administrador, mesmo que já tenham aparecido em outra seção.
-    const escolhaManual = !['categoria', 'marca', 'dinamica'].includes(v.tipo);
+    // Apenas vitrines inteiramente automáticas não repetem a home.
+    // Vitrines de marca, categoria ou seleção manual são curadoria explícita:
+    // manter os itens que o administrador escolheu exibir.
+    const escolhaManual = v.tipo !== 'dinamica';
     const unicos = [], idsDaVitrine = new Set();
     for (const p of produtos) {
       if (!p || idsDaVitrine.has(p.id) ||
