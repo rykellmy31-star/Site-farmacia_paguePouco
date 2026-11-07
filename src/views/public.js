@@ -168,16 +168,14 @@ export function homePage(ctx) {
   const idsNasOfertas = new Set(ofertasVisiveis ? ofertasDoDia.map((p) => p.id) : []);
 
   // Separar vitrines antes de renderizar: a ordem visual é configurável,
-  // mas Novidades NUNCA pode repetir um dos cinco campeões de vendas.
+  // mas Novidades não deve repetir campeões de vendas nem ofertas. Sem corte de 5 itens.
   const vendidosVisiveis = secoesAtivas.some(s => s.tipo === 'mais_vendidos');
   const novidadesVisiveis = secoesAtivas.some(s => s.tipo === 'novidades');
   const maisVendidos = vendidosVisiveis ? vitrineProdutos(db, 'mais_vendidos', 5) : [];
   const idsMaisVendidos = new Set(maisVendidos.map(p => p.id));
-  const limiteNovidades = secoesAtivas.find(s => s.tipo === 'novidades')?.limite || 5;
   const novidades = novidadesVisiveis
     ? vitrineProdutos(db, 'novidades', Infinity)
       .filter(p => !idsMaisVendidos.has(p.id) && !idsNasOfertas.has(p.id))
-      .slice(0, Math.min(5, limiteNovidades))
     : [];
   const idsNovidades = new Set(novidades.map(p => p.id));
 
@@ -209,7 +207,7 @@ export function homePage(ctx) {
       case 'mais_vendidos': return secaoVitrina({ id: 'mais-vendidos',
         titulo: s.titulo || 'Mais vendidos', produtos: maisVendidos, db });
       case 'novidades': return secaoVitrina({ id: 'novidades',
-        titulo: s.titulo || 'Novidades', produtos: novidades, db });
+        titulo: s.titulo || 'Novidades', produtos: novidades, rolagem: true, db });
       case 'vitrines': return vitrinesPersonalizadas(db, ctx, idsExibidos);
       case 'entregas': return secaoEntregas(settings);
       case 'institucional': return secaoInstitucional(settings);

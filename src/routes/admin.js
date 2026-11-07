@@ -2748,6 +2748,11 @@ function registrarApi(app, db) {
     if (numero && (numero.length < 12 || numero.length > 14)) {
       return void res.json({ ok: false, erro: 'Número inválido. Use DDI + DDD + número (ex.: 5573988887777).' }, 400);
     }
+    const botaoCorFundo = String(req.body.botaoCorFundo || '#25d366');
+    const botaoCorTexto = String(req.body.botaoCorTexto || '#ffffff');
+    if (![botaoCorFundo, botaoCorTexto].every(cor => /^#[0-9a-f]{6}$/i.test(cor))) {
+      return void res.json({ ok: false, erro: 'Escolha cores válidas para o botão do WhatsApp.' }, 400);
+    }
     const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
     const horarios = dias.map((dia) => ({
       dia,
@@ -2760,6 +2765,9 @@ function registrarApi(app, db) {
       numero,
       mensagem: cleanText(req.body.mensagem, 400),
       textoBotao: cleanText(req.body.textoBotao, 60),
+      botaoCorFundo,
+      botaoCorTexto,
+      pulsacaoSuave: req.body.pulsacaoSuave === '1',
       posicao: req.body.posicao === 'esquerda' ? 'esquerda' : 'direita',
       paginas: String(req.body.paginas || 'todas').split(',').map((s) => s.trim()).filter(Boolean),
       respeitarHorario: req.body.respeitarHorario === '1',

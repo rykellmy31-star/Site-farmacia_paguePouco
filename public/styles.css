@@ -779,7 +779,7 @@ input::placeholder, textarea::placeholder {
   border-color: #ecd7d7;
 }
 .botao, .botao.destaque, .botao.perigo, .busca button,
-.botao-whatsapp, .notificacao, .passos li.ativo,
+.notificacao, .passos li.ativo,
 .menu-conta a.ativo, .paginacao .atual, .admin-menu a.ativo,
 .acao-topo .contador, .produto .etiqueta-desconto,
 .item-midia .principal-marca {
@@ -787,7 +787,7 @@ input::placeholder, textarea::placeholder {
   border-color: #e1b9b9;
 }
 .botao:hover, .botao.destaque:hover, .botao.perigo:hover,
-.busca button:hover, .botao-whatsapp:hover {
+.busca button:hover {
   background: #ffe0e0;
 }
 .rodape-inferior { border-top-color: #ecd7d7; }
@@ -1307,4 +1307,42 @@ body .cabecalho {
 @media (max-width: 767px) {
   body .cabecalho > .barra-topo { padding: 5px 12px; min-height: 26px; }
   body .cabecalho > .barra-topo .barra-topo-conteudo { font-size: .72rem; }
+}
+
+
+/* Botão flutuante do WhatsApp: cores independentes da identidade vermelha da loja.
+   Prioridade sobre as regras globais body * { color:... !important }. */
+body .whatsapp-flutuante .botao-whatsapp,
+body.admin #previewBotaoWhatsApp {
+  background: var(--whatsapp-botao-fundo, #25d366) !important;
+  color: var(--whatsapp-botao-texto, #ffffff) !important;
+  -webkit-text-fill-color: var(--whatsapp-botao-texto, #ffffff);
+}
+body .whatsapp-flutuante .botao-whatsapp *,
+body.admin #previewBotaoWhatsApp * {
+  color: var(--whatsapp-botao-texto, #ffffff) !important;
+  -webkit-text-fill-color: var(--whatsapp-botao-texto, #ffffff);
+}
+body .whatsapp-flutuante .botao-whatsapp:hover,
+body.admin #previewBotaoWhatsApp:hover {
+  background: var(--whatsapp-botao-fundo, #25d366) !important;
+  filter: brightness(.94);
+  text-decoration: none;
+}
+/* Respiração leve: aumento de apenas 2%, sem piscar nem escurecer agressivamente. */
+@keyframes whatsapp-respirar-suave {
+  0%, 100% { transform: scale(1); box-shadow: 0 5px 16px rgba(0, 0, 0, .13); }
+  50% { transform: scale(1.02); box-shadow: 0 7px 21px rgba(0, 0, 0, .19); }
+}
+body .whatsapp-flutuante .whatsapp-pulso-suave,
+body.admin #previewBotaoWhatsApp.whatsapp-pulso-suave {
+  animation: whatsapp-respirar-suave 3.2s ease-in-out infinite;
+  transform-origin: center center;
+}
+@media (prefers-reduced-motion: reduce) {
+  body .whatsapp-flutuante .whatsapp-pulso-suave,
+  body.admin #previewBotaoWhatsApp.whatsapp-pulso-suave {
+    animation: none !important;
+    transform: none !important;
+  }
 }

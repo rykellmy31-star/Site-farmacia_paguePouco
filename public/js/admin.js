@@ -1378,6 +1378,26 @@
     atualizarPreviaBarra();
   }
 
+  /* -------- Personalização ao vivo do botão flutuante de WhatsApp -------- */
+  const formularioWhatsApp = document.querySelector('form[action="/admin/api/whatsapp"]');
+  const previaWhatsApp = document.querySelector('#previewBotaoWhatsApp');
+  if (formularioWhatsApp && previaWhatsApp) {
+    const fundo = formularioWhatsApp.querySelector('[name="botaoCorFundo"]');
+    const corTexto = formularioWhatsApp.querySelector('[name="botaoCorTexto"]');
+    const texto = formularioWhatsApp.querySelector('[name="textoBotao"]');
+    const pulsar = formularioWhatsApp.querySelector('[name="pulsacaoSuave"]');
+    const previaTexto = document.querySelector('#previewTextoBotaoWhatsApp');
+    function atualizarPreviaWhatsApp() {
+      previaWhatsApp.style.setProperty('--whatsapp-botao-fundo', fundo?.value || '#25d366');
+      previaWhatsApp.style.setProperty('--whatsapp-botao-texto', corTexto?.value || '#ffffff');
+      previaWhatsApp.classList.toggle('whatsapp-pulso-suave', !!pulsar?.checked);
+      if (previaTexto) previaTexto.textContent = texto?.value || 'Dúvidas? Fale com a gente';
+    }
+    for (const campo of [fundo, corTexto, texto]) campo?.addEventListener('input', atualizarPreviaWhatsApp);
+    pulsar?.addEventListener('change', atualizarPreviaWhatsApp);
+    atualizarPreviaWhatsApp();
+  }
+
   /* --------------------- máscara de CEP e preços ------------------------ */
   $$('input[data-mascara-cep]').forEach((inp) => {
     inp.addEventListener('input', () => {
