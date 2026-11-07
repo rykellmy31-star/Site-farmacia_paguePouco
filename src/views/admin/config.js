@@ -553,6 +553,7 @@ export function telaUsuarios(ctx, { usuarios }) {
     ativo: 'usuarios',
     conteudo: `
     <h1 class="mt-0">Usuários e permissões</h1>
+    ${podeGerenciar ? '<p class="texto-pequeno texto-suave">Cadastros inativos podem ser excluídos após confirmação. A exclusão revoga o acesso, mas mantém os registros de auditoria e o histórico comercial.</p>' : ''}
     ${!podeGerenciar ? '<div class="alerta aviso">Seu perfil não pode criar ou alterar usuários. Apenas o Super Administrador tem essa permissão.</div>' : ''}
     ${podeGerenciar ? painel({
       titulo: 'Novo usuário administrativo',
@@ -586,7 +587,10 @@ export function telaUsuarios(ctx, { usuarios }) {
           <td class="acoes-linha">
             ${podeGerenciar ? `
               <button class="botao pequeno" data-alternar-usuario="${e(u.id)}">${u.ativo !== false ? 'Desativar' : 'Ativar'}</button>
-              <button class="botao pequeno secundario" data-resetar-senha="${e(u.id)}">Redefinir senha</button>` : ''}
+              <button class="botao pequeno secundario" data-resetar-senha="${e(u.id)}">Redefinir senha</button>
+              ${u.ativo === false && String(u.id) !== String(ctx.adminUser?.id)
+                ? `<button type="button" class="botao pequeno perigo" data-excluir-usuario="${e(u.id)}" data-nome="${e(u.nome)}" data-email="${e(u.email)}" aria-label="Excluir cadastro inativo de ${e(u.nome)}">Excluir cadastro</button>`
+                : ''}` : ''}
           </td>
         </tr>`),
       }),
