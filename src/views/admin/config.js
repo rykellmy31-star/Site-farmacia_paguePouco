@@ -62,9 +62,27 @@ export function telaFretes(ctx, { frete, categorias, produtos }) {
             — token e e-mail técnico são segredos no servidor; não aparecem neste painel.</p>
           ${campoAdmin({nome:'me_ativo',rotulo:'Ativar somente consulta Melhor Envio para outros CEPs',
             tipo:'checkbox',valor:!!frete.melhorEnvio?.ativo})}
-          <p class="texto-pequeno">Para ativar, configure MELHOR_ENVIO_TOKEN e MELHOR_ENVIO_CONTATO_EMAIL na Cloudflare.
-          O CEP da farmácia vem de Configurações → Empresa. Cadastre peso (kg) e dimensões (cm) reais de cada produto.
-          Com a integração ativa, caso a API esteja indisponível, a loja não inventa preços e solicita nova cotação.</p>
+          <p class="texto-pequeno">Para ativar, configure <code>MELHOR_ENVIO_TOKEN</code> (segredo) e
+          <code>MELHOR_ENVIO_CONTATO_EMAIL</code> na Cloudflare. O único escopo necessário é <code>shipping-calculate</code>.
+          Os tokens OAuth expiram e precisam ser renovados. Não compartilhe o token por mensagens ou no GitHub.</p>
+          <p class="texto-pequeno">O CEP de origem vem de Configurações gerais → Empresa. Cadastre em cada produto
+          o peso real (kg) e altura/largura/comprimento (cm). Enquanto a integração estiver desligada,
+          a tabela de fretes atual continua funcionando.</p>
+          <div class="cartao mt-2" id="diagnosticoMelhorEnvio">
+            <strong>Testar conexão e cotação (sem comprar frete)</strong>
+            <p class="texto-pequeno">Use um CEP diferente da farmácia. O teste consulta um pacote ilustrativo
+            de 500 g e 20 × 15 × 10 cm, apenas para conferir a autorização da API.</p>
+            <div class="linha centro" style="gap:8px;flex-wrap:wrap">
+              <input id="cepTesteMelhorEnvio" name="cepTesteMelhorEnvio" inputmode="numeric" maxlength="9"
+                autocomplete="off" placeholder="CEP de destino" aria-label="CEP de destino para teste" style="max-width:180px">
+              <button id="botaoTesteMelhorEnvio" type="button" class="botao secundario">Testar cotação</button>
+            </div>
+            <div id="resultadoTesteMelhorEnvio" class="texto-pequeno mt-2" role="status" aria-live="polite"></div>
+          </div>
+          <p class="texto-pequeno mt-2">O teste não ativa a integração. Ative e salve somente após conferir as opções.
+          Cotação não garante aceitação da mercadoria: medicamentos e itens com restrições devem seguir as
+          exigências da transportadora e da legislação sanitária. A compra de etiquetas e o rastreio
+          continuam separados e desativados.</p>
         `,
       })}
       <div class="grade-form duas-colunas">
