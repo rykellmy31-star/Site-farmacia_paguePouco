@@ -1363,8 +1363,8 @@
     const visivel = formularioTema.querySelector('[name="barraTopoAtiva"]');
     const previaTexto = document.querySelector('#previewTextoBarraTopo');
     function atualizarPreviaBarra() {
-      previaBarra.style.setProperty('--barra-topo-fundo', corFundo?.value || '#fff0f0');
-      previaBarra.style.setProperty('--barra-topo-texto', corTexto?.value || '#8b0000');
+      previaBarra.style.setProperty('--barra-topo-fundo', corFundo?.value || '#16803c');
+      previaBarra.style.setProperty('--barra-topo-texto', corTexto?.value || '#ffffff');
       previaBarra.classList.toggle('barra-topo-pulsante', !!pulsante?.checked);
       previaBarra.hidden = visivel ? !visivel.checked : false;
       if (previaTexto) previaTexto.textContent = textoBarra?.value || 'Seu aviso aparecerá aqui';

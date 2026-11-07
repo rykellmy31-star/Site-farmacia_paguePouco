@@ -13,10 +13,14 @@ const ctx = (tema = {}) => ({
   settings: { ...DEFAULT_SETTINGS(), tema: { ...DEFAULT_SETTINGS().tema, ...tema } },
 });
 
-test('barra superior padrão é pulsante sem alterar cor do menu ou conteúdo', () => {
+test('faixa padrão é verde e branca abaixo do menu sem alterar as demais cores', () => {
   const html = paginaPublica(ctx(), { conteudo: '<h1>Oferta</h1>' });
   assert.match(html, /class="barra-topo barra-topo-pulsante"/);
-  assert.match(html, /--barra-topo-fundo:#fff0f0;--barra-topo-texto:#8b0000/);
+  assert.match(html, /--barra-topo-fundo:#16803c;--barra-topo-texto:#ffffff/);
+  assert.ok(html.indexOf('class="menu-departamentos"') < html.indexOf('class="barra-topo barra-topo-pulsante"'));
+  assert.ok(html.indexOf('class="barra-topo barra-topo-pulsante"') < html.indexOf('</header>'));
+  assert.ok(html.indexOf('class="barra-topo barra-topo-pulsante"') > html.indexOf('</nav>'));
+  assert.equal((html.match(/class="barra-topo barra-topo-pulsante"/g) || []).length, 1);
   assert.match(html, /Entregamos para todo o Brasil/);
   assert.match(html, /<h1>Oferta<\/h1>/);
 });
@@ -33,7 +37,7 @@ test('cor e texto personalizados são exibidos com validação contra injeção 
     barraTopoCorFundo: '#000000;background:url(https://exemplo.com)',
     barraTopoCorTexto: 'red;',
   }), { conteudo: '' });
-  assert.match(malicioso, /--barra-topo-fundo:#fff0f0;--barra-topo-texto:#8b0000/);
+  assert.match(malicioso, /--barra-topo-fundo:#16803c;--barra-topo-texto:#ffffff/);
   assert.doesNotMatch(malicioso, /background:url\(https:\/\/exemplo\.com\)/);
 });
 
@@ -53,7 +57,10 @@ test('editor oferece seletor de cor, controle de pulsação e prévia no painel'
   }
   assert.match(html, /id="previewBarraTopo"/);
   assert.match(html, /id="previewTextoBarraTopo"/);
-  assert.match(html, /Ativar pulsação forte na barra superior/);
+  assert.match(html, /Ativar pulsação na faixa de avisos/);
+  assert.match(html, /Faixa de avisos abaixo do menu/);
+  assert.match(html, /value="#16803c"/);
+  assert.match(html, /value="#ffffff"/);
 });
 
 test('CSS da barra é isolado e reduz o movimento quando solicitado', () => {
@@ -67,6 +74,40 @@ test('CSS da barra é isolado e reduz o movimento quando solicitado', () => {
   const html = paginaPublica(ctx(), { conteudo: 'Loja' });
   assert.match(html, /<span class="barra-topo-conteudo">/, 'deve renderizar o texto animável');
   assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(css, /body \.cabecalho\s*\{\s*position:\s*sticky;\s*top:\s*0/);
+  assert.match(css, /body \.cabecalho > \.barra-topo\s*\{/);
   const js = readFileSync(new URL('../public/js/admin.js', import.meta.url), 'utf8');
   assert.match(js, /atualizarPreviaBarra/);
+});
+
+
+test('cores antigas padrão são migradas visualmente, escolhas personalizadas não são sobrescritas', () => {
+  const legado = paginaPublica(ctx({
+    barraTopoCorFundo: '#fff0f0',
+    barraTopoCorTexto: '#8b0000',
+  }), { conteudo: '' });
+  assert.match(legado, /--barra-topo-fundo:#16803c;--barra-topo-texto:#ffffff/);
+  const editado = paginaPublica(ctx({
+    barraTopoCorFundo: '#fff0f0',
+    barraTopoCorTexto: '#8b0000',
+    barraTopoEstiloVersao: 'abaixo-menu-verde-20261107',
+  }), { conteudo: '' });
+  assert.match(editado, /--barra-topo-fundo:#fff0f0;--barra-topo-texto:#8b0000/);
+  const personalizado = paginaPublica(ctx({
+    barraTopoCorFundo: '#112233',
+    barraTopoCorTexto: '#aabbcc',
+  }), { conteudo: '' });
+  assert.match(personalizado, /--barra-topo-fundo:#112233;--barra-topo-texto:#aabbcc/);
+});
+
+test('barra é exibida apenas dentro de cabeçalho sticky e pode ser desabilitada', () => {
+  const html = paginaPublica(ctx(), { conteudo: '<section>Banner principal</section>' });
+  const bar = html.indexOf('class="barra-topo barra-topo-pulsante"');
+  assert.ok(bar > html.indexOf('class="menu-departamentos"'));
+  assert.ok(bar < html.indexOf('</header>'));
+  assert.ok(bar < html.indexOf('<main id="conteudo">'));
+  assert.ok(html.indexOf('<body') < html.indexOf('<header class="cabecalho">'));
+  assert.doesNotMatch(paginaPublica(ctx({barraTopoAtiva:false}), {conteudo:'Banner'}), /class="barra-topo/);
+  const route = readFileSync(new URL('../src/routes/admin.js', import.meta.url), 'utf8');
+  assert.match(route, /barraTopoEstiloVersao: 'abaixo-menu-verde-20261107'/);
 });
