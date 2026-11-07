@@ -90,7 +90,7 @@ function secaoEntregas(settings) {
         <h2 class="mb-0">${e(home.entregaTitulo || 'Entregas para todo o Brasil')}</h2>
         <p class="mb-0">${e(home.entregaTexto || '')}</p>
         <div class="beneficios-entrega" aria-label="Benefícios de entrega e compra">
-          <span class="beneficio-entrega">${ICONES.caminhao} ${ctx.settings.frete?.melhorEnvio?.ativo ? 'Frete calculado pelo CEP' : 'Frete fixo por estado'}</span>
+          <span class="beneficio-entrega">${ICONES.caminhao} ${settings.frete?.melhorEnvio?.ativo ? 'Frete calculado pelo CEP' : 'Frete fixo por estado'}</span>
           <span class="beneficio-entrega">${ICONES.cadeado} Compra segura</span>
           <a class="beneficio-entrega beneficio-link" href="/pagina/entregas-e-fretes">Como calculamos o frete</a>
         </div>
