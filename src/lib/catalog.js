@@ -313,6 +313,25 @@ export function searchProducts(db, {
   return { produtos: itens, rows: itens, total, pagina: paginaAtual, porPagina };
 }
 
+/**
+ * Ranking de vendas do próprio e-commerce: somente pedidos pagos,
+ * acumulando unidades por produto. Não confiar no contador legado p.vendas,
+ * que pode estar zerado, desatualizado ou vindo da importação.
+ */
+export function rankingVendasPagas(db) {
+  const unidades = new Map();
+  for (const pedido of db.collection('orders').all()) {
+    if (pedido.statusFinanceiro !== 'aprovado') continue;
+    for (const item of pedido.itens || []) {
+      const id = String(item.produtoId || '');
+      const quantidade = Number(item.quantidade);
+      if (!id || !Number.isFinite(quantidade) || quantidade <= 0) continue;
+      unidades.set(id, (unidades.get(id) || 0) + quantidade);
+    }
+  }
+  return unidades;
+}
+
 export function vitrineProdutos(db, tipo, limite = 12, referencia = new Date()) {
   const base = db.collection('products').all().filter((p) => p.ativo && podeVender(p).ok);
   const filtros = {
@@ -320,8 +339,25 @@ export function vitrineProdutos(db, tipo, limite = 12, referencia = new Date()) 
     ofertas: () => ordenarOfertasVigentes(
       base.filter((p) => temPromocao(p, referencia)), referencia),
     destaques: () => base.filter((p) => p.destaque),
-    mais_vendidos: () => base.slice().sort((a, b) => Number(b.vendas || 0) - Number(a.vendas || 0)),
-    novidades: () => base.slice().sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))),
+    mais_vendidos: () => {
+      const quantidades = rankingVendasPagas(db);
+      // Sem vendas aprovadas, não inventar "mais vendidos" com produtos aleatórios.
+      return base.filter(p => (quantidades.get(String(p.id)) || 0) > 0)
+        .sort((a, b) => quantidades.get(String(b.id)) - quantidades.get(String(a.id)) ||
+          String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR') ||
+          String(a.id).localeCompare(String(b.id)));
+    },
+    novidades: () => {
+      // Apenas cadastros realmente recentes: atualização de estoque ou foto não é novidade.
+      const agora = new Date(referencia).getTime();
+      const prazo = 30 * 86400000;
+      return base.filter(p => {
+        const data = Date.parse(p.criadoEm || p.createdAt || '');
+        return Number.isFinite(data) && data <= agora && (agora - data) <= prazo;
+      }).sort((a, b) =>
+        Date.parse(b.criadoEm || b.createdAt) - Date.parse(a.criadoEm || a.createdAt) ||
+        String(a.id).localeCompare(String(b.id)));
+    },
   };
   const fn = filtros[tipo] || filtros.destaques;
   const rows = fn();
