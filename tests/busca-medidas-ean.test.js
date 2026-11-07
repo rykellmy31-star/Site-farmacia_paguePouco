@@ -91,8 +91,12 @@ test('integração exige permissão admin e não altera pagamento, preço nem re
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/ativar', \(req, res\)/);
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/buscar-medidas-ean',async/);
   assert.match(rotas,/aplicarMedidasAusentes\(p,encontrados\)/);
-  assert.match(js,/buscar-medidas-nome/);
-  assert.match(tela,/id="botaoBuscarMedidasEAN"/);
+  assert.doesNotMatch(js,/buscar-medidas-nome|botaoBuscarMedidasEAN/);
+  assert.doesNotMatch(tela,/id="botaoBuscarMedidasEAN"/);
+  assert.match(tela,/nome: 'peso'|nome: "peso"/);
+  assert.match(tela,/nome: 'largura'|nome: "largura"/);
+  assert.match(tela,/nome: 'altura'|nome: "altura"/);
+  assert.match(tela,/nome: 'comprimento'|nome: "comprimento"/);
   assert.match(js,/campo\('ean'\)\?\.addEventListener\('change'/);
 });
 
