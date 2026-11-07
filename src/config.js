@@ -111,6 +111,9 @@ export const config = {
     token: process.env.MELHOR_ENVIO_TOKEN || '',
     contato: process.env.MELHOR_ENVIO_CONTATO_EMAIL || '',
     sandbox: bool(process.env.MELHOR_ENVIO_SANDBOX, false),
+    clientId: process.env.MELHOR_ENVIO_CLIENT_ID || '',
+    clientSecret: process.env.MELHOR_ENVIO_CLIENT_SECRET || '',
+    credentialsKey: process.env.MELHOR_ENVIO_CREDENTIALS_KEY || '',
   },
   cep: {
     viacep: bool(process.env.VIACEP_ENABLED, false),
@@ -177,6 +180,9 @@ export function configureCloudflare(env, origin, persistentSecret) {
     token: env.MELHOR_ENVIO_TOKEN || '',
     contato: env.MELHOR_ENVIO_CONTATO_EMAIL || '',
     sandbox: bool(env.MELHOR_ENVIO_SANDBOX, false),
+    clientId: env.MELHOR_ENVIO_CLIENT_ID || '',
+    clientSecret: env.MELHOR_ENVIO_CLIENT_SECRET || '',
+    credentialsKey: env.MELHOR_ENVIO_CREDENTIALS_KEY || '',
   };
   config.cep.viacep = bool(env.VIACEP_ENABLED, false);
   // Limite de memória do runtime: uploads de vídeo até 16 MiB por arquivo.
