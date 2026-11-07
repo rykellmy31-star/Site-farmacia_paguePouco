@@ -79,7 +79,7 @@ test('produtos inativos e sem estoque não entram no ranking nem na vitrine',()=
   assert.deepEqual(vitrineProdutos(db,'mais_vendidos',5).map(p=>p.id),['ativo']);
 });
 
-test('ofertas continuam completas, destaques e vitrines extras não repetem itens',()=>{
+test('ofertas e destaques não repetem, e vitrine manual respeita seleção do administrador',()=>{
   const produtos=[
     produto('oferta',{promo:true,destaque:true}),
     produto('campeao',{destaque:true}),
@@ -95,7 +95,7 @@ test('ofertas continuam completas, destaques e vitrines extras não repetem iten
   assert.deepEqual(idsDaSecao(html,'mais-vendidos'),['campeao']);
   assert.deepEqual(idsDaSecao(html,'novidades'),['recente']);
   assert.deepEqual(idsDaSecao(html,'destaques'),['destaque-especifico']);
-  assert.deepEqual(idsDaSecao(html,'vitrine-mini'),['custom-antigo']);
+  assert.deepEqual(idsDaSecao(html,'vitrine-mini'),['campeao','recente','custom-antigo']);
 });
 
 test('não preenche vagas com produtos antigos para simular novidade',()=>{
