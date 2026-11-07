@@ -48,6 +48,42 @@ export function extrairPesoBruto(texto) {
   return val>=0.001&&val<=30?arred(val):0;
 }
 
+/**
+ * Reaproveita medidas de uma ficha do próprio catálogo pelo nome COMPLETO:
+ * marca, apresentação e quantidade precisam coincidir. Nunca confunde
+ * nomes parecidos (fralda M versus G, 30 versus 60 cápsulas).
+ * Consulta somente leitura, não altera produtos ou estoque.
+ */
+export function buscarMedidasNoCatalogoPorNome(db, nomeBruto, {ignorarId=null}={}) {
+  if (!db || !nomeMedidasValido(nomeBruto)) return null;
+  const nome = limpar(nomeBruto);
+  const candidatos = db.collection('products').all().filter(p =>
+    !p.inovaArquivado?.em &&
+    String(p.id) !== String(ignorarId ?? '') &&
+    limpar(p.nome) === nome &&
+    ['largura','altura','comprimento'].every(campo => {
+      const valor = Number(p.dimensoes?.[campo]);
+      return Number.isFinite(valor) && valor >= 0.1 && valor <= 150;
+    }));
+  if (!candidatos.length) return null;
+  const medidas = candidatos.map(p => ({
+    largura: arred(Number(p.dimensoes.largura)),
+    altura: arred(Number(p.dimensoes.altura)),
+    comprimento: arred(Number(p.dimensoes.comprimento)),
+  }));
+  const distintos = [...new Set(medidas.map(m => JSON.stringify(m)))];
+  if (distintos.length > 1) return {ok:true,encontrado:false,divergencia:true,
+    mensagem:'Há dimensões diferentes em cadastros com esse mesmo nome. Confira a embalagem manualmente.'};
+  const pesos = [...new Set(candidatos.map(p => {
+    const n=Number(p.peso);
+    return Number.isFinite(n) && n>=0.001 && n<=30 ? arred(n) : 0;
+  }).filter(Boolean))];
+  return {ok:true,encontrado:true,nome:String(nomeBruto),dimensoes:medidas[0],
+    peso:pesos.length===1?pesos[0]:0,origem:'Catálogo da farmácia — mesmo nome',
+    url:null,campos:['largura','altura','comprimento'],
+    aviso:'Medidas encontradas em outro cadastro. Confira a embalagem real antes de usar no frete.'};
+}
+
 export async function buscarMedidasPorNome(nomeBruto,{
   fetcher=globalThis.fetch,googleKey=config.googleEan?.key,
   googleCx=config.googleEan?.cx,timeoutMs=5000,forcar=false,
@@ -55,7 +91,7 @@ export async function buscarMedidasPorNome(nomeBruto,{
   const nome=String(nomeBruto||'').trim().slice(0,170);
   if(!nomeMedidasValido(nome))return {ok:false,encontrado:false,mensagem:'Informe o nome completo do produto, incluindo apresentação e quantidade.'};
   if(!googleKey||!googleCx)return {ok:false,encontrado:false,semIntegracao:true,
-    mensagem:'Configure a API de pesquisa Google para pesquisar medidas pelo nome.'};
+    mensagem:'Pesquisa por nome sem acesso ao Google. Configure GOOGLE_CSE_API_KEY e GOOGLE_CSE_CX nos segredos da Cloudflare. A busca de imagens usa uma integração diferente.'};
   const chave=limpar(nome);
   const cacheAtivo=fetcher===globalThis.fetch;
   const cached=CACHE.get(chave);
@@ -69,13 +105,26 @@ export async function buscarMedidasPorNome(nomeBruto,{
   let ret;
   try{
     const response=await fetcher(url.href,{signal:ctrl.signal,headers:{Accept:'application/json'}});
-    if(response.status===429||response.status===403){
-      // Não consumir consultas infinitas se a conta atingiu a cota.
-      return {ok:false,encontrado:false,cotaEsgotada:true,
-        mensagem:'A API do Google atingiu o limite disponível. O lote foi pausado para preservar a cota.'};
+    if(!response.ok){
+      // A chave de imagens/Photos ou outro provedor não habilita automaticamente
+      // a Custom Search JSON API. Nunca mostrar credenciais ou corpo bruto.
+      if(response.status===429)return {ok:false,encontrado:false,cotaEsgotada:true,
+        mensagem:'Limite de consultas do Google atingido. Aguarde a renovação da cota.'};
+      if([400,401,403].includes(response.status)){
+        let motivo='';
+        try {
+          const erro=await response.json();
+          motivo=String(erro?.error?.errors?.[0]?.reason||erro?.error?.status||'').slice(0,80);
+        } catch { /* sem corpo JSON */ }
+        if(/quota|rate|resource_exhausted|dailyLimit/i.test(motivo))
+          return {ok:false,encontrado:false,cotaEsgotada:true,
+            mensagem:'A cota da pesquisa Google está esgotada. Consulte os limites da sua API.'};
+        return {ok:false,encontrado:false,credencialInvalida:true,
+          mensagem:'O Google não autorizou a pesquisa por nome. Verifique a chave GOOGLE_CSE_API_KEY, o identificador GOOGLE_CSE_CX e se a Custom Search JSON API está habilitada para essa chave.'};
+      }
+      return {ok:false,encontrado:false,temporario:true,
+        mensagem:'Pesquisa externa indisponível (HTTP '+response.status+'). Tente novamente.'};
     }
-    if(!response.ok)return {ok:false,encontrado:false,temporario:true,
-      mensagem:'Pesquisa temporariamente indisponível. Tente novamente mais tarde.'};
     const json=await response.json();
     const candidatos=[];
     for(const item of Array.isArray(json.items)?json.items:[]){
