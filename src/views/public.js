@@ -115,7 +115,7 @@ function secaoInstitucional(settings) {
   </section>`;
 }
 
-function vitrinesPersonalizadas(db, ctx) {
+function vitrinesPersonalizadas(db, ctx, idsExibidos = new Set()) {
   const vitrines = db.collection('showcases').all()
     .filter((v) => v.ativa !== false)
     .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
@@ -133,11 +133,14 @@ function vitrinesPersonalizadas(db, ctx) {
     } else {
       produtos = (v.produtosIds || []).map((id) => db.collection('products').get(id)).filter(Boolean);
     }
+    // Vitrines extras respeitam os itens que já apareceram na home.
+    const unicos = produtos.filter(p => p && !idsExibidos.has(p.id));
+    for (const p of unicos) idsExibidos.add(p.id);
     return secaoVitrina({
       id: `vitrine-${v.id}`,
       titulo: v.titulo,
       link: v.link || '',
-      produtos,
+      produtos: unicos,
       rolagem: v.rolagem !== false,
       db,
     });
@@ -154,6 +157,24 @@ export function homePage(ctx) {
   const ofertasDoDia = vitrineProdutos(db, 'ofertas', Infinity);
   const ofertasVisiveis = secoesAtivas.some((s) => s.tipo === 'ofertas');
   const idsNasOfertas = new Set(ofertasVisiveis ? ofertasDoDia.map((p) => p.id) : []);
+
+  // Separar vitrines antes de renderizar: a ordem visual é configurável,
+  // mas Novidades NUNCA pode repetir um dos cinco campeões de vendas.
+  const vendidosVisiveis = secoesAtivas.some(s => s.tipo === 'mais_vendidos');
+  const novidadesVisiveis = secoesAtivas.some(s => s.tipo === 'novidades');
+  const maisVendidos = vendidosVisiveis ? vitrineProdutos(db, 'mais_vendidos', 5) : [];
+  const idsMaisVendidos = new Set(maisVendidos.map(p => p.id));
+  const limiteNovidades = secoesAtivas.find(s => s.tipo === 'novidades')?.limite || 5;
+  const novidades = novidadesVisiveis
+    ? vitrineProdutos(db, 'novidades', Infinity)
+      .filter(p => !idsMaisVendidos.has(p.id) && !idsNasOfertas.has(p.id))
+      .slice(0, Math.min(5, limiteNovidades))
+    : [];
+  const idsNovidades = new Set(novidades.map(p => p.id));
+
+  // Reservar previamente Mais Vendidos e Novidades para não repetirem
+  // em Destaques e em vitrines manuais/dinâmicas, mesmo com ordem alterada.
+  const idsExibidos = new Set([...idsNasOfertas, ...idsMaisVendidos, ...idsNovidades]);
   const bannersHoje = db.collection('banners').all().filter((b) => bannerDeveAparecer(b));
   const banners = ordenarBanners(bannersHoje.filter((b) => (b.posicao || 'principal') === 'principal'));
   const bannersSec = ordenarBanners(bannersHoje.filter((b) => b.posicao === 'secundario'));
@@ -169,11 +190,18 @@ export function homePage(ctx) {
         </section>`;
       case 'categorias': return secaoDepartamentos(arvore);
       case 'ofertas': return secaoVitrina({ id: 'ofertas', titulo: s.titulo || 'Ofertas do dia', link: '/ofertas', produtos: ofertasDoDia, db });
-      case 'destaques': return secaoVitrina({ id: 'destaques', titulo: s.titulo || 'Destaques', produtos: vitrineProdutos(db, 'destaques', Infinity)
-        .filter((p) => !idsNasOfertas.has(p.id)).slice(0, s.limite || 8), db });
-      case 'mais_vendidos': return secaoVitrina({ id: 'mais-vendidos', titulo: s.titulo || 'Mais vendidos', produtos: vitrineProdutos(db, 'mais_vendidos', s.limite || 8), db });
-      case 'novidades': return secaoVitrina({ id: 'novidades', titulo: s.titulo || 'Novidades', produtos: vitrineProdutos(db, 'novidades', s.limite || 8), db });
-      case 'vitrines': return vitrinesPersonalizadas(db, ctx);
+      case 'destaques': {
+        const selecionados = vitrineProdutos(db, 'destaques', Infinity)
+          .filter(p => !idsExibidos.has(p.id)).slice(0, s.limite || 8);
+        for (const p of selecionados) idsExibidos.add(p.id);
+        return secaoVitrina({ id: 'destaques', titulo: s.titulo || 'Destaques',
+          produtos: selecionados, db });
+      }
+      case 'mais_vendidos': return secaoVitrina({ id: 'mais-vendidos',
+        titulo: s.titulo || 'Mais vendidos', produtos: maisVendidos, db });
+      case 'novidades': return secaoVitrina({ id: 'novidades',
+        titulo: s.titulo || 'Novidades', produtos: novidades, db });
+      case 'vitrines': return vitrinesPersonalizadas(db, ctx, idsExibidos);
       case 'entregas': return secaoEntregas(settings);
       case 'institucional': return secaoInstitucional(settings);
       default: return '';
