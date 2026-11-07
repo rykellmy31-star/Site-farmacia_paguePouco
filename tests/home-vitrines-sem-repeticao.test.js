@@ -54,9 +54,9 @@ test('novidades excluem os cinco mais vendidos mesmo se seção novidades vier p
   const vendidos=idsDaSecao(html,'mais-vendidos');
   const novidades=idsDaSecao(html,'novidades');
   assert.equal(vendidos.length,5);
-  assert.equal(novidades.length,5);
+  assert.equal(novidades.length,9);
   assert.deepEqual(vendidos,['item0','item1','item2','item3','item4']);
-  assert.deepEqual(novidades,['item5','item6','item7','item8','item9']);
+  assert.deepEqual(novidades,['item5','item6','item7','item8','item9','item10','item11','item12','item13']);
   assert.equal(novidades.some(x=>vendidos.includes(x)),false);
 });
 
@@ -102,4 +102,16 @@ test('não preenche vagas com produtos antigos para simular novidade',()=>{
   const db=fixture([produto('novo',{criadoEm:novo(1)}),
     produto('velho',{criadoEm:'2020-01-01T00:00:00Z'})]);
   assert.deepEqual(idsDaSecao(home(db,['novidades']),'novidades'),['novo']);
+});
+
+
+test('Novidades exibe todos os produtos recentes em rolagem horizontal, sem limite de 5 ou 8',()=>{
+  const produtos=Array.from({length:32},(_,i)=>produto('novo'+i,{criadoEm:novo(i+1)}));
+  const db=fixture(produtos);
+  const html=home(db,['novidades']);
+  const visiveis=idsDaSecao(html,'novidades');
+  assert.equal(visiveis.length,32);
+  assert.deepEqual(visiveis,produtos.map(p=>p.id));
+  assert.match(html, /<section class="secao" id="novidades">[\s\S]*?<div class="vitrine rolagem">/);
+  assert.equal(new Set(visiveis).size,32);
 });

@@ -67,6 +67,12 @@ function widgetWhatsApp(whatsapp, pathname) {
   const { aberto, texto } = horarioAtendimentoAgora(whatsapp);
   const link = linkWhatsApp(whatsapp);
   const pos = whatsapp.posicao === 'esquerda' ? 'esquerda' : '';
+  // Somente cores hexadecimais: valores do painel nunca são CSS arbitrário.
+  const corFundo = /^#[0-9a-f]{6}$/i.test(whatsapp.botaoCorFundo || '')
+    ? whatsapp.botaoCorFundo : '#25d366';
+  const corTexto = /^#[0-9a-f]{6}$/i.test(whatsapp.botaoCorTexto || '')
+    ? whatsapp.botaoCorTexto : '#ffffff';
+  const pulsacao = whatsapp.pulsacaoSuave !== false ? ' whatsapp-pulso-suave' : '';
   return `
   <div class="whatsapp-flutuante ${pos}" id="whatsappFlutuante">
     <div class="whatsapp-aviso" id="whatsappAviso">
@@ -74,7 +80,8 @@ function widgetWhatsApp(whatsapp, pathname) {
       <p class="mb-0 mt-1">${e(aberto ? (whatsapp.mensagem || '') : texto)}</p>
       <p class="mb-0 mt-1 texto-pequeno"><strong>Atenção:</strong> ${e(whatsapp.avisoCheckout || 'Este canal é exclusivo para dúvidas.')}</p>
     </div>
-    <a class="botao-whatsapp" href="${e(link)}" target="_blank" rel="noopener noreferrer"
+    <a class="botao-whatsapp${pulsacao}" href="${e(link)}" target="_blank" rel="noopener noreferrer"
+       style="--whatsapp-botao-fundo:${e(corFundo)};--whatsapp-botao-texto:${e(corTexto)}"
        aria-label="Tirar dúvidas pelo WhatsApp" data-whatsapp-link>
       ${ICONES.whatsapp}
       <span class="texto">${e(whatsapp.textoBotao || 'Dúvidas?')}</span>
@@ -292,7 +299,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=barra-verde-sticky-20261107">
+<link rel="stylesheet" href="/styles.css?v=whatsapp-suave-novidades-20261107">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};

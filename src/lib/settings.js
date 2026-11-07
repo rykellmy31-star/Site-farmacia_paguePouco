@@ -52,6 +52,9 @@ export const DEFAULT_SETTINGS = () => ({
     numero: '5573000000000', // DDI + DDD + número, somente dígitos
     mensagem: 'Olá! Estou acessando o site da Farmácia Pague Pouco e gostaria de tirar uma dúvida.',
     textoBotao: 'Dúvidas? Fale com a gente',
+    botaoCorFundo: '#25d366',
+    botaoCorTexto: '#ffffff',
+    pulsacaoSuave: true,
     posicao: 'direita', // direita | esquerda
     paginas: ['todas'], // ['todas'] ou lista de slugs/rotas
     horarios: [

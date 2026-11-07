@@ -228,6 +228,26 @@ export function telaWhatsApp(ctx, { whatsapp, linkExemplo }) {
           ${campoAdmin({ nome: 'mensagem', rotulo: 'Mensagem inicial', tipo: 'textarea', valor: whatsapp.mensagem || '',
             dica: 'Texto que já vem preenchido quando o cliente clica.' })}
           ${campoAdmin({ nome: 'textoBotao', rotulo: 'Texto do botão', valor: whatsapp.textoBotao || '' })}
+          <h4 class="mt-2">Aparência do botão flutuante</h4>
+          <div class="campo-linha">
+            ${campoAdmin({ nome: 'botaoCorFundo', rotulo: 'Cor de fundo (WhatsApp)', tipo: 'color',
+              valor: /^#[0-9a-f]{6}$/i.test(whatsapp.botaoCorFundo || '') ? whatsapp.botaoCorFundo : '#25d366' })}
+            ${campoAdmin({ nome: 'botaoCorTexto', rotulo: 'Cor do texto e ícone', tipo: 'color',
+              valor: /^#[0-9a-f]{6}$/i.test(whatsapp.botaoCorTexto || '') ? whatsapp.botaoCorTexto : '#ffffff' })}
+          </div>
+          ${campoAdmin({ nome: 'pulsacaoSuave', rotulo: 'Ativar pulsação leve e discreta', tipo: 'checkbox',
+            valor: whatsapp.pulsacaoSuave !== false })}
+          <div class="campo">
+            <label>Prévia da aparência</label>
+            <div style="padding:10px 2px">
+              <span id="previewBotaoWhatsApp" class="botao-whatsapp whatsapp-pulso-suave"
+                    aria-hidden="true" style="width:max-content;max-width:100%">
+                <span aria-hidden="true">◉</span>
+                <span id="previewTextoBotaoWhatsApp" style="color:inherit"></span>
+              </span>
+            </div>
+            <span class="dica">O verde original do WhatsApp é o padrão. As cores e a animação podem ser alteradas quando quiser. A pulsação é suave.</span>
+          </div>
           ${campoAdmin({ nome: 'posicao', rotulo: 'Posição na tela', valor: whatsapp.posicao || 'direita',
             opcoes: [{ valor: 'direita', texto: 'Canto inferior direito' }, { valor: 'esquerda', texto: 'Canto inferior esquerdo' }] })}
           ${campoAdmin({ nome: 'paginas', rotulo: 'Aparecer em quais páginas', valor: (whatsapp.paginas || ['todas']).join(', '),
