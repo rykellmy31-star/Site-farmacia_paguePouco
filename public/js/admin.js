@@ -56,7 +56,8 @@
     try { dados = await r.json(); } catch (e) { dados = null; }
     if (!r.ok || (dados && dados.ok === false)) {
       const codigo = /^BD_[A-Z_]{2,40}$/.test(String(dados?.codigo||'')) ? ' ['+dados.codigo+']' : '';
-      throw new Error(((dados && dados.erro) || 'Não foi possível concluir.') + codigo);
+      throw new Error(((dados && (dados.erro || dados.mensagem)) ||
+        ('Não foi possível concluir (HTTP '+r.status+'). Verifique a conexão e tente novamente.')) + codigo);
     }
     return dados || { ok: true };
   }
