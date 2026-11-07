@@ -102,16 +102,28 @@ test('destaque marcado aparece, sem repetir o item já mostrado nas ofertas', ()
   assert.doesNotMatch(apenasOferta, /<section class="secao" id="destaques">/);
 });
 
-test('mais vendidos e novidades mantêm a ordenação existente', () => {
-  const db = banco([
-    produto('antigo', { semPromocao: true, vendas: 11, criadoEm: '2026-10-01T00:00:00Z' }),
+test('mais vendidos seguem pedidos pagos, e novidades são cadastros recentes', () => {
+  const base = [
+    produto('antigo', { semPromocao: true, vendas: 999, criadoEm: '2026-10-01T00:00:00Z' }),
     produto('novo', { semPromocao: true, vendas: 1, criadoEm: '2026-11-04T00:00:00Z' }),
     produto('medio', { semPromocao: true, vendas: 5, criadoEm: '2026-10-15T00:00:00Z' }),
-  ]);
+  ];
+  const pedidos = [
+    { id: 'p1', statusFinanceiro: 'aprovado', itens: [
+      { produtoId: 'novo', quantidade: 7 }, { produtoId: 'medio', quantidade: 2 }] },
+    { id: 'p2', statusFinanceiro: 'aprovado', itens: [
+      { produtoId: 'medio', quantidade: 4 }] },
+    { id: 'p3', statusFinanceiro: 'pendente', itens: [
+      { produtoId: 'antigo', quantidade: 99 }] },
+  ];
+  const db = { collection: nome => ({
+    all: () => nome === 'products' ? base : nome === 'orders' ? pedidos : [],
+    get: () => null,
+  })};
   assert.deepEqual(vitrineProdutos(db, 'mais_vendidos', 3).map((p) => p.id),
-    ['antigo', 'medio', 'novo']);
-  assert.deepEqual(vitrineProdutos(db, 'novidades', 3).map((p) => p.id),
-    ['novo', 'medio', 'antigo']);
+    ['novo', 'medio']);
+  assert.deepEqual(vitrineProdutos(db, 'novidades', 3,
+    new Date('2026-11-06T15:00:00Z')).map(p => p.id), ['novo', 'medio']);
 });
 
 test('oferta específica de quinta vem antes da promoção mensal mesmo com menor desconto', () => {
