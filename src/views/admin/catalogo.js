@@ -111,6 +111,24 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       </div>
     </div>
 
+    ${ctx.adminUser?.role === 'super_admin' ? `
+      <div class="painel mb-2" id="painelMedidasNomeLote" style="padding:14px">
+        <strong>📦 Dimensões dos produtos em lote — busca pelo nome</strong>
+        <p class="texto-pequeno">Pesquisa automaticamente todos os produtos com medidas incompletas,
+        grava somente campos vazios e marca os resultados para conferência.
+        Produtos sem correspondência segura ficam sem medidas. Usa a API Google,
+        com limite de segurança de até 90 consultas por mês; interrompe ao atingir a cota.
+        Mantenha esta página aberta enquanto estiver executando; é possível retomar.</p>
+        <div class="linha" style="gap:8px;flex-wrap:wrap">
+          <button class="botao secundario" type="button" id="botaoBuscarMedidasTodos">
+            📐 Buscar dimensões de todos os produtos e gravar
+          </button>
+          <button class="botao pequeno secundario" type="button" id="botaoPausarMedidas" disabled>Pausar</button>
+        </div>
+        <p class="texto-pequeno mt-2" id="progressoMedidasNome" role="status" aria-live="polite">
+          Aguardando início. Nenhum preço ou produto será alterado.</p>
+      </div>` : ''}
+
     ${/^[0-9]{1,2}$/.test(String(filtros.promosOrganizadas||'')) ?
       '<div class="alerta info">'+e(filtros.promosOrganizadas)+
       ' produto(s) tiveram marcação organizacional atualizada. Descontos não foram modificados.</div>' : ''}
@@ -341,13 +359,13 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               <div id="listaGoogleImagensEAN" class="campo-linha" aria-label="Resultados do Google Imagens"></div>
             </div>
             <div class="alerta info" id="painelBuscaEAN">
-              <strong>📦 Ferramenta de dimensões — EAN</strong>
-              <p class="texto-pequeno mt-1">Pesquisa separadamente peso e dimensões logísticas da embalagem.
-              Consulte e confira as medidas antes de calcular frete. O Google pode complementar resultados
-              somente quando a API oficial estiver configurada.</p>
-              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">📐 Buscar dimensões pelo EAN</button>
+              <strong>📦 Ferramenta de dimensões — nome do produto</strong>
+              <p class="texto-pequeno mt-1">Pesquisa pelo nome e apresentação, não pelo código EAN.
+              Aceita apenas dimensões explícitas da embalagem e resultados que correspondam ao produto.
+              Confira as medidas sugeridas antes de calcular fretes.</p>
+              <button class="botao pequeno secundario" type="button" id="botaoBuscarMedidasEAN">📐 Buscar dimensões pelo nome</button>
               <a id="linkPesquisaEAN" class="botao pequeno secundario mt-1" target="_blank"
-                rel="noopener noreferrer" style="display:none">🌐 Procurar medidas deste EAN na web</a>
+                rel="noopener noreferrer" style="display:none">🌐 Procurar medidas deste produto na web</a>
               <p class="texto-pequeno mt-1 mb-0" id="resultadoBuscaEAN" role="status">
                 ${p.logisticaFonte?.origem
                   ? `Fonte: ${e(p.logisticaFonte.origem)} · ${p.logisticaFonte.revisaoPendente ? 'Conferência da embalagem pendente' : 'Medidas revisadas'}`

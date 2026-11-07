@@ -55,6 +55,7 @@ import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
+import { buscarMedidasPorNome, buscaLogisticaPendente, nomeMedidasValido } from '../lib/busca-medidas-nome.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
 import { buscarImagemDisponivel } from '../lib/ean-image-download.js';
 import { consultarGoogleImagensEAN } from '../lib/brightdata-google-imagens.js';
@@ -1726,6 +1727,147 @@ function registrarApi(app, db) {
     logAdmin(db,req.adminUser,'anexou_imagem_png_ean','produto',p.id,{ean:p.ean,imagem:url},req);
     res.json({ok:true,adicionada:true});
   });
+
+  // Limite conservador COMPARTILHADO entre busca individual e execução em lote.
+  // O Google pode cobrar por requisições adicionais: não consumir cota sem controle.
+  const LIMITE_MEDIDAS_GOOGLE_MES=90;
+  function autorizarPesquisaNome(){
+    if(!config.googleEan?.key||!config.googleEan?.cx)
+      return {ok:false,semIntegracao:true,mensagem:'Configure a pesquisa Google no painel para consultar medidas por nome.'};
+    const mes=new Date().toISOString().slice(0,7);
+    const col=db.collection('cotasMedidasNome');
+    const uso=col.get(mes);
+    if(Number(uso?.consultas||0)>=LIMITE_MEDIDAS_GOOGLE_MES)
+      return {ok:false,cotaEsgotada:true,mensagem:'Limite de segurança de 90 pesquisas de dimensões por mês atingido. Retome no próximo mês; outras pesquisas Google podem ter cota própria.'};
+    if(uso)col.update(mes,{consultas:uso.consultas+1});
+    else col.insert({id:mes,consultas:1});
+    return {ok:true};
+  }
+  async function consultarMedidasNomeComLimite(nome){
+    const autorizado=autorizarPesquisaNome();
+    return autorizado.ok?buscarMedidasPorNome(nome):autorizado;
+  }
+  function gravarMedidasPesquisa(p,resultado,adminUser,req,origemAcao){
+    if(!p||!resultado?.encontrado)return false;
+    const atual=db.collection('products').get(p.id); // preservar edições paralelas
+    if(!atual||atual.inovaArquivado?.em)return false;
+    const patch=aplicarMedidasAusentes(atual,resultado);
+    if(!Object.keys(patch).length)return false;
+    patch.logisticaFonte={
+      origem:resultado.origem,nomeConsultado:atual.nome,ean:atual.ean||'',
+      url:resultado.url||null,revisaoPendente:true,consultadoEm:new Date().toISOString(),
+    };
+    db.collection('products').update(atual.id,patch);
+    logAdmin(db,adminUser,origemAcao,'produto',atual.id,
+      {origem:resultado.origem,peso:!!patch.peso,dimensoes:!!patch.dimensoes,
+        exigeConferencia:true},req);
+    return true;
+  }
+
+  // Formulário: sugerir pela descrição real do produto, NÃO usar EAN como busca.
+  // A consulta não salva automaticamente o resultado do formulário.
+  app.post('/admin/api/produtos/dimensoes-nome',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const nome=String(req.body?.nome||'').trim().slice(0,170);
+    if(!nomeMedidasValido(nome))return void res.json({ok:false,erro:'Informe o nome completo do produto.'},400);
+    const resultado=await consultarMedidasNomeComLimite(nome);
+    res.set('Cache-Control','no-store');
+    res.json(resultado,resultado.ok===false?400:200);
+  });
+
+  // Iniciar ou retomar a busca automática por TODOS os produtos incompletos.
+  // Não inicia cron nem consome milhares de chamadas na mesma requisição.
+  const JOB_NOME_MEDIDAS='catalogo-medidas-por-nome';
+  app.post('/admin/api/produtos/medidas-lote/iniciar',(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')return void res.json({ok:false,erro:'Somente o Super Administrador pode iniciar atualização em lote.'},403);
+    const jobs=db.collection('jobsMedidasNome');
+    const existente=jobs.get(JOB_NOME_MEDIDAS);
+    if(existente&&existente.status!=='concluido'&&req.body?.reiniciar!==true){
+      return void res.json({ok:true,job:{...existente,ids:undefined}});
+    }
+    if(!config.googleEan?.key||!config.googleEan?.cx)
+      return void res.json({ok:false,erro:'Configure a API Google para buscar dimensões por nome.'},400);
+    const ids=db.collection('products').all().filter(buscaLogisticaPendente)
+      .sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(p=>p.id);
+    const job={ids,indice:0,total:ids.length,gravados:0,semDados:0,ignorados:0,
+      status:ids.length?'executando':'concluido',ultimo:'',iniciadoEm:new Date().toISOString()};
+    if(existente)jobs.update(JOB_NOME_MEDIDAS,job);
+    else jobs.insert({id:JOB_NOME_MEDIDAS,...job});
+    res.json({ok:true,job:{id:JOB_NOME_MEDIDAS,...job,ids:undefined}});
+  });
+  app.post('/admin/api/produtos/medidas-lote/proximo',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')return void res.json({ok:false,erro:'Sem permissão para busca em lote.'},403);
+    const jobs=db.collection('jobsMedidasNome');
+    const job=jobs.get(JOB_NOME_MEDIDAS);
+    if(!job)return void res.json({ok:false,erro:'Inicie a atualização em lote primeiro.'},400);
+    if(job.status!=='executando')return void res.json({ok:true,job:{...job,ids:undefined}});
+    // Uma requisição por vez, para evitar duplicações em duas abas.
+    if(job.executandoAte&&job.executandoAte>Date.now())
+      return void res.json({ok:true,ocupado:true,job:{...job,ids:undefined}});
+    jobs.update(JOB_NOME_MEDIDAS,{executandoAte:Date.now()+20000});
+    let indice=job.indice,gravados=job.gravados,semDados=job.semDados,
+      ignorados=job.ignorados,status='executando',ultimo='';
+    try{
+      // Duas chamadas no máximo por requisição. Seguro para execução no Worker.
+      for(let tentativas=0;tentativas<2&&indice<job.ids.length;tentativas++){
+        const p=db.collection('products').get(job.ids[indice]);
+        if(!buscaLogisticaPendente(p)){
+          ignorados++;indice++;continue;
+        }
+        let resultado=null;
+        if(eanValido(p.ean))
+          resultado=buscarMedidasNoCatalogo(db,p.ean,p.id);
+        if(!resultado){
+          resultado=await consultarMedidasNomeComLimite(p.nome);
+          if(!resultado.ok&&(resultado.cotaEsgotada||resultado.semIntegracao||resultado.temporario)){
+            status='pausado';ultimo=resultado.mensagem||'Pesquisa indisponível.';break;
+          }
+        }
+        if(gravarMedidasPesquisa(p,resultado,req.adminUser,req,'consultou_medidas_nome_lote'))gravados++;
+        else semDados++;
+        indice++;
+        ultimo=p.nome;
+      }
+      if(indice>=job.ids.length)status='concluido';
+      const atualizado=jobs.update(JOB_NOME_MEDIDAS,{
+        indice,gravados,semDados,ignorados,status,ultimo,executandoAte:0,
+        atualizadoEm:new Date().toISOString(),
+      });
+      res.set('Cache-Control','no-store');
+      res.json({ok:true,job:{...atualizado,ids:undefined}});
+    }catch{
+      jobs.update(JOB_NOME_MEDIDAS,{executandoAte:0,status:'pausado',ultimo:'Falha temporária. Retome a consulta.'});
+      res.json({ok:false,erro:'Falha temporária na busca. Retome pelo painel.'},503);
+    }
+  });
+  app.post('/admin/api/produtos/medidas-lote/retomar',(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')return void res.json({ok:false,erro:'Sem permissão.'},403);
+    const col=db.collection('jobsMedidasNome'),job=col.get(JOB_NOME_MEDIDAS);
+    if(!job)return void res.json({ok:false,erro:'Lote inexistente.'},404);
+    const status=job.indice>=job.total?'concluido':'executando';
+    const atualizado=col.update(JOB_NOME_MEDIDAS,{status,executandoAte:0});
+    res.json({ok:true,job:{...atualizado,ids:undefined}});
+  });
+
+  // Ao ativar individualmente, aproveitar exatamente a mesma busca por nome,
+  // sem depender de EAN, sem trocar dimensões já preenchidas.
+  app.post('/admin/api/produtos/:id/buscar-medidas-nome',async(req,res)=>{
+    if(!guardApi(req,res,'produtos.editar'))return;
+    const p=db.collection('products').get(req.params.id);
+    if(!p||p.inovaArquivado?.em)return void res.json({ok:false,erro:'Produto indisponível.'},404);
+    if(!buscaLogisticaPendente(p))return void res.json({ok:true,encontrado:false,
+      mensagem:'Medidas existentes preservadas.'});
+    const r=await consultarMedidasNomeComLimite(p.nome);
+    if(!r.ok)return void res.json({ok:false,erro:r.mensagem||'Busca indisponível.'},429);
+    const salvou=gravarMedidasPesquisa(p,r,req.adminUser,req,'consultou_medidas_nome');
+    res.json({ok:true,encontrado:salvou,medidasAdicionadas:salvou,
+      mensagem:salvou?'Medidas sugeridas gravadas; confirme a embalagem.':
+        r.mensagem||'Nenhuma medida confiável encontrada pelo nome.'});
+  });
+
   // Pesquisa por EAN exato: apenas dados logísticos, sem buscar imagens.
   // Campos do produto não são alterados pela busca do formulário.
   app.post('/admin/api/produtos/dimensoes-ean', async (req,res) => {

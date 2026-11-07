@@ -91,7 +91,7 @@ test('integração exige permissão admin e não altera pagamento, preço nem re
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/ativar', \(req, res\)/);
   assert.match(rotas,/app\.post\('\/admin\/api\/produtos\/:id\/buscar-medidas-ean',async/);
   assert.match(rotas,/aplicarMedidasAusentes\(p,encontrados\)/);
-  assert.match(js,/buscar-medidas-ean/);
+  assert.match(js,/buscar-medidas-nome/);
   assert.match(tela,/id="botaoBuscarMedidasEAN"/);
   assert.match(js,/campo\('ean'\)\?\.addEventListener\('change'/);
 });
@@ -147,7 +147,7 @@ test('botão repete busca mesmo com resultado anterior e oferece pesquisa assist
   const rotas=readFileSync(new URL('src/routes/admin.js',base),'utf8');
   const tela=readFileSync(new URL('src/views/admin/catalogo.js',base),'utf8');
   assert.match(js,/consultarMedidasEAN\(\{forcar:true\}\)/);
-  assert.match(js,/r\.consultadas\.join\(', '\)/);
+  assert.match(js,/dimensões da embalagem pelo nome/);
   assert.match(js,/google\.com\/search\?q=/);
   assert.match(tela,/id="linkPesquisaEAN"/);
   assert.match(rotas,/buscarMedidasNoCatalogo\(db,ean/);

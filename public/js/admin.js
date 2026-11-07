@@ -367,10 +367,6 @@
         }
         if(buscaImagemAntesDeSalvar&&podeAtualizarFotoEAN()&&!fotoGooglePendente)
           await buscaImagemAntesDeSalvar({silencioso:true});
-        if(buscaMedidasAntesDeSalvar&&
-          ['peso','altura','largura','comprimento'].some(nome=>
-            !(Number(form.querySelector('[name="'+nome+'"]')?.value)>0)))
-          await buscaMedidasAntesDeSalvar({silencioso:true});
         const resposta = await api(form.getAttribute('action'), {
           method: 'POST',
           body: new FormData(form),
@@ -953,24 +949,23 @@
     let codigoConsultado='';
     let emConsulta=false;
     async function consultarMedidasEAN({silencioso=false,forcar=false}={}){
-      const ean=eanAtual();
-      if(!formatoEAN(ean)){
-        if(!silencioso)notificar('Informe um EAN válido para pesquisar.','erro');
+      const nomeProduto=String(campo('nome')?.value||'').trim();
+      if(nomeProduto.length<4){
+        if(!silencioso)notificar('Informe o nome completo do produto.','erro');
         return;
       }
-      if(emConsulta||(!forcar&&ean===codigoConsultado))return;
+      if(emConsulta||(!forcar&&nomeProduto===codigoConsultado))return;
       emConsulta=true;if(btn)btn.disabled=true;
-      if(status)status.textContent='Pesquisando apenas peso e dimensões da embalagem...';
+      if(status)status.textContent='Pesquisando dimensões da embalagem pelo nome do produto...';
       try{
-        const r=await post('/admin/api/produtos/dimensoes-ean',{ean,forcar,produtoId});
-        if(ean!==eanAtual())return;
-        codigoConsultado=ean;
+        const r=await post('/admin/api/produtos/dimensoes-nome',{nome:nomeProduto,produtoId});
+        if(nomeProduto!==String(campo('nome')?.value||'').trim())return;
+        codigoConsultado=nomeProduto;
         if(!r.encontrado){
-          if(status)status.textContent=(r.mensagem||'Nenhuma medida confiável encontrada.')+
-            (r.consultadas?.length?' Fontes: '+r.consultadas.join(', ')+'.':'');
+          if(status)status.textContent=r.mensagem||'Nenhuma medida de embalagem confiável encontrada.';
           if(linkWeb){
             linkWeb.href='https://www.google.com/search?q='+encodeURIComponent(
-              'EAN '+ean+' peso bruto dimensões embalagem altura largura comprimento');
+              '"'+nomeProduto+'" dimensões embalagem altura largura comprimento peso bruto');
             linkWeb.style.display='inline-flex';
           }
           return;
@@ -986,19 +981,20 @@
           }
         }
         if(status)status.textContent=preenchidos.length
-          ? 'Medidas sugeridas ('+r.origem+'): '+preenchidos.join(', ')+'. Confira a embalagem.'
-          : 'Campos de medidas já preenchidos, preservados.';
-        if(!silencioso)notificar('Medidas consultadas. Confira antes de salvar.');
+          ? 'Medidas sugeridas pelo nome ('+r.origem+'): '+preenchidos.join(', ')+
+            '. Confira a embalagem e salve o produto.'
+          : 'Medidas existentes preservadas.';
+        if(!silencioso)notificar('Medidas encontradas pelo nome. Confira antes de salvar.');
       }catch(err){
-        if(status)status.textContent='Consulta de medidas indisponível.';
-        if(!silencioso)notificar(err.message||'Falha na consulta de dimensões.','erro');
+        if(status)status.textContent='Consulta de medidas por nome indisponível: '+err.message;
+        if(!silencioso)notificar(err.message||'Falha ao buscar medidas.','erro');
       }finally{emConsulta=false;if(btn)btn.disabled=false;}
     }
     buscaDescricaoAntesDeSalvar=buscarDescricaoEAN;
     $('#botaoBuscarDescricaoEAN')?.addEventListener('click',()=>
       buscarDescricaoEAN({forcar:true}));
     buscaImagemAntesDeSalvar=buscarFotoEAN;
-    buscaMedidasAntesDeSalvar=consultarMedidasEAN;
+    buscaMedidasAntesDeSalvar=null; // Não consumir Google automaticamente ao salvar.
     $('#botaoBuscarImagemEAN')?.addEventListener('click',()=>buscarFotoEAN({forcar:true}));
     $('#botaoGoogleImagensEAN')?.addEventListener('click',pesquisarGoogleImagensEAN);
     btn?.addEventListener('click',()=>consultarMedidasEAN({forcar:true}));
@@ -1007,8 +1003,6 @@
       if(!($('#editorDescricao')?.textContent||'').trim())
         buscarDescricaoEAN({silencioso:true});
       if(podeAtualizarFotoEAN())buscarFotoEAN({silencioso:true});
-      if(['peso','largura','altura','comprimento'].some(n=>!(Number(campo(n)?.value)>0)))
-        consultarMedidasEAN({silencioso:true});
     });
   }
 
@@ -1040,7 +1034,7 @@
           catch { /* ausência de descrição não impede ativação */ }
           try { await imagemNaAtivacao(id); }
           catch(err) { notificar('Foto PNG não adicionada: '+err.message, 'erro'); }
-          try { await post('/admin/api/produtos/'+encodeURIComponent(id)+'/buscar-medidas-ean'); }
+          try { await post('/admin/api/produtos/'+encodeURIComponent(id)+'/buscar-medidas-nome'); }
           catch { /* medida ausente não bloqueia ativação */ }
         }
         await post(`/admin/api/produtos/${id}/ativar`);
@@ -1369,6 +1363,56 @@
         notificar(erro.message || 'Cotação não disponível.', 'erro');
       } finally {
         botaoTesteMelhorEnvio.disabled = false;
+      }
+    });
+  }
+
+
+  // Atualização retomável: pequenas requisições, sem travar o Worker.
+  const botaoLoteMedidas=$('#botaoBuscarMedidasTodos');
+  if(botaoLoteMedidas){
+    const aviso=$('#progressoMedidasNome'),botaoPausar=$('#botaoPausarMedidas');
+    let executando=false;
+    const atualizar=job=>{
+      if(!aviso||!job)return;
+      const processados=Number(job.indice||0);
+      aviso.textContent=processados+' / '+(job.total||0)+' produtos analisados · '+
+        (job.gravados||0)+' com medidas gravadas · '+(job.semDados||0)+
+        ' sem resultado seguro · '+(job.ignorados||0)+' ignorados. '+
+        (job.status==='pausado'?'Pausado: '+(job.ultimo||'limite de consultas atingido.'):
+          job.status==='concluido'?'Concluído.':'Atualizando: '+(job.ultimo||''));
+    };
+    botaoPausar?.addEventListener('click',()=>{
+      executando=false;
+      if(aviso)aviso.textContent+=' Pausado por você. Clique novamente para retomar.';
+    });
+    botaoLoteMedidas.addEventListener('click',async()=>{
+      if(executando)return;
+      if(!confirm('Pesquisar dimensões de todos os produtos com campos vazios? '+
+        'Apenas correspondências seguras serão gravadas e ficarão pendentes de revisão. '+
+        'A API Google tem limite de 90 pesquisas de dimensões por mês.'))return;
+      executando=true;botaoLoteMedidas.disabled=true;
+      if(botaoPausar)botaoPausar.disabled=false;
+      try{
+        let {job}=await post('/admin/api/produtos/medidas-lote/iniciar',{});
+        if(job.status==='concluido')({job}=await post('/admin/api/produtos/medidas-lote/iniciar',{reiniciar:true}));
+        if(job.status==='pausado')({job}=await post('/admin/api/produtos/medidas-lote/retomar',{}));
+        atualizar(job);
+        while(executando&&job.status==='executando'){
+          const r=await post('/admin/api/produtos/medidas-lote/proximo',{});
+          job=r.job;atualizar(job);
+          if(r.ocupado)await new Promise(ok=>setTimeout(ok,1500));
+          else if(job.status==='executando')await new Promise(ok=>setTimeout(ok,900));
+        }
+        if(job.status==='concluido')notificar('Busca em lote concluída. Consulte os produtos pendentes de revisão.');
+        else if(job.status==='pausado')notificar('Busca em lote pausada. Confira a cota de consultas.', 'erro');
+      }catch(err){
+        if(aviso)aviso.textContent='Busca interrompida: '+(err.message||'falha na consulta')+
+          '. Clique no botão para retomar.';
+        notificar(err.message||'Não foi possível continuar a busca em lote.','erro');
+      }finally{
+        executando=false;botaoLoteMedidas.disabled=false;
+        if(botaoPausar)botaoPausar.disabled=true;
       }
     });
   }
