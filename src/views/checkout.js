@@ -132,7 +132,11 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
                   <span class="valor">${o.valor === 0 ? '<span style="color:var(--sucesso)">Grátis</span>' : money(o.valor)}</span>
                 </label>`).join('')}
                 <p class="texto-pequeno texto-suave">Estado identificado: <strong>${e(calculo.ufNome || '')} (${e(calculo.uf || '')})</strong>.
-                Valor conforme a tabela de fretes fixos configurada pela farmácia.</p>` : ''}
+                ${calculo.fonte === 'melhor-envio'
+                  ? 'Valores e prazos cotados pelas transportadoras via Melhor Envio. A farmácia confirma a postagem após a compra.'
+                  : calculo.opcoes.some(o => o.id === 'retirada' || o.id === 'entrega_local')
+                    ? 'Retirada ou entrega local conforme configuração da farmácia.'
+                    : 'Valor conforme a tabela de fretes fixos configurada pela farmácia.'}</p>` : ''}
             </div>
 
             <button class="botao destaque bloquinho mt-2" type="submit" id="botaoIrPagamento" ${calculo?.opcoes?.length ? '' : 'disabled'}>Ir para o pagamento</button>
