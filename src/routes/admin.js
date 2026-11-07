@@ -73,6 +73,7 @@ import { iniciarOAuthMelhorEnvio, consumirEstadoOAuthMelhorEnvio, autorizarOAuth
   tokenOAuthMelhorEnvio, estadoOAuthMelhorEnvio, desconectarOAuthMelhorEnvio } from '../lib/melhor-envio-oauth.js';
 import { normalizeCep, isValidCep } from '../lib/cep.js';
 import { revogarSessoes } from '../lib/session-revocation.js';
+import { excluirCadastroAdminInativo } from '../lib/contas-admin.js';
 import { cadastrarVendedor, editarVendedor, metricasVendedores } from '../lib/sellers.js';
 import { telaVendedores } from '../views/admin/sellers.js';
 import { validarNovoCupom } from '../lib/coupon-validation.js';
@@ -3011,6 +3012,18 @@ function registrarApi(app, db) {
     db.collection('admins').update(u.id, { ativo: !(u.ativo !== false) });
     logAdmin(db, req.adminUser, u.ativo !== false ? 'desativou_usuario' : 'ativou_usuario', 'admin', u.id, { email: u.email }, req);
     res.json({ ok: true, ativo: !(u.ativo !== false) });
+  });
+
+  app.post('/admin/api/usuarios/:id/excluir', (req, res) => {
+    if (req.adminUser?.role !== 'super_admin')
+      return void res.json({ ok: false, erro: 'Somente o Super Administrador pode excluir cadastros administrativos.' }, 403);
+    const resultado = excluirCadastroAdminInativo(db, req.params.id, {
+      operador: req.adminUser,
+      emailConfirmacao: req.body?.emailConfirmacao,
+      req,
+    });
+    if (!resultado.ok) return void res.json(resultado, resultado.status);
+    res.json({ ok: true, mensagem: 'Cadastro inativo excluído e sessões revogadas.' });
   });
 
   app.post('/admin/api/usuarios/:id/senha', (req, res) => {

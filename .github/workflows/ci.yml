@@ -58,6 +58,8 @@ jobs:
         run: node --test tests/imagens-avif-produtos.test.js
       - name: Validar preenchimento automático de dados da empresa nas páginas
         run: node --test tests/dados-institucionais-dinamicos.test.js
+      - name: Validar exclusão segura de contas administrativas inativas
+        run: node --test tests/excluir-usuarios-inativos.test.js
       - name: Validar botão compacto do WhatsApp no rodapé
         run: node --test tests/whatsapp-rodape-compacto.test.js
       - name: Validar pulsação dos selos de desconto

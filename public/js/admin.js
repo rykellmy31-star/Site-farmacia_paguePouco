@@ -1242,6 +1242,28 @@
       try { await post(`/admin/api/usuarios/${altUser.getAttribute('data-alternar-usuario')}/ativar`); location.reload(); } catch (err) { notificar(err.message, 'erro'); }
       return;
     }
+    const excUser = alvo('[data-excluir-usuario]');
+    if (excUser) {
+      const nome = excUser.getAttribute('data-nome') || 'este usuário';
+      const email = excUser.getAttribute('data-email') || '';
+      if (!confirm('Excluir definitivamente o cadastro inativo de "' + nome +
+        '"? O acesso e as sessões serão removidos. O histórico de auditoria e vendas será preservado.')) return;
+      const digitado = prompt('Para confirmar, digite o e-mail do cadastro (' + email + '):', '');
+      if (digitado === null || digitado.trim().toLowerCase() !== email.toLowerCase()) {
+        if (digitado !== null) notificar('E-mail de confirmação não confere. Nenhum cadastro foi excluído.', 'erro');
+        return;
+      }
+      excUser.disabled = true;
+      try {
+        await post('/admin/api/usuarios/' + encodeURIComponent(excUser.getAttribute('data-excluir-usuario')) + '/excluir',
+          { emailConfirmacao: digitado.trim() });
+        location.reload();
+      } catch (err) {
+        excUser.disabled = false;
+        notificar(err.message, 'erro');
+      }
+      return;
+    }
     const resetUser = alvo('[data-resetar-senha]');
     if (resetUser) {
       const nova = prompt('Nova senha provisória (mínimo 8 caracteres, com letras e números). Deixe vazio para gerar automaticamente:', '');
