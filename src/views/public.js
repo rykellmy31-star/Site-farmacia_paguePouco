@@ -3,12 +3,12 @@ import { escapeHtml as e, sanitizeHtml } from '../lib/security.js';
 import { preencherDadosPagina } from '../lib/dados-institucionais.js';
 import {
   montarArvore, categoriaPorSlug, searchProducts, vitrineProdutos,
-  produtosRelacionados, imagemPrincipal, precoVigenteCentavos, temPromocao,
-  descontoPercentual, podeVender, estoqueDisponivel, avisoMedicamento, categoryUrl,
+  produtosRelacionados, imagemPrincipal, precoVigenteCentavos,
+  podeVender, estoqueDisponivel, avisoMedicamento, categoryUrl,
 } from '../lib/catalog.js';
 import { paginaPublica, money, ICONES } from './layout.js';
 import {
-  vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, avisoImagemProduto, enderecoHtml, creditoFotoOpenverse, creditoFotoDailus,
+  vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, precoHtml, avisoImagemProduto, enderecoHtml, creditoFotoOpenverse, creditoFotoDailus,
 } from './partials.js';
 import { formatDate } from '../lib/format.js';
 import { STATUS_OPERACIONAL, STATUS_FINANCEIRO } from '../lib/orders.js';
@@ -433,9 +433,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
           <h1>${e(produto.nome)}</h1>
           ${s.apresentacao ? `<p class="texto-suave mb-1">${e(s.apresentacao)}${s.concentracao ? ` — ${e(s.concentracao)}` : ''}</p>` : ''}
           <div class="bloco-preco">
-            ${temPromocao(produto) ? `<span class="preco-antigo">${money(produto.precoCentavos)}</span>` : ''}
-            <span class="preco">${money(preco)}</span>
-            ${temPromocao(produto) ? `<span class="etiqueta laranja oferta-pulsante">-${descontoPercentual(produto)}%</span>` : ''}
+            ${precoHtml(produto, { db: ctx.db })}
             ${parcelamentoSemJuros ? `<p class="texto-pequeno texto-suave mb-0 mt-1">Em até ${parcelamentoSemJuros.numero}x sem juros nos cartões. Consulte as condições no checkout.</p>` : ''}
           </div>
 
