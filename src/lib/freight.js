@@ -127,7 +127,7 @@ function deadlineText(min, max) {
  * @param {boolean} params.cupomFreteGratis
  * @returns {object} { disponivel, motivo, opcoes: [{id,label,valor,prazo,detalhe}] , uf, pesoTotalKg }
  */
-export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidade, items = [], subtotalCents = 0, cupomFreteGratis = false }) {
+export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidade, items = [], subtotalCents = 0, cupomFreteGratis = false, permitirCotacaoExterna = false }) {
   const cfg = normalizeFreightConfig(rawCfg);
   const cepNorm = normalizeCep(cep);
   const ufFinal = ufFromCep(cepNorm);
@@ -164,7 +164,7 @@ export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidad
   // 1) Bloqueios por produto / categoria
   const bloqProd = new Set((cfg.bloqueios?.produtos || []).map(String));
   const bloqCat = new Set((cfg.bloqueios?.categorias || []).map(String));
-  const bloqueado = items.find((it) => bloqProd.has(String(it.productId)) || (it.categoriaId && bloqCat.has(String(it.categoriaId))));
+  const bloqueado = items.find((it) => bloqProd.has(String(it.produtoId ?? it.productId)) || (it.categoriaId && bloqCat.has(String(it.categoriaId))));
   if (bloqueado) {
     result.motivo = 'Este pedido contém itens com restrição de transporte (ex.: produtos hospitalares/aerossóis). Remova o item ou fale com nossa farmácia.';
     return result;
@@ -230,12 +230,6 @@ export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidad
   }
 
   const state = cfg.states[ufFinal];
-  if (!state || !state.ativo) {
-    result.motivo = cfg.mensagemIndisponivel || 'Não há entrega configurada e ativa para este estado.';
-    result.opcoes = opcoes;
-    result.disponivel = opcoes.length > 0;
-    return result;
-  }
 
   // exceções (cidade, faixa de CEP)
   const excecao = (cfg.excecoes || []).find((ex) => {
@@ -254,6 +248,19 @@ export function calcularFrete({ config: rawCfg, cep, cepFarmacia = '', uf, cidad
     result.motivo = excecao.motivo || cfg.mensagemIndisponivel;
     result.opcoes = opcoes;
     result.disponivel = opcoes.length > 0;
+    return result;
+  }
+
+  // Com o Melhor Envio ATIVO, a tabela fixa por UF não determina cobertura.
+  // Esta etapa apenas valida CEP/UF, restrições, peso e exceções explícitas.
+  // Não gera nenhuma opção nem preço fictício: a cotação externa é obrigatória.
+  if (permitirCotacaoExterna) {
+    result.disponivel = true;
+    return result;
+  }
+
+  if (!state || !state.ativo) {
+    result.motivo = cfg.mensagemIndisponivel || 'Não há entrega configurada e ativa para este estado.';
     return result;
   }
 

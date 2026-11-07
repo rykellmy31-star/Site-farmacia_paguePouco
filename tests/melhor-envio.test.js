@@ -72,6 +72,84 @@ test('sem ativação do lojista mantém frete atual fixo',async()=>{
  const r=await calcularFreteIntegrado({...base,config:defaultFreightConfig()});
  assert.deepEqual(r.opcoes.map(o=>o.id),['_padrao']);
 });
+
+test('CEP em estado desativado na TABELA FIXA recebe cotação externa e escolha da transportadora',async()=>{
+ const c=cfg();
+ c.states.ES.ativo=false;
+ c.states.ES.valor=0;
+ const params={...base,config:c};
+ const {fetcher,calls}=provedor();
+ const cotacao=await calcularFreteIntegrado(params,{
+   fetcher,token:'t',contato:'suporte@example.com',
+ });
+ assert.equal(cotacao.disponivel,true);
+ assert.equal(cotacao.fonte,'melhor-envio');
+ assert.deepEqual(cotacao.opcoes.map(o=>o.id),['me_1','me_2']);
+ assert.deepEqual(cotacao.opcoes.map(o=>o.valor),[2250,4500]);
+ assert.equal(calls.length,1,'deve consultar o provedor mesmo com a UF fixa desligada');
+ const selecionado=await resolverFreteIntegrado({...params,opcaoId:'me_1'},{
+   fetcher,token:'t',contato:'suporte@example.com',
+ });
+ assert.equal(selecionado.ok,true);
+ assert.equal(selecionado.valor,2250);
+ assert.equal(selecionado.opcao.prazo,'5 dias úteis');
+});
+
+test('desativar Melhor Envio preserva tabela fixa e bloqueio do estado desligado',async()=>{
+ const c=cfg();
+ c.melhorEnvio.ativo=false;
+ c.states.ES.ativo=false;
+ let calls=0;
+ const r=await calcularFreteIntegrado({...base,config:c},{
+   fetcher:async()=>{calls++;throw Error('não chamar');},
+   token:'t',contato:'suporte@example.com',
+ });
+ assert.equal(r.disponivel,false);
+ assert.match(r.motivo,/Ainda não atendemos esta localidade/);
+ assert.equal(calls,0);
+});
+
+test('cotação externa não ignora bloqueios explícitos de produto, categoria ou região',async()=>{
+ const c=cfg();
+ c.states.ES.ativo=false;
+ let calls=0;
+ const opts={token:'t',contato:'suporte@example.com',fetcher:async()=>{
+   calls++;throw Error('Não deve consultar provedor quando bloqueado');
+ }};
+ c.bloqueios.produtos=['p1']; // IDs do carrinho normalizado usam produtoId.
+ const a=await calcularFreteIntegrado({...base,config:c},opts);
+ assert.equal(a.disponivel,false);
+ assert.match(a.motivo,/restrição de transporte/i);
+ c.bloqueios.produtos=[];
+ c.bloqueios.categorias=['isentos'];
+ const b=await calcularFreteIntegrado({...base,config:c},opts);
+ assert.equal(b.disponivel,false);
+ c.bloqueios.categorias=[];
+ c.excecoes=[{id:'exc1',ativo:true,tipo:'cidade',uf:'ES',cidade:'Ponto Belo',
+   bloqueado:true,motivo:'Área bloqueada explicitamente pela farmácia.'}];
+ const d=await calcularFreteIntegrado({...base,config:c},opts);
+ assert.equal(d.disponivel,false);
+ assert.match(d.motivo,/bloqueada explicitamente/);
+ assert.equal(calls,0);
+});
+
+test('Meio externo não contorna validação de estado nem cobra preço fixo no erro',async()=>{
+ const c=cfg();
+ c.states.ES.ativo=false;
+ const params={...base,config:c};
+ const invalid=await calcularFreteIntegrado({...params,uf:'BA'},{
+   token:'t',contato:'suporte@example.com',fetcher:async()=>{throw Error('não chamar');},
+ });
+ assert.equal(invalid.disponivel,false);
+ assert.match(invalid.motivo,/não corresponde ao CEP/i);
+ const offline=await calcularFreteIntegrado(params,{
+   token:'t',contato:'suporte@example.com',fetcher:async()=>{throw Error('offline');},
+ });
+ assert.equal(offline.disponivel,false);
+ assert.deepEqual(offline.opcoes,[]);
+ assert.doesNotMatch(offline.motivo,/Ainda não atendemos esta localidade/);
+});
+
 test('ativado e sem chave não exibe preço fictício e não finaliza pedido',async()=>{
  const r=await calcularFreteIntegrado(base,{token:'',contato:''});
  assert.equal(r.disponivel,false);

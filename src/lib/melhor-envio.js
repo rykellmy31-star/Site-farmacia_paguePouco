@@ -103,11 +103,14 @@ export async function consultarMelhorEnvio({origem,destino,items=[],token,contat
  * Quando habilitada mas indisponível, falha fechada (não cobra preço inventado).
  */
 export async function calcularFreteIntegrado(params,{fetcher,token,contato,sandbox}={}) {
-  const base=calcularFrete(params);
   const cfg=normalizeFreightConfig(params.config);
+  const consultarExterno = Boolean(cfg.melhorEnvio?.ativo) &&
+    normalizeCep(params.cep) !== normalizeCep(params.cepFarmacia);
+  // Não bloquear o Melhor Envio por UF desativada no sistema antigo de frete fixo.
+  // Mantemos validações de CEP, restrições, peso, volume e bloqueios explícitos.
+  const base=calcularFrete({...params,permitirCotacaoExterna:consultarExterno});
   if(!base.disponivel)return base;
-  if(normalizeCep(params.cep)===normalizeCep(params.cepFarmacia)||
-      !cfg.melhorEnvio?.ativo)return base;
+  if(!consultarExterno)return base;
   const tokenAtual = token ?? (await tokenOAuthMelhorEnvio(params.db, {fetcher}) || config.melhorEnvio?.token);
   const cotacao=await consultarMelhorEnvio({
     origem:params.cepFarmacia,destino:params.cep,
