@@ -1203,7 +1203,7 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
    por temPromocao(produto), não em preços normais nem promoções vencidas. */
 .produto .etiqueta-desconto.oferta-pulsante,
 .etiqueta.laranja.oferta-pulsante {
-  animation: oferta-desconto-pulsar 1.35s ease-in-out infinite;
+  animation: var(--oferta-pulso-animacao, oferta-desconto-pulsar 1.35s ease-in-out infinite);
   transform-origin: left center;
   will-change: transform, box-shadow;
   isolation: isolate;
@@ -1215,19 +1215,19 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
     filter: brightness(1);
   }
   28% {
-    transform: scale(1.16);
-    box-shadow: 0 0 0 3px rgba(139, 0, 0, .35), 0 0 16px 5px rgba(255, 179, 0, .68);
-    filter: brightness(1.12);
+    transform: scale(var(--oferta-escala-forte, 1.16));
+    box-shadow: 0 0 0 3px rgba(139, 0, 0, var(--oferta-sombra-vermelha-forte, .35)), 0 0 16px 5px rgba(255, 179, 0, var(--oferta-sombra-amarela-forte, .68));
+    filter: brightness(var(--oferta-brilho-forte, 1.12));
   }
   52% {
-    transform: scale(1.045);
-    box-shadow: 0 0 0 1px rgba(139, 0, 0, .15), 0 0 7px 2px rgba(255, 179, 0, .25);
+    transform: scale(var(--oferta-escala-media, 1.045));
+    box-shadow: 0 0 0 1px rgba(139, 0, 0, var(--oferta-sombra-vermelha-media, .15)), 0 0 7px 2px rgba(255, 179, 0, var(--oferta-sombra-amarela-media, .25));
     filter: brightness(1);
   }
   78% {
-    transform: scale(1.12);
-    box-shadow: 0 0 0 2px rgba(139, 0, 0, .32), 0 0 12px 4px rgba(255, 179, 0, .5);
-    filter: brightness(1.08);
+    transform: scale(var(--oferta-escala-final, 1.12));
+    box-shadow: 0 0 0 2px rgba(139, 0, 0, var(--oferta-sombra-vermelha-final, .32)), 0 0 12px 4px rgba(255, 179, 0, var(--oferta-sombra-amarela-final, .5));
+    filter: brightness(var(--oferta-brilho-final, 1.08));
   }
 }
 /* No detalhe do produto o selo é inline; transformar sem deslocar o preço. */
@@ -1253,7 +1253,7 @@ body.com-menu-mobile { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0
   padding: 2px 4px; border: none; border-radius: 2px; background: #188d4b !important;
   color: #fff !important; -webkit-text-fill-color: #fff;
   font-size: .66rem; font-weight: 800; line-height: 1.1; white-space: nowrap; z-index: 1;
-  animation: oferta-desconto-pulsar 1.35s ease-in-out infinite;
+  animation: var(--oferta-pulso-animacao, oferta-desconto-pulsar 1.35s ease-in-out infinite);
 }
 .preco-oferta .preco-antigo {
   display: inline; font-size: .76rem; color: #777 !important;
