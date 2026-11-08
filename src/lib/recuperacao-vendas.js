@@ -35,6 +35,24 @@ export const CONFIG_RECUPERACAO_LOCAL=Object.freeze({
   ativo:false,
   ativadoEm:null,
 });
+export const CONFIG_RECUPERACAO_PEDIDO=Object.freeze({
+  ...CONFIG_RECUPERACAO,
+  ativo:false,
+  primeiroLembreteHoras:1,
+  enviarCupomAposHoras:4,
+  descontoPercentual:7,
+  descontoMaximoCentavos:2000,
+  compraMinimaCentavos:6000,
+  validadeHoras:24,
+  intervaloDias:15,
+  ativadoEm:null,
+});
+export function configRecuperacaoPedido(db) {
+  return {...CONFIG_RECUPERACAO_PEDIDO,...(getSetting(db,'recuperacaoPedidoOnline')||{})};
+}
+export function validarConfigRecuperacaoPedido(body,anterior=CONFIG_RECUPERACAO_PEDIDO) {
+  return validarConfigRecuperacao(body,anterior);
+}
 export function configRecuperacaoLocal(db) {
   return { ...CONFIG_RECUPERACAO_LOCAL, ...(getSetting(db,'recuperacaoVendasLocal')||{}) };
 }
@@ -96,8 +114,9 @@ function carrinhoAbandonado(db, cart, cliente, config, agora, ativadoEm) {
   const ultimaAtividade = Date.parse(cart.atualizadoEm);
   if (!Number.isFinite(ultimaAtividade) || ultimaAtividade > agora ||
       ultimaAtividade < ativadoEm || agora - ultimaAtividade > 30*86_400_000) return false; // nunca gerar campanhas retroativas
-  if (db.collection('orders').all().some(o =>
-    o.carrinhoId === cart.id && !['recusado','expirado'].includes(o.statusFinanceiro))) return false;
+  // Depois de gerar pedido, o carrinho original pertence àquele pedido,
+  // mesmo quando a cobrança expira. O fluxo de pagamento cuida da retomada.
+  if (db.collection('orders').all().some(o => o.carrinhoId === cart.id)) return false;
   return (cart.itens || []).every(i => Number.isInteger(Number(i.quantidade)) && Number(i.quantidade) > 0);
 }
 // Lista conservadora: não enviar ofertas de medicamentos, aparelhos, testes
@@ -108,14 +127,14 @@ const CATEGORIAS_PERMITIDAS = new Set([
  'cuidados-com-o-corpo','dermocosmeticos','hidratantes','cuidados-faciais',
  'fraldas','fraldas-descartaveis','lencos-umedecidos','chupetas-e-mamadeiras',
 ]);
-function itensRecuperaveis(db, cart) {
+function itensRecuperaveis(db, cart, {verificarEstoque=true}={}) {
   const items = [];
   for (const item of cart.itens || []) {
     const p = db.collection('products').get(item.produtoId);
     const categoria=db.collection('categories').get(p?.categoriaId);
     if (!p || !podeVender(p).ok ||
         !Number.isSafeInteger(Number(item.quantidade)) || Number(item.quantidade)<1 ||
-        estoqueDisponivel(p)<Number(item.quantidade)) return [];
+        (verificarEstoque && estoqueDisponivel(p)<Number(item.quantidade))) return [];
     if (!CATEGORIAS_PERMITIDAS.has(String(categoria?.slug||''))) return [];
     const tipo=String(p.sanitario?.classificacao||'nao_aplicavel').toLowerCase();
     if (!['nao_aplicavel','cosmetico','cosmético','higiene'].includes(tipo) ||
@@ -163,7 +182,7 @@ function mensagemCupom(cliente, itens, cupom, config, token, modo='nacional') {
 }
 function codigoNovo(db,modo='nacional') {
   for (let n=0;n<8;n++) {
-    const codigo=(modo==='local'?'PP-LOCAL-':'PP-')+randomToken(9).replace(/[^a-zA-Z0-9]/g,'').slice(0,11).toUpperCase();
+    const codigo=(modo==='local'?'PP-LOCAL-':modo==='pedido'?'PP-PAGO-':'PP-')+randomToken(9).replace(/[^a-zA-Z0-9]/g,'').slice(0,11).toUpperCase();
     if (codigo.length>=10 && !db.collection('coupons').findOne(c=>c.codigo===codigo)) return codigo;
   }
   throw new Error('Não foi possível gerar código individual seguro.');
@@ -188,7 +207,12 @@ export function temRecuperacaoMonitoravel(db) {
   const cupomPendente=db.collection('coupons').all().some(c=>
     c.recuperacaoVenda===true&&c.ativo===true&&c.expiraEm&&
     Date.parse(c.expiraEm)>Date.now());
-  return cupomPendente || ((cfg.ativo && Boolean(cfg.ativadoEm) ||
+  const cfgPedido=configRecuperacaoPedido(db);
+  const pedidosMonitoraveis=cfgPedido.ativo && Boolean(cfgPedido.ativadoEm) &&
+    db.collection('orders').all().some(p=>p.clienteId && !p.pagamentoPresencial &&
+      ['pendente','expirado','recusado'].includes(p.statusFinanceiro) &&
+      Date.now()-Date.parse(p.criadoEm||'') < 30*86_400_000);
+  return cupomPendente || pedidosMonitoraveis || ((cfg.ativo && Boolean(cfg.ativadoEm) ||
     configRecuperacaoLocal(db).ativo && Boolean(configRecuperacaoLocal(db).ativadoEm)) &&
     db.collection('carts').all().some(c=>c.clienteId && (c.itens||[]).length &&
       Date.now()-Date.parse(c.atualizadoEm||'') < 30*86_400_000));
@@ -210,8 +234,8 @@ export function expirarCuponsRecuperacao(db,{agora=Date.now()}={}) {
 export function executarRecuperacao(db,{agora=Date.now()}={}) {
   expirarCuponsRecuperacao(db,{agora});
   const evo=evolutionConfig(db), nacional=configRecuperacao(db), local=configRecuperacaoLocal(db);
-  const resumo={avaliados:0,lembretes:0,cupons:0,locais:0,nacionais:0};
-  if ((!nacional.ativo && !local.ativo) || !evo.ativo || !evo.instancia) return resumo;
+  const resumo={avaliados:0,lembretes:0,cupons:0,locais:0,nacionais:0,pedidosLembretes:0,pedidosCupons:0};
+  if ((!nacional.ativo && !local.ativo && !configRecuperacaoPedido(db).ativo) || !evo.ativo || !evo.instancia) return resumo;
   const fila=db.collection('evolutionWhatsappOutbox');
   const campanhas=db.collection('recuperacoesVendas');
   const cupons=db.collection('coupons');
@@ -278,6 +302,146 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     if (modo==='local') resumo.locais++;
     else resumo.nacionais++;
   }
+  executarRecuperacaoPedidosOnline(db,{agora,resumo});
+  return resumo;
+}
+
+/**
+ * Pedidos online Pix registrados não são carrinhos abandonados.
+ * Para evitar indicar incorretamente que alguém não pagou, somente mensagens
+ * de pagamento ainda pendente exigem confirmação autenticada do provedor há
+ * menos de 15 minutos. Novo desconto apenas após expiração/recusa confirmada.
+ */
+export function pedidoOnlineRecuperavel(db,pedido,{agora=Date.now(),cupom=false}={}) {
+  if (!pedido?.clienteId || pedido.pagamentoPresencial ||
+      pedido.metodoPagamento!=='pix' || !pedido.pagamentoId ||
+      pedido.statusOperacional==='cancelado' && pedido.statusFinanceiro==='pendente' ||
+      !['pendente','expirado','recusado'].includes(pedido.statusFinanceiro) ||
+      pedido.pendenciaPagamento==='conciliacao_necessaria') return false;
+  const sede=getSetting(db,'empresa')?.endereco?.cep;
+  const cep=pedido.endereco?.cep;
+  if (destinoPedidoLocal(cep,sede)) return false;
+  const pagamento=db.collection('payments').get(pedido.pagamentoId);
+  if (!pagamento || pagamento.provedor!=='mercadopago' ||
+      pagamento.metodo!=='pix' || pagamento.pedidoId!==pedido.id ||
+      Number(pagamento.valorCentavos)!==Number(pedido.totalCentavos)) return false;
+  const mesmoCliente=db.collection('orders').all().filter(o=>o.clienteId===pedido.clienteId && o.id!==pedido.id);
+  if (mesmoCliente.some(o=>o.statusFinanceiro==='aprovado' &&
+      Date.parse(o.criadoEm||'')>=Date.parse(pedido.criadoEm||'') ||
+      Date.parse(o.criadoEm||'')>Date.parse(pedido.criadoEm||''))) return false;
+  const confirmado=String(pagamento.ultimoStatusConfirmado||'').toLowerCase();
+  const ultima=Date.parse(pagamento.ultimaConfirmacaoProvedorEm||'');
+  const recente=Number.isFinite(ultima)&&agora>=ultima&&agora-ultima<=15*60_000;
+  if (pedido.statusFinanceiro==='pendente') {
+    return !cupom && recente && confirmado==='pending' &&
+      !['approved','expired','cancelled','rejected','refunded'].includes(String(pagamento.status||'').toLowerCase());
+  }
+  // O estado terminal já foi confirmado pela conciliação autenticada.
+  return (pedido.statusFinanceiro==='expirado' && confirmado==='expired' ||
+          pedido.statusFinanceiro==='recusado' && ['rejected','cancelled'].includes(confirmado));
+}
+function destinoPedidoLocal(cep,cepSede) {
+  const n=x=>String(x||'').replace(/\D/g,'');
+  return n(cep).length!==8 || n(cepSede).length!==8 || n(cep)===n(cepSede);
+}
+function mensagemPagamentoPendente(cliente,pedido,token,terminado) {
+  const titulo='Olá, '+nomeSeguro(cliente.nome)+'! ❤️\n';
+  const link=terminado?linkCarrinho(token):
+    String(config.publicBaseUrl||'https://site.farmaciapaguepouco.app').replace(/\/+$/,'')+
+    '/conta/pedidos/'+encodeURIComponent(String(pedido.codigo));
+  return titulo+'💳 O pagamento do seu pedido *#'+String(pedido.codigo).replace(/[^a-zA-Z0-9-]/g,'').slice(0,32)+
+    '* ainda não foi confirmado.\n'+
+    (terminado?'A cobrança anterior foi encerrada. Para comprar novamente, revise seus produtos e gere um novo pagamento pelo site.\n':
+      'Se você ainda deseja concluir sua compra, confira a cobrança no site. Não gere outro pagamento para o mesmo pedido.\n')+
+    '🛍️ '+(terminado?'Retomar compra: ':'Acompanhar pedido: ')+link+'\n'+
+    '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
+}
+function mensagemCupomPagamento(cliente,pedido,cupom,cfg,token) {
+  return 'Olá, '+nomeSeguro(cliente.nome)+'! ❤️\n'+
+    '🎁 Temos um desconto especial para você retomar sua compra na *Farmácia Pague Pouco*!\n'+
+    'O pagamento anterior do pedido #'+String(pedido.codigo).replace(/[^a-zA-Z0-9-]/g,'').slice(0,32)+
+    ' foi encerrado sem aprovação.\n'+
+    '🎟️ *Cupom:* '+cupom.codigo+' — *'+String(cfg.descontoPercentual).replace('.',',')+'%*'+
+    ' (até '+descontoFormato(cfg.descontoMaximoCentavos)+', compras a partir de '+
+    descontoFormato(cfg.compraMinimaCentavos)+').\n'+
+    '⏰ Válido por '+cfg.validadeHoras+' horas após o envio.\n'+
+    '🛍️ Retome sua seleção e gere um *novo pagamento* pelo site: '+linkCarrinho(token)+'\n'+
+    '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
+}
+export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}={}) {
+  const cfg=configRecuperacaoPedido(db);
+  const evo=evolutionConfig(db);
+  if (!cfg.ativo || !cfg.ativadoEm || !evo.ativo || !evo.instancia) return resumo;
+  const inicio=Date.parse(cfg.ativadoEm);
+  if (!Number.isFinite(inicio)) return resumo;
+  const fila=db.collection('evolutionWhatsappOutbox');
+  const campanhas=db.collection('recuperacoesVendas');
+  const cupons=db.collection('coupons');
+  let avaliados=0;
+  const pedidos=db.collection('orders').all()
+    .filter(p=>p.clienteId && !p.pagamentoPresencial)
+    .sort((a,b)=>String(a.criadoEm).localeCompare(String(b.criadoEm)));
+  for (const pedido of pedidos) {
+    if (avaliados>=cfg.maximoPorCiclo) break;
+    const horaPedido=Date.parse(pedido.criadoEm);
+    if (!Number.isFinite(horaPedido)||horaPedido<inicio||horaPedido>agora ||
+        agora-horaPedido>30*86_400_000 ||
+        !pedidoOnlineRecuperavel(db,pedido,{agora})) continue;
+    const cliente=db.collection('customers').get(pedido.clienteId);
+    const numero=numeroWhatsapp(cliente?.telefone);
+    if (!cliente || cliente.ativo===false || cliente.marketing!==true || !numero ||
+        cfg.apenasPrimeiraCompra && db.collection('orders').all().some(o=>
+          o.clienteId===cliente.id && o.statusFinanceiro==='aprovado')) continue;
+    const cart=db.collection('carts').get(pedido.carrinhoId);
+    if (!cart || cart.clienteId!==cliente.id || !(cart.itens||[]).length ||
+        !itensRecuperaveis(db,cart,{verificarEstoque:false}).length) continue;
+    avaliados++;
+    const idadeHoras=(agora-horaPedido)/3_600_000;
+    const lembreteId='recuperacao:pedido:lembrete:'+pedido.id;
+    if (idadeHoras>=cfg.primeiroLembreteHoras && idadeHoras<cfg.enviarCupomAposHoras &&
+        !fila.get(lembreteId)) {
+      const token=randomToken(24);
+      fila.insert({id:lembreteId,tipo:'recuperacao_pedido_lembrete',modo:'pedido',
+        pedidoId:pedido.id,carrinhoId:cart.id,clienteId:cliente.id,numero,
+        texto:mensagemPagamentoPendente(cliente,pedido,token,pedido.statusFinanceiro!=='pendente'),
+        status:'fila',criadoEm:nowISO(),tentativas:0});
+      campanhas.insert({id:lembreteId,pedidoId:pedido.id,carrinhoId:cart.id,
+        clienteId:cliente.id,modo:'pedido',tipo:'pedido_lembrete',
+        criadoEm:nowISO(),cupomId:null,token});
+      resumo.pedidosLembretes=(resumo.pedidosLembretes||0)+1;
+    }
+    // Não ofereça desconto enquanto existir Pix válido/pagamento incerto.
+    if (idadeHoras<cfg.enviarCupomAposHoras ||
+        !pedidoOnlineRecuperavel(db,pedido,{agora,cupom:true})) continue;
+    const cupomId='recuperacao:pedido:cupom:'+pedido.id;
+    if (fila.get(cupomId)) continue;
+    const ultimo=campanhas.all().filter(c=>c.clienteId===cliente.id && c.tipo==='pedido_cupom')
+      .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
+    if (ultimo && agora-Date.parse(ultimo.criadoEm)<cfg.intervaloDias*86_400_000) continue;
+    const itens=itensRecuperaveis(db,cart);
+    if (!itens.length) continue;
+    const subtotal=cart.itens.reduce((n,i)=>
+      n+precoVigenteCentavos(db.collection('products').get(i.produtoId))*Number(i.quantidade),0);
+    if (subtotal<cfg.compraMinimaCentavos) continue;
+    const token=randomToken(24);
+    const codigo=codigoNovo(db,'pedido');
+    const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
+    const cupom=cupons.insert({codigo,tipo:'percentual',valor:cfg.descontoPercentual,
+      valorMinimo:cfg.compraMinimaCentavos,descontoMaximoCentavos:cfg.descontoMaximoCentavos,
+      usoMaximo:1,usos:0,ativo:false,primeiroPedido:cfg.apenasPrimeiraCompra,
+      clienteExclusivoId:cliente.id,produtosExclusivos,recuperacaoVenda:true,
+      modoRecuperacao:'pedido',pedidoOrigemId:pedido.id,
+      criadoEm:nowISO(),validadeHoras:cfg.validadeHoras,
+      descricao:'Recuperação de pedido online sem pagamento confirmado'});
+    fila.insert({id:cupomId,tipo:'recuperacao_pedido_cupom',modo:'pedido',
+      pedidoId:pedido.id,carrinhoId:cart.id,clienteId:cliente.id,cupomId:cupom.id,
+      numero,texto:mensagemCupomPagamento(cliente,pedido,cupom,cfg,token),
+      status:'fila',criadoEm:nowISO(),tentativas:0});
+    campanhas.insert({id:cupomId,pedidoId:pedido.id,carrinhoId:cart.id,
+      clienteId:cliente.id,modo:'pedido',tipo:'pedido_cupom',
+      cupomId:cupom.id,criadoEm:nowISO(),token});
+    resumo.pedidosCupons=(resumo.pedidosCupons||0)+1;
+  }
   return resumo;
 }
 function caminhosUltimosCupons(campanhas,clienteId) {
@@ -307,6 +471,10 @@ export function painelRecuperacao(db) {
     receitaLocalCentavos:locaisPagos.reduce((n,p)=>n+Number(p.totalCentavos||0),0),
     cuponsLocais:campanhas.filter(c=>c.modo==='local'&&c.tipo==='cupom').length,
     cuponsNacionais:campanhas.filter(c=>(c.modo||'nacional')==='nacional'&&c.tipo==='cupom').length,
+    lembretesPedidos:campanhas.filter(c=>c.tipo==='pedido_lembrete').length,
+    cuponsPedidos:campanhas.filter(c=>c.tipo==='pedido_cupom').length,
+    pedidosOnlinePendentes:pedidos.filter(p=>!p.pagamentoPresencial &&
+      p.statusFinanceiro==='pendente').length,
     receitaRecuperadaCentavos:recuperados.reduce((n,p)=>n+Number(p.totalCentavos||0),0),
     linhas:campanhas.slice(0,100).map(c=>({
       ...c, modo:c.modo||'nacional',
