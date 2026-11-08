@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { config } from '../src/config.js';
+import { defaultFreightConfig } from '../src/lib/freight.js';
+import { resolverFreteIntegrado } from '../src/lib/melhor-envio.js';
 import {
   MELHOR_ENVIO_CALLBACK, iniciarOAuthMelhorEnvio, consumirEstadoOAuthMelhorEnvio,
   autorizarOAuthMelhorEnvio, estadoOAuthMelhorEnvio, tokenOAuthMelhorEnvio,
@@ -142,4 +144,51 @@ test('painel, callback, checkout e proteção do segredo estão ligados',()=>{
   assert.match(freight,/tokenOAuthMelhorEnvio\(params\.db/);
   assert.match(checkout,/resolverFreteIntegrado\(\{\s*db, config:/);
   assert.match(api,/calcularFreteIntegrado\(\{\s*db, config:/);
+});
+
+
+test('finalização de pedido reutiliza token OAuth salvo, mesmo sem token manual no Worker', async () => {
+  setup();
+  try {
+    const db=mockDb();
+    let tokenChamadas=0,cotacoes=0;
+    const fetcher=async(url,opts)=>{
+      if(url.endsWith('/oauth/token')) {
+        tokenChamadas++;
+        return {ok:true,json:async()=>({
+          access_token:'access-token-oauth-apenas-testes-0001',
+          refresh_token:'refresh-token-oauth-apenas-testes-0001',
+          expires_in:2592000,
+        })};
+      }
+      assert.equal(url,'https://melhorenvio.com.br/api/v2/me/shipment/calculate');
+      cotacoes++;
+      assert.equal(opts.headers.Authorization,'Bearer access-token-oauth-apenas-testes-0001');
+      return {ok:true,json:async()=>[{
+        id:1,name:'PAC',company:{name:'Correios'},
+        price:'28.90',delivery_time:7,
+      }]};
+    };
+    assert.equal(config.melhorEnvio.token,'','não usa token manual');
+    const aut=await autorizarOAuthMelhorEnvio(db,'codigo-teste',{fetcher});
+    assert.equal(aut.ok,true);
+    const frete=defaultFreightConfig();
+    frete.melhorEnvio.ativo=true;
+    const result=await resolverFreteIntegrado({
+      db,config:frete,cepFarmacia:'45970000',cep:'29885000',
+      uf:'ES',cidade:'Ponto Belo',opcaoId:'me_1',
+      items:[{produtoId:'produto',quantidade:1,peso:0.5,
+        largura:12,altura:8,comprimento:20,precoUnitarioCentavos:7000}],
+      subtotalCents:7000,
+    },{fetcher});
+    assert.equal(result.ok,true,'cotação deve estar disponível na última etapa');
+    assert.equal(result.valor,2890);
+    assert.equal(tokenChamadas,1,'OAuth válido não é solicitado novamente');
+    assert.equal(cotacoes,1);
+    const source=readFileSync(new URL('../src/lib/orders.js',import.meta.url),'utf8');
+    assert.match(source,/resolverFreteIntegrado\(\{\s*(?:\/\/[^\n]*\n\s*)*db,\s*config:\s*freteConfig/,
+      'criarPedido deve passar o banco persistido para resolver o OAuth');
+  } finally {
+    restore();
+  }
 });
