@@ -64,6 +64,8 @@ export function validarConfigRecuperacao(body, anterior = CONFIG_RECUPERACAO) {
 // Telefone e autorização para OFERTAS, independentemente do opt-in transacional.
 function clienteElegivel(db, cliente, config, numero) {
   if (!cliente || cliente.ativo === false || cliente.marketing !== true || !numero) return false;
+  if (db.collection('orders').all().some(o=>o.clienteId===cliente.id &&
+      o.statusFinanceiro==='pendente')) return false;
   if (config.apenasPrimeiraCompra && db.collection('orders').all().some(o =>
     o.clienteId === cliente.id && o.statusFinanceiro === 'aprovado')) return false;
   return true;
@@ -154,11 +156,29 @@ export function proximaRecuperacaoPendente(db, agora=Date.now()) {
 }
 export function temRecuperacaoMonitoravel(db) {
   const cfg=configRecuperacao(db);
-  return cfg.ativo && Boolean(cfg.ativadoEm) &&
+  const cupomPendente=db.collection('coupons').all().some(c=>
+    c.recuperacaoVenda===true&&c.ativo===true&&c.expiraEm&&
+    Date.parse(c.expiraEm)>Date.now());
+  return cupomPendente || (cfg.ativo && Boolean(cfg.ativadoEm) &&
     db.collection('carts').all().some(c=>c.clienteId && (c.itens||[]).length &&
-      Date.now()-Date.parse(c.atualizadoEm||'') < 30*86_400_000);
+      Date.now()-Date.parse(c.atualizadoEm||'') < 30*86_400_000));
+}
+/** Expiração materializa o estado no banco, além da checagem obrigatória do checkout. */
+export function expirarCuponsRecuperacao(db,{agora=Date.now()}={}) {
+  const col=db.collection('coupons');
+  let total=0;
+  for (const c of col.all()) {
+    if (c.recuperacaoVenda===true && c.ativo===true &&
+        c.expiraEm && Number.isFinite(Date.parse(c.expiraEm)) &&
+        Date.parse(c.expiraEm)<=agora) {
+      col.update(c.id,{ativo:false,expiradoEm:new Date(agora).toISOString()});
+      total++;
+    }
+  }
+  return total;
 }
 export function executarRecuperacao(db,{agora=Date.now()}={}) {
+  expirarCuponsRecuperacao(db,{agora});
   const cfg=configRecuperacao(db), evo=evolutionConfig(db);
   const resumo={avaliados:0,lembretes:0,cupons:0};
   if (!cfg.ativo || !cfg.ativadoEm || !evo.ativo || !evo.instancia) return resumo;
@@ -223,6 +243,7 @@ function caminhosUltimosCupons(campanhas,clienteId) {
     .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
 }
 export function painelRecuperacao(db) {
+  expirarCuponsRecuperacao(db);
   const campanhas=db.collection('recuperacoesVendas').all()
     .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)));
   const outbox=db.collection('evolutionWhatsappOutbox');
