@@ -18,8 +18,7 @@ function caixa(numero, rotulo) {
 
 export function telaVisitasSite(ctx,{relatorio,db}) {
   const {linhas} = relatorio;
-  const possiveisDesistencias = linhas.reduce((s,v)=>s+
-    Math.max(0,Number(v.iniciosCheckout||0)-Number(v.pedidosCriados||0)),0);
+  const possiveisDesistencias = relatorio.possiveisDesistencias;
   const corpo = `
     <p class="texto-suave">Identifique quantos navegadores autorizaram as métricas,
       quantas visitas fizeram e quantas tentativas de compra ocorreram.
