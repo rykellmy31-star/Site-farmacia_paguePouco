@@ -64,7 +64,7 @@ export function telaVisitasSite(ctx,{relatorio,db}) {
       redistribuídos por dia com precisão. Somente quem aceitou cookies é contado;
       não coletamos IP, MAC, localização nem produtos consultados.
       Inícios de compra sem pedido são estimativas, não perdas confirmadas.
-    </p>`;;
+    </p>`;
   const body = linhas.map(v=>{
     const cliente = v.clienteId ? db.collection('customers').get(v.clienteId) : null;
     const identificador = 'Navegador •••' + String(v.navegadorId).slice(-6);
