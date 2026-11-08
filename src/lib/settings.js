@@ -45,6 +45,7 @@ export const DEFAULT_SETTINGS = () => ({
     barraTopoCorFundo: '#16803c',
     barraTopoCorTexto: '#ffffff',
     barraTopoPulsante: true,
+    seloDescontoPulsoIntensidade: 100, // 0 = fixo; 100 = atual; 200 = mais forte
     mostrarConsultaCep: true,
   },
   whatsapp: {
