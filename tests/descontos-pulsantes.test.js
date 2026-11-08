@@ -33,8 +33,8 @@ test('vitrines mistas e preços de produtos exibem pulsação só em descontos',
 test('CSS usa pulsação visível e respeita acessibilidade', () => {
   const css = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(css, /@keyframes oferta-desconto-pulsar/);
-  assert.match(css, /transform: scale\(1\.16\)/);
-  assert.match(css, /animation: oferta-desconto-pulsar 1\.35s/);
+  assert.match(css, /transform: scale\(var\(--oferta-escala-forte, 1\.16\)\)/);
+  assert.match(css, /animation: var\(--oferta-pulso-animacao, oferta-desconto-pulsar 1\.35s/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /\.preco-oferta \.etiqueta-desconto\.oferta-pulsante/);
   const publico = readFileSync(new URL('../src/views/public.js', import.meta.url), 'utf8');
