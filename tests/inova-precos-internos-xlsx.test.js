@@ -124,3 +124,26 @@ test('rejeita arquivo não-XLSX e não lê dados de custo nem altera ERP',()=>{
   const page=readFileSync(new URL('../src/views/admin/importacao-estoque.js',import.meta.url),'utf8');
   assert.match(page,/arquivoPrecosInternosInova/);
 });
+
+
+test('prévia permite localizar SKU fora dos 100 primeiros e mostra motivo de rejeição',async()=>{
+  const {telaPreviaPrecosInternos}=await import('../src/views/admin/inova-precos-internos-previa.js');
+  const ctx={settings:{empresa:{},tema:{}},adminUser:{id:'admin',nome:'Admin',role:'super_admin'},
+    csrf:'teste',req:{query:new URLSearchParams('codigo=797222')}};
+  const plano=Array.from({length:130},(_,i)=>({
+    codigo:String(800000+i),nome:'Produto '+i,atualBase:4790,novoBase:4790,
+    atualPromo:0,novoPromo:0,motivo:'sem_mudanca',
+  }));
+  plano.push({codigo:'797222',nome:'FRALDA BABYSEC ULTA MEGA M 38UN',
+    atualBase:4790,novoBase:4790,atualPromo:0,novoPromo:3999,motivo:'ean_divergente'});
+  const resumo={aplicaveis:0,comDesconto:0,semDesconto:0,semCadastro:0,
+    eanDivergente:1,identificacaoAmbigua:0,promocaoManual:0,
+    controlados:0,campanhaConflitante:0,alertasPreco:0,semMudanca:130};
+  const html=telaPreviaPrecosInternos(ctx,{id:'lote',plano,resumo,
+    aplicado:true,fonte:{linhas:131,precoPromocional:1,semPromocao:130,promocaoInvalida:0}});
+  assert.match(html,/797222/);
+  assert.match(html,/FRALDA BABYSEC ULTA MEGA M 38UN/);
+  assert.match(html,/EAN diferente/);
+  assert.match(html,/R\$\s*39,99/);
+  assert.doesNotMatch(html,/>Produto 0</);
+});
