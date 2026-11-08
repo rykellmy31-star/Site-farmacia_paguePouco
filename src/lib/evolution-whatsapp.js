@@ -220,6 +220,22 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
   let enviados=0,verificar=0;
   for(const item of fila){
     if(col.get(item.id)?.status!=='fila')continue;
+    if (['recuperacao_lembrete','recuperacao_cupom'].includes(item.tipo)) {
+      const config=getSetting(db,'recuperacaoVendas')||{};
+      const cliente=db.collection('customers').get(item.clienteId);
+      const carrinho=db.collection('carts').get(item.carrinhoId);
+      const cupom=item.cupomId?db.collection('coupons').get(item.cupomId):null;
+      const pedido=db.collection('orders').all().some(o=>o.carrinhoId===item.carrinhoId);
+      if (config.ativo!==true || !cliente?.marketing || cliente.ativo===false ||
+          numeroWhatsapp(cliente.telefone)!==item.numero ||
+          !carrinho?.itens?.length || carrinho.clienteId!==item.clienteId ||
+          pedido || (item.tipo==='recuperacao_cupom' && (!cupom || cupom.canceladoEm))) {
+        col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
+        if (cupom) db.collection('coupons').update(cupom.id,{ativo:false});
+        await persistir();
+        continue;
+      }
+    }
     col.update(item.id,{status:'enviando',tentativas:1,tentadoEm:nowISO()});
     await persistir(); // escrita durável ANTES do envio externo
     try{
@@ -232,7 +248,20 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
           signal:controller.signal,redirect:'manual', // Workers nao aceita redirect:error
         });
       }finally{clearTimeout(timer);}
-      if(response.ok){col.update(item.id,{status:'enviado',enviadoEm:nowISO(),texto:null});enviados++;}
+      if(response.ok){
+        const enviadoEm=nowISO();
+        col.update(item.id,{status:'enviado',enviadoEm,texto:null});enviados++;
+        if (item.tipo==='recuperacao_cupom' && item.cupomId) {
+          const cupom=db.collection('coupons').get(item.cupomId);
+          if (cupom && !cupom.canceladoEm) {
+            const horas=Math.max(1,Math.min(720,Number(cupom.validadeHoras)||48));
+            db.collection('coupons').update(cupom.id,{
+              ativo:true,emitidoEm:enviadoEm,
+              expiraEm:new Date(Date.parse(enviadoEm)+horas*3_600_000).toISOString(),
+            });
+          }
+        }
+      }
       else if([400,401,403,404].includes(response.status)){
         col.update(item.id,{status:'falha',codigoHttp:response.status,atualizadoEm:nowISO(),texto:null});
       }else{
