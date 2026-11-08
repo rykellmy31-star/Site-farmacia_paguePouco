@@ -1,6 +1,7 @@
 /** Painel exclusivo e responsivo de recuperação consentida de carrinhos. */
 import { paginaAdmin, painel, campoAdmin } from './layout.js';
 import { escapeHtml as e } from '../../lib/security.js';
+import { TIPOS_TESTE_RECUPERACAO } from '../../lib/recuperacao-teste-whatsapp.js';
 
 const real=n=>(Number(n||0)/100).toFixed(2).replace('.',',');
 function data(v){
@@ -15,7 +16,7 @@ function linhaResumo(rotulo,valor){
   return '<div class="cartao" style="flex:1;min-width:165px;padding:16px"><small>'+e(rotulo)+
     '</small><br><strong style="font-size:1.4em">'+e(String(valor))+'</strong></div>';
 }
-export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''}) {
+export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro='',testeStatus=''}) {
   const c=campoAdmin;
   const form = '<form method="post" action="/admin/recuperacao-vendas/configurar">'+
     '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
@@ -89,6 +90,42 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
     'quando a equipe confirmar o recebimento. As mensagens param após a criação do pedido. '+
     'Somente WhatsApp de clientes autorizados e itens promocionais elegíveis.</p>'+
     '<p><button type="submit" class="botao destaque">Salvar recuperação local</button></p></form>';
+  const estadosTeste={
+    enviado:['sucesso','A Evolution API aceitou o envio. Confira se a mensagem chegou ao número informado.'],
+    evolution:['erro','Evolution API indisponível. Confira a conexão na aba WhatsApp Evolution.'],
+    intervalo:['erro','Aguarde pelo menos 60 segundos antes de fazer outro teste.'],
+    numero:['erro','Informe um WhatsApp válido com DDD (e DDI 55, se desejar).'],
+    tipo:['erro','Selecione o modelo de mensagem para testar.'],
+    autorizacao:['erro','Confirme que o número informado autorizou receber esta mensagem de teste.'],
+    recusado:['erro','A Evolution API recusou o envio. Verifique a conexão e o número e tente novamente depois.'],
+    verificar:['erro','Não foi possível confirmar a resposta da Evolution. Verifique o WhatsApp antes de repetir para evitar mensagem duplicada.'],
+  };
+  const estadoTeste=Object.hasOwn(estadosTeste,testeStatus)?estadosTeste[testeStatus]:null;
+  const painelTeste='<section id="teste-whatsapp-recuperacao">'+
+    '<p>Envie uma <strong>mensagem real de teste</strong> para um número autorizado, '+
+    'usando o mesmo WhatsApp conectado na Evolution API. Escolha o modelo abaixo; '+
+    'o texto será claramente identificado como <strong>TESTE</strong>.</p>'+
+    (estadoTeste?'<div class="alerta '+estadoTeste[0]+'" role="status">'+e(estadoTeste[1])+'</div>':'')+
+    '<form method="post" action="/admin/recuperacao-vendas/testar-whatsapp">'+
+    '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div style="flex:1;min-width:200px"><label for="testeNumeroRecuperacao"><strong>WhatsApp destinatário</strong></label>'+
+      '<input id="testeNumeroRecuperacao" class="entrada" type="tel" name="numero" required '+
+        'inputmode="tel" maxlength="24" autocomplete="off" placeholder="(73) 99999-9999"></div>'+
+      '<div style="flex:2;min-width:240px"><label for="testeModeloRecuperacao"><strong>Mensagem para testar</strong></label>'+
+      '<select id="testeModeloRecuperacao" class="entrada" name="tipo" required>'+
+        Object.entries(TIPOS_TESTE_RECUPERACAO).map(([value,label])=>
+          '<option value="'+e(value)+'">'+e(label)+'</option>').join('')+
+      '</select></div>'+
+    '</div>'+
+    '<p><label><input type="checkbox" name="confirmado" value="1" required> '+
+      'Confirmo que este número é meu ou autorizou receber a mensagem de teste.</label></p>'+
+    '<p><button type="submit" class="botao destaque">📲 Enviar mensagem de teste</button></p>'+
+    '</form>'+
+    '<p class="texto-pequeno">Envio imediato por clique, sem esperar 1 hora. '+
+    'Não gera cupons, pedidos, Pix ou campanhas e não altera métricas. '+
+    'Há intervalo mínimo de 60 segundos entre testes. O aceite pela API não garante a entrega no aparelho.</p>'+
+    '</section>';
   const linhas=resumo.linhas.map(x=>
     '<tr><td>'+e(data(x.criadoEm))+'</td><td>'+e(x.nome)+'</td>'+
     '<td>'+e(x.modo==='local'?'🏪 Local':x.modo==='pedido'?'💳 Pedido não pago':'🌎 Carrinho global')+'</td>'+ 
@@ -131,6 +168,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
         'Quando um pedido é gerado, o carrinho para de enviar mensagens. Pedidos Pix não pagos seguem suas regras próprias; após pagamento aprovado, a recuperação é interrompida. '+
         'O cliente pode cancelar ofertas em Minha conta → Meus dados.</p>'+
       indicadores+
+      painel({titulo:'📲 Testar envio de recuperação pelo WhatsApp',corpo:painelTeste})+
       painel({titulo:'🌎 Carrinho global abandonado — configurações e cupons',corpo:form})+
       painel({titulo:'💳 Pedido global não pago — configurações e cupons',corpo:formPedido})+
       painel({titulo:'🏪 Recuperação local — configurações e cupons',corpo:formLocal})+
