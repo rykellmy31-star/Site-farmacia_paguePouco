@@ -1,5 +1,6 @@
 /** Evolution v2: avisos transacionais; nomes de itens só com autorização v2 do cliente. */
 import {getSetting} from './settings.js';
+import { destinoRecuperacao } from './recuperacao-destino.js';
 import {nowISO} from './store.js';
 const COL='evolutionWhatsappOutbox', CFG='evolutionWhatsapp';
 export const DEFAULT_EVOLUTION=Object.freeze({
@@ -221,7 +222,7 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
   for(const item of fila){
     if(col.get(item.id)?.status!=='fila')continue;
     if (['recuperacao_lembrete','recuperacao_cupom'].includes(item.tipo)) {
-      const config=getSetting(db,'recuperacaoVendas')||{};
+      const config=getSetting(db,item.modo==='local'?'recuperacaoVendasLocal':'recuperacaoVendas')||{};
       const cliente=db.collection('customers').get(item.clienteId);
       const carrinho=db.collection('carts').get(item.carrinhoId);
       const cupom=item.cupomId?db.collection('coupons').get(item.cupomId):null;
@@ -234,7 +235,8 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
         Date.parse(item.criadoEm||'')+1000;
       const produtosAgora=[...new Set((carrinho?.itens||[]).map(i=>String(i.produtoId)))].sort();
       const cupomDiferente=cupom && JSON.stringify(cupom.produtosExclusivos)!==JSON.stringify(produtosAgora);
-      if (config.ativo!==true || !cliente?.marketing || cliente.ativo===false ||
+      if (config.ativo!==true || (item.modo||'nacional')!==destinoRecuperacao(db,carrinho,cliente) ||
+          !cliente?.marketing || cliente.ativo===false ||
           numeroWhatsapp(cliente.telefone)!==item.numero ||
           !carrinho?.itens?.length || carrinho.clienteId!==item.clienteId ||
           pedido || foiAtualizado || (compra && config.apenasPrimeiraCompra===true) ||
