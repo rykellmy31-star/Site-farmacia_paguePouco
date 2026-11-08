@@ -244,7 +244,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
     if (!plano) return { ok: false, erro: 'Parcelamento não permitido.' };
     parcelasValidadas = plano.numero;
     acrescimoJurosCentavos = plano.total - baseCentavos;
-  } else if (metodoPagamento !== 'debit_card') {
+  } else if (metodoPagamento !== 'debit_card' && metodoPagamento !== 'checkout_pro') {
     return { ok: false, erro: 'Meio de pagamento inválido.' };
   }
   const totalCentavos = baseCentavos - descontoPixCentavos + acrescimoJurosCentavos;
@@ -309,7 +309,7 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
       detalhe: frete.opcao.detalhe || '',
     },
     totalCentavos,
-    metodoPagamento, // pix | credit_card | debit_card | cash (somente presencial)
+    metodoPagamento, // pix | checkout_pro (cartão real) | credit_card | debit_card | cash
     pagamentoPresencial: local?{
       ...presencialValidado.presencial,confirmadoEm:null,confirmadoPor:null,
       momento:'na_entrega_ou_retirada',status:'aguardando_recebimento',
