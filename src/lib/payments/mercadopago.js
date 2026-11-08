@@ -284,7 +284,7 @@ function localizarCheckoutPro(db, remoto, dataId) {
 /** Confirma o retorno de um cliente autenticado; nunca confia em ?status=approved. */
 export async function consultarRetornoCheckoutPro({ db, pedidoId, pagamentoId, config }) {
   const id = String(pagamentoId || '');
-  if (!/^\\d{1,30}$/.test(id)) return { ok: false, erro: 'Pagamento não identificado.' };
+  if (!/^\d{1,30}$/.test(id)) return { ok: false, erro: 'Pagamento não identificado.' };
   const pedido = db.collection('orders').get(pedidoId);
   if (!pedido || pedido.metodoPagamento !== 'checkout_pro' ||
       !pedido.pagamentoId || pedido.statusFinanceiro !== 'pendente') {
@@ -439,7 +439,7 @@ export async function refund({ db, payment, amountCents, config }) {
   if (payment.status !== 'approved') return { ok: false, erro: 'Somente cobranças aprovadas podem ser estornadas.' };
   const mpId = payment.metodo === 'checkout_pro' ? String(payment.transacaoId || '') :
     String(payment.id || '').replace(/^mp_/, '');
-  if (!/^\\d{1,30}$/.test(mpId))
+  if (!/^\d{1,30}$/.test(mpId))
     return { ok:false, erro:'ID da transação não identificado para estorno.' };
   const res = await mpFetch(`/v1/payments/${mpId}/refunds`, {
     method: 'POST', body: undefined, idempotencyKey: `refund-${payment.id}`, config,
