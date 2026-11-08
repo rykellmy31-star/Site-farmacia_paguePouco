@@ -235,9 +235,9 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
           <div class="cartao">
             <h3>${ICONES.cadeado} Como você quer pagar?</h3>
             ${infoPag.real && formasPagamento.pix ? `<div class="campo">
-              <label for="cpfPix">CPF do pagador (obrigatório para gerar o Pix)</label>
+              <label for="cpfPix">CPF do pagador (obrigatório somente para Pix)</label>
               <input id="cpfPix" type="text" name="cpfPix" inputmode="numeric" autocomplete="off"
-                maxlength="14" required value="${e(ctx.usuario?.cpf || '')}"
+                maxlength="14" value="${e(ctx.usuario?.cpf || '')}"
                 placeholder="000.000.000-00" aria-describedby="cpfPixAjuda">
               <span id="cpfPixAjuda" class="dica">Necessário para identificar o pagador na API Mercado Pago. Não será salvo como número de cartão.</span>
             </div>` : ''}
@@ -251,6 +251,15 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
               </span>
             </label>` : ''}
 
+            ${formasPagamento.checkout_pro ? `<label class="opcao-pagamento${!formasPagamento.pix ? ' selecionada' : ''}">
+              <input type="radio" name="metodoPagamento" value="checkout_pro" ${!formasPagamento.pix ? 'checked' : ''}>
+              <span>
+                <strong>Cartão de crédito${formasPagamento.checkout_pro_debit ? ' ou débito' : ''} — Mercado Pago</strong><br>
+                <span class="texto-pequeno texto-suave">Pague com segurança no Mercado Pago.
+                  No crédito, parcelamento de até 6x, com mínimo de R$ 25 por parcela.
+                  O Mercado Pago exibirá as parcelas, juros e total final antes de confirmar.</span>
+              </span>
+            </label>` : ''}
             ${formasPagamento.credit_card ? `<label class="opcao-pagamento">
               <input type="radio" name="metodoPagamento" value="credit_card">
               <span>
@@ -295,7 +304,7 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
                   sem precisar autorizar novamente. <a href="/conta/dados#avisos-whatsapp">Gerenciar avisos</a>.</p>
                 </div>
                 <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
-                  ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>Finalizar pedido</button>`
+                  ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card && !formasPagamento.checkout_pro ? 'disabled' : ''}>Finalizar pedido</button>`
               : autorizouWhatsappPedidos(ctx.usuario)
                 ? `<div class="cartao">
                     <strong>📱 Avisos por WhatsApp já ativados</strong>
@@ -305,10 +314,10 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
                   </div>
                   <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
                     name="acaoWhatsappPedido" value="autorizar_detalhes"
-                    ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>
+                    ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card && !formasPagamento.checkout_pro ? 'disabled' : ''}>
                     Finalizar e incluir produtos no WhatsApp</button>
                   <button class="botao secundario grande bloquinho mt-2" type="submit"
-                    ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>
+                    ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card && !formasPagamento.checkout_pro ? 'disabled' : ''}>
                     Finalizar sem nomes dos produtos</button>`
               : `<div class="cartao">
                   <strong>📱 Quer receber avisos de seus pedidos no WhatsApp?</strong>
@@ -322,14 +331,14 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
                 <input type="hidden" name="preferenciaWhatsappPedido" value="sem">
                 <button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
                   name="acaoWhatsappPedido" value="autorizar"
-                  ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>
+                  ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card && !formasPagamento.checkout_pro ? 'disabled' : ''}>
                   Finalizar e receber avisos no WhatsApp</button>
                 <button class="botao secundario grande bloquinho mt-2" type="submit"
                   name="acaoWhatsappPedido" value="sem"
-                  ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>
+                  ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card && !formasPagamento.checkout_pro ? 'disabled' : ''}>
                   Finalizar sem avisos no WhatsApp</button>`
             : `<button class="botao destaque grande bloquinho" type="submit" id="botaoFinalizar"
-                ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card ? 'disabled' : ''}>Finalizar pedido</button>`}
+                ${!formasPagamento.pix && !formasPagamento.credit_card && !formasPagamento.debit_card && !formasPagamento.checkout_pro ? 'disabled' : ''}>Finalizar pedido</button>`}
           <p class="texto-pequeno texto-suave mt-2 mb-0">
             Ao finalizar, você concorda com os <a href="/pagina/termos-de-uso" target="_blank">Termos de Uso</a> e a
             <a href="/pagina/politica-de-privacidade" target="_blank">Política de Privacidade</a>.
