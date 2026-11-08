@@ -140,7 +140,9 @@ export function precoVigenteCentavos(produto, referencia = new Date()) {
   const inova = precoPromocaoInovaVigente(produto, referencia);
   if (inova != null) return inova;
   const promo = Number(produto?.precoPromocionalCentavos || 0);
-  return promo > 0 && promo < normal ? promo : normal;
+  if (promo > 0 && promo < normal) return promo; // preço manual preservado
+  const interno = Number(produto?.precoInternoInovaCentavos || 0);
+  return interno > 0 && interno < normal ? interno : normal;
 }
 
 export function temPromocao(produto, referencia = new Date()) {
