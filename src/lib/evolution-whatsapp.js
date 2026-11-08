@@ -225,11 +225,20 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
       const cliente=db.collection('customers').get(item.clienteId);
       const carrinho=db.collection('carts').get(item.carrinhoId);
       const cupom=item.cupomId?db.collection('coupons').get(item.cupomId):null;
-      const pedido=db.collection('orders').all().some(o=>o.carrinhoId===item.carrinhoId);
+      const pedido=db.collection('orders').all().some(o=>
+        o.carrinhoId===item.carrinhoId ||
+        (o.clienteId===item.clienteId && o.statusFinanceiro==='pendente'));
+      const compra=db.collection('orders').all().some(o=>
+        o.clienteId===item.clienteId && o.statusFinanceiro==='aprovado');
+      const foiAtualizado=Date.parse(carrinho?.atualizadoEm||'')>
+        Date.parse(item.criadoEm||'')+1000;
+      const produtosAgora=[...new Set((carrinho?.itens||[]).map(i=>String(i.produtoId)))].sort();
+      const cupomDiferente=cupom && JSON.stringify(cupom.produtosExclusivos)!==JSON.stringify(produtosAgora);
       if (config.ativo!==true || !cliente?.marketing || cliente.ativo===false ||
           numeroWhatsapp(cliente.telefone)!==item.numero ||
           !carrinho?.itens?.length || carrinho.clienteId!==item.clienteId ||
-          pedido || (item.tipo==='recuperacao_cupom' && (!cupom || cupom.canceladoEm))) {
+          pedido || foiAtualizado || (compra && config.apenasPrimeiraCompra===true) ||
+          (item.tipo==='recuperacao_cupom' && (!cupom || cupom.canceladoEm || cupomDiferente))) {
         col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
         if (cupom) db.collection('coupons').update(cupom.id,{ativo:false});
         await persistir();
