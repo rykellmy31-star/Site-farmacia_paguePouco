@@ -1,0 +1,122 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {deflateRawSync} from 'node:zlib';
+import {Collection} from '../src/lib/store.js';
+import {lerPrecosInovaXlsx} from '../src/lib/inova-precos-internos-xlsx.js';
+import {prepararPrecosInternos,consultarPrecosInternos,aplicarPrecosInternos}
+  from '../src/lib/inova-precos-internos-aplicacao.js';
+import {precoVigenteCentavos} from '../src/lib/catalog.js';
+import {readFileSync} from 'node:fs';
+
+const u16=n=>{const b=Buffer.alloc(2);b.writeUInt16LE(n);return b;};
+const u32=n=>{const b=Buffer.alloc(4);b.writeUInt32LE(n);return b;};
+function xlsx(dados){
+  const sharedStrings=[
+    'Código','Produto','Preço Venda','Preço Promoção','Código Barra',
+    'Ativo','Controlado','APTAMIL PREMIUM 2 800G','SEM DESCONTO','PROMO MAIOR'
+  ];
+  const shared='<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    sharedStrings.map(s=>'<si><t>'+s+'</t></si>').join('')+'</sst>';
+  const cell=(col,row,value,shared=false)=>'<c r="'+col+row+'"'+
+    (shared?' t="s"':'')+'><v>'+value+'</v></c>';
+  const head=cell('B',2,0,true)+cell('C',2,1,true)+cell('Y',2,2,true)+
+    cell('AB',2,3,true)+cell('AH',2,4,true)+cell('AP',2,5,true)+
+    cell('AM',2,6,true);
+  const rows=dados.map((d,i)=>'<row r="'+(i+3)+'">'+
+    cell('B',i+3,d.code)+cell('C',i+3,d.name,true)+
+    cell('Y',i+3,d.price)+cell('AB',i+3,d.promo)+
+    cell('AH',i+3,d.ean)+cell('AP',i+3,1)+cell('AM',i+3,0)+'</row>').join('');
+  const sheet='<?xml version="1.0"?><worksheet><sheetData><row r="2">'+
+    head+'</row>'+rows+'</sheetData></worksheet>';
+  const entries=[['xl/sharedStrings.xml',Buffer.from(shared)],
+    ['xl/worksheets/sheet0.xml',Buffer.from(sheet)]];
+  let offset=0;const locals=[],centrals=[];
+  for(const [name,data] of entries){
+    const n=Buffer.from(name),deflate=deflateRawSync(data);
+    const local=Buffer.concat([u32(0x04034b50),u16(20),u16(0),u16(8),u16(0),u16(0),
+      u32(0),u32(deflate.length),u32(data.length),u16(n.length),u16(0),n,deflate]);
+    const central=Buffer.concat([u32(0x02014b50),u16(20),u16(20),u16(0),u16(8),
+      u16(0),u16(0),u32(0),u32(deflate.length),u32(data.length),
+      u16(n.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),n]);
+    locals.push(local);centrals.push(central);offset+=local.length;
+  }
+  const dir=Buffer.concat(centrals);
+  const end=Buffer.concat([u32(0x06054b50),u16(0),u16(0),u16(entries.length),
+    u16(entries.length),u32(dir.length),u32(offset),u16(0)]);
+  return Buffer.concat([...locals,dir,end]);
+}
+const excel=xlsx([
+  {code:795818,name:7,price:'84.9000',promo:'73.9000',ean:'7891025107897'},
+  {code:111,name:8,price:'25.9000',promo:0,ean:'7891234567895'},
+  {code:222,name:9,price:'45.9000',promo:'49.9000',ean:'7891234567896'},
+]);
+function dbFake(){
+  const map=new Map();
+  const db={storage:{transactionSync:fn=>fn()},
+    collection(name){
+      if(!map.has(name))map.set(name,new Collection({_commit(){}},name));
+      return map.get(name);
+    }};
+  return db;
+}
+test('lê XLSX realístico Inova: preço normal, desconto, código e EAN',()=>{
+  const resultado=lerPrecosInovaXlsx(excel);
+  assert.equal(resultado.resumo.linhas,3);
+  assert.equal(resultado.resumo.precoPromocional,1);
+  assert.equal(resultado.resumo.semPromocao,1);
+  assert.equal(resultado.resumo.promocaoInvalida,1);
+  assert.equal(resultado.itens.length,2);
+  assert.deepEqual(resultado.itens[0].precoCentavos,8490);
+  assert.deepEqual(resultado.itens[0].promocaoCentavos,7390);
+  assert.equal(resultado.itens[0].ean,'7891025107897');
+  assert.equal(resultado.itens[0].codigo,'795818');
+});
+test('prévia não altera produto e aplicação exige confirmação tripla',()=>{
+  const db=dbFake();
+  const p=db.collection('products').insert({id:'p1',codigoInterno:'795818',
+    ean:'7891025107897',nome:'APTAMIL PREMIUM 2 800G',precoCentavos:8490,
+    precoPromocionalCentavos:0,ativo:true,inovaPromocoes:[],
+    imagens:['imagem-existente.png'],estoque:{quantidade:10},sanitario:{requerReceita:false}});
+  db.collection('products').insert({id:'p2',codigoInterno:'111',ean:'7891234567895',
+    precoCentavos:2590,precoPromocionalCentavos:0,ativo:false,inovaPromocoes:[],
+    estoque:{quantidade:7}});
+  const prev=prepararPrecosInternos(db,excel,'admin');
+  assert.equal(prev.ok,true);
+  assert.equal(prev.resumo.aplicaveis,1);
+  assert.equal(db.collection('products').get('p1').precoInternoInovaCentavos,undefined);
+  assert.equal(aplicarPrecosInternos(db,prev.id,'admin',{}).ok,false);
+  const revisao=consultarPrecosInternos(db,prev.id,'admin');
+  assert.equal(revisao.ok,true);
+  const autorizado=aplicarPrecosInternos(db,prev.id,'admin',{
+    frase:'APLICAR PRECOS INTERNOS INOVA',confirmado:'1',autorizacaoOnline:'1'});
+  assert.equal(autorizado.ok,true);
+  assert.equal(autorizado.atualizados,1);
+  const salvo=db.collection('products').get('p1');
+  assert.equal(salvo.precoInternoInovaCentavos,7390);
+  assert.equal(salvo.precoCentavos,8490);
+  assert.equal(precoVigenteCentavos(salvo),7390);
+  assert.deepEqual(salvo.imagens,['imagem-existente.png']);
+  assert.equal(salvo.estoque.quantidade,10);
+  assert.equal(salvo.ativo,true);
+  assert.equal(db.collection('products').get('p2').ativo,false);
+  assert.equal(aplicarPrecosInternos(db,prev.id,'admin',{
+    frase:'APLICAR PRECOS INTERNOS INOVA',confirmado:'1',autorizacaoOnline:'1'}).ok,false);
+});
+test('desconto manual e campanha existente não são apagados pelo preço interno',()=>{
+  const normal={precoCentavos:8490,precoInternoInovaCentavos:7390,
+    precoPromocionalCentavos:6990};
+  assert.equal(precoVigenteCentavos(normal),6990);
+  const campanha={...normal,inovaPromocoes:[{inicio:'2026-01-01',fim:'2027-01-01',
+    precoVendaCentavos:8490,precoPromocionalCentavos:6490}]};
+  assert.equal(precoVigenteCentavos(campanha,new Date('2026-11-07T12:00:00Z')),6490);
+});
+test('rejeita arquivo não-XLSX e não lê dados de custo nem altera ERP',()=>{
+  assert.throws(()=>lerPrecosInovaXlsx(Buffer.from('não é excel')),/inválido|incompleto/);
+  const src=readFileSync(new URL('../src/lib/inova-precos-internos-xlsx.js',import.meta.url),'utf8');
+  assert.doesNotMatch(src,/precoCompra|precoCusto|senhaBanco|sql\.query/i);
+  const routes=readFileSync(new URL('../src/routes/admin.js',import.meta.url),'utf8');
+  assert.match(routes,/admin\/estoque\/precos-internos\/preparar/);
+  assert.match(routes,/admin\/estoque\/precos-internos\/aplicar/);
+  const page=readFileSync(new URL('../src/views/admin/importacao-estoque.js',import.meta.url),'utf8');
+  assert.match(page,/arquivoPrecosInternosInova/);
+});
