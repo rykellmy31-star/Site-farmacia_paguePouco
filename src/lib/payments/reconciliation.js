@@ -1,5 +1,5 @@
 /**
- * Conciliação recorrente de cobranças Pix. A aprovação exige consulta
+ * Conciliação recorrente de pagamentos online (Pix e cartão). A aprovação exige consulta
  * autenticada ao provedor; falha de rede não é evidência de cancelamento.
  * Executar dentro da fila serial do Durable Object para evitar disputa.
  */
@@ -9,21 +9,24 @@ import { nowISO } from '../store.js';
 
 const TERMINAL = { approved: 'aprovado', rejected: 'recusado', cancelled: 'recusado', expired: 'expirado' };
 
-export function temPixPendente(db) {
+export function temPagamentoOnlinePendente(db) {
   return db.collection('orders').all().some((order) =>
-    order.metodoPagamento === 'pix' && order.statusFinanceiro === 'pendente' &&
+    ['pix','credit_card','debit_card'].includes(order.metodoPagamento) &&
+    !order.pagamentoPresencial && order.statusFinanceiro === 'pendente' &&
     !!order.pagamentoId);
 }
 
-export async function reconciliarPix(db, { limit = 50, pedidoId = null } = {}) {
+export async function reconciliarPagamentoOnline(db, { limit = 50, pedidoId = null } = {}) {
   const pendentes = db.collection('orders').find((order) =>
-    order.metodoPagamento === 'pix' && order.statusFinanceiro === 'pendente' &&
+    ['pix','credit_card','debit_card'].includes(order.metodoPagamento) &&
+    !order.pagamentoPresencial && order.statusFinanceiro === 'pendente' &&
     !!order.pagamentoId && (!pedidoId || order.id === pedidoId))
     .slice(0, Math.max(1, Math.min(100, limit)));
   const resultado = { verificados: 0, atualizados: 0, pendentes: 0, erros: 0 };
   for (const pedido of pendentes) {
     const pagamento = db.collection('payments').get(pedido.pagamentoId);
     if (!pagamento || pagamento.pedidoId !== pedido.id ||
+        pagamento.metodo !== pedido.metodoPagamento ||
         Number(pagamento.valorCentavos) !== Number(pedido.totalCentavos) ||
         !['internal', 'mercadopago'].includes(pagamento.provedor)) {
       resultado.erros++;
@@ -57,7 +60,7 @@ export async function reconciliarPix(db, { limit = 50, pedidoId = null } = {}) {
       continue;
     }
     const r = atualizarStatusFinanceiro(db, pedido.id, destino, {
-      obs: 'Reconciliação automática de cobrança Pix com confirmação do provedor.',
+      obs: 'Reconciliação automática de pagamento online com confirmação do provedor.',
       por: 'conciliacao',
     });
     if (r.ok) resultado.atualizados++;
@@ -66,6 +69,9 @@ export async function reconciliarPix(db, { limit = 50, pedidoId = null } = {}) {
   return { ...resultado, conferidoEm: nowISO() };
 }
 
+// Mantém interfaces antigas compatíveis com rotas e testes já publicados.
+export const temPixPendente=temPagamentoOnlinePendente;
+export const reconciliarPix=reconciliarPagamentoOnline;
 
 /**
  * Sincroniza UM Pix real quando o proprietário abre a tela de seu pedido.
