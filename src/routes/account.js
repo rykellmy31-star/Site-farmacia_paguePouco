@@ -13,7 +13,8 @@ import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
 import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
 import { sendMail } from '../lib/mailer.js';
-import { vincularCarrinhoAoCliente, aplicarCupom, calcularTotais, normalizeCart } from '../lib/cart.js';
+import { vincularCarrinhoAoCliente, aplicarCupom, calcularTotais, normalizeCart, novoCarrinhoId } from '../lib/cart.js';
+import { pedidoOnlineRecuperavel } from '../lib/recuperacao-vendas.js';
 import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
@@ -323,6 +324,40 @@ export function registrarRotasConta(app, db) {
       c.token===token && c.clienteId===req.user.id &&
       Number.isFinite(Date.parse(c.criadoEm)) &&
       Date.now()-Date.parse(c.criadoEm) <= 30*86_400_000);
+    // Pedido online encerrado é diferente de um carrinho abandonado:
+    // somente após expiração/recusa confirmada criar cesta NOVA. Nunca
+    // reaproveitar o ID vinculado à cobrança anterior nem gerar Pix automático.
+    if(campanha?.modo==='pedido'){
+      const pedido=db.collection('orders').get(campanha.pedidoId);
+      const origem=pedido?db.collection('carts').get(pedido.carrinhoId):null;
+      if(!pedido || pedido.clienteId!==req.user.id ||
+          pedido.carrinhoId!==campanha.carrinhoId ||
+          !origem || origem.clienteId!==req.user.id ||
+          !pedidoOnlineRecuperavel(db,pedido,{cupom:true})) {
+        return void res.redirect('/conta/pedidos');
+      }
+      const nova=db.collection('carts').insert({
+        id:novoCarrinhoId(),clienteId:req.user.id,
+        itens:(origem.itens||[]).map(i=>({...i})),cupom:null,frete:null,
+        criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString(),
+      });
+      const validada=normalizeCart(db,nova).cart;
+      if(!(validada.itens||[]).length)return void res.redirect('/carrinho');
+      if(campanha.tipo==='pedido_cupom' && campanha.cupomId){
+        const cupom=db.collection('coupons').get(campanha.cupomId);
+        if(cupom?.ativo && cupom?.pedidoOrigemId===pedido.id){
+          const totals=calcularTotais(db,validada);
+          aplicarCupom(db,validada,cupom.codigo,{
+            subtotalCentavos:totals.subtotalCentavos,
+            clienteId:req.user.id,itens:validada.itens,
+          });
+        }
+      }
+      res.cookie(config.cartCookie,nova.id,{
+        maxAge:60*60*24*180,path:'/',httpOnly:false,sameSite:'Lax',
+      });
+      return void res.redirect('/carrinho');
+    }
     const cart=campanha?db.collection('carts').get(campanha.carrinhoId):null;
     if(!cart || cart.clienteId!==req.user.id || !(cart.itens||[]).length)
       return void res.redirect('/carrinho');
