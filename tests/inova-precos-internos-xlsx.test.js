@@ -145,7 +145,7 @@ test('prévia permite localizar SKU fora dos 100 primeiros e mostra motivo de re
     aplicado:true,fonte:{linhas:131,precoPromocional:1,semPromocao:130,promocaoInvalida:0}});
   assert.match(html,/797222/);
   assert.match(html,/FRALDA BABYSEC ULTA MEGA M 38UN/);
-  assert.match(html,/EAN diferente/);
+  assert.match(html,/EAN divergente/);
   assert.match(html,/R\$\s*39,99/);
   assert.doesNotMatch(html,/>Produto 0</);
 });
@@ -174,7 +174,8 @@ test('BABYSEC 797222: Inova R$47,90/R$39,99 sobrepõe campanha/manual sem ignora
   assert.equal(prev.resumo.eanDivergente,1);
   assert.equal(prev.plano[0].motivo,'apto');
   const lote=prepararPrecosInternos(db,xlsx([
-    {code:797222,name:7,price:'47.9000',promo:'39.9900',ean:'17896061995900'}
+    {code:797222,name:7,price:'47.9000',promo:'39.9900',ean:'17896061995900'},
+    {code:111,name:8,price:'25.9000',promo:0,ean:'7891234567895'},
   ]),'admin');
   assert.equal(lote.ok,true);
   assert.equal(lote.resumo.aplicaveis,1);
