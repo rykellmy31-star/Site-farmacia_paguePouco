@@ -56,6 +56,7 @@ import { logAdmin, queryLogs } from '../lib/audit.js';
 import { relatorioVisitas } from '../lib/visitas-site.js';
 import { configRecuperacao, validarConfigRecuperacao, configRecuperacaoLocal, validarConfigRecuperacaoLocal, configRecuperacaoPedido, validarConfigRecuperacaoPedido, painelRecuperacao, cancelarCupomRecuperacao } from '../lib/recuperacao-vendas.js';
 import { telaRecuperacaoVendas } from '../views/admin/recuperacao-vendas.js';
+import { enviarTesteRecuperacao } from '../lib/recuperacao-teste-whatsapp.js';
 import { telaVisitasSite } from '../views/admin/visitas-site.js';
 import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
@@ -1351,7 +1352,29 @@ export function registrarRotasAdmin(app, db) {
     res.set('Cache-Control','no-store');
     res.html(telaRecuperacaoVendas(ctxAdmin(req,db),{
       cfg:configRecuperacao(db),cfgLocal:configRecuperacaoLocal(db),cfgPedido:configRecuperacaoPedido(db),resumo:painelRecuperacao(db),
+      testeStatus:String(req.query.get('teste')||''),
     }));
+  });
+  app.post('/admin/recuperacao-vendas/testar-whatsapp',async(req,res)=>{
+    if(!guard(req,res,'whatsapp.editar'))return;
+    if(!['admin','super_admin'].includes(req.adminUser?.role) ||
+        !can(req.adminUser,'clientes.ver') || !can(req.adminUser,'promocoes.editar'))
+      return void res.status(403).html('Acesso administrativo restrito.');
+    res.set('Cache-Control','no-store');
+    const resultado=await enviarTesteRecuperacao(db,req.ctx?.env,{
+      numero:String(req.body.numero||''),
+      tipo:String(req.body.tipo||''),
+      confirmado:req.body.confirmado==='1',
+    });
+    if(resultado.ok) {
+      // Auditoria sem número ou conteúdo: não revelar dados de destinatários.
+      logAdmin(db,req.adminUser,'testou_mensagem_recuperacao','integracao',
+        'evolutionWhatsapp',{modelo:String(req.body.tipo||'').slice(0,40)},req);
+    }
+    const codigo=resultado.ok?'enviado':
+      ['evolution','intervalo','numero','tipo','autorizacao','recusado','verificar']
+        .includes(resultado.codigo)?resultado.codigo:'verificar';
+    res.redirect('/admin/recuperacao-vendas?teste='+codigo+'#teste-whatsapp-recuperacao');
   });
   app.post('/admin/recuperacao-vendas/configurar',(req,res)=>{
     if(!guard(req,res,'promocoes.editar'))return;
