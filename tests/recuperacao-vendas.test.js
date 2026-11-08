@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { executarRecuperacao, configRecuperacao, validarConfigRecuperacao, painelRecuperacao } from '../src/lib/recuperacao-vendas.js';
+import { executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, validarConfigRecuperacao, painelRecuperacao } from '../src/lib/recuperacao-vendas.js';
 import { processarFilaEvolution } from '../src/lib/evolution-whatsapp.js';
 import { validarCupom } from '../src/lib/cart.js';
 
@@ -146,4 +146,31 @@ test('indicador de receita só soma pedidos com cupom recuperado e pagamento apr
   const resumo=painelRecuperacao(db);
   assert.equal(resumo.recuperados,1);
   assert.equal(resumo.receitaRecuperadaCentavos,14500);
+});
+
+test('cupom vira expirado no banco automaticamente e permanece inválido',async()=>{
+ const {db,agora}=fixture();
+ executarRecuperacao(db,{agora});
+ const item=db.collection('evolutionWhatsappOutbox').all()[0];
+ await processarFilaEvolution(db,{apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>({ok:true,status:200})});
+ const cupom=db.collection('coupons').get(item.cupomId);
+ assert.equal(cupom.ativo,true);
+ const expira=Date.parse(cupom.expiraEm);
+ assert.equal(expirarCuponsRecuperacao(db,{agora:expira+1}),1);
+ assert.equal(db.collection('coupons').get(cupom.id).ativo,false);
+ assert.equal(expirarCuponsRecuperacao(db,{agora:expira+2}),0);
+});
+test('fila cancela envio se o cliente voltou e atualizou o carrinho',async()=>{
+ const {db,agora}=fixture({idade:2});
+ executarRecuperacao(db,{agora});
+ let enviou=false;
+ db.collection('carts').update('c-1',{atualizadoEm:new Date(agora+30_000).toISOString()});
+ const r=await processarFilaEvolution(db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>{enviou=true;return {ok:true};},
+ });
+ assert.equal(r.enviados,0);
+ assert.equal(enviou,false);
+ assert.equal(db.collection('evolutionWhatsappOutbox').all()[0].status,'cancelado');
 });
