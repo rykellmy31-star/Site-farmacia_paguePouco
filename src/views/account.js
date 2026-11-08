@@ -90,6 +90,11 @@ export function telaCadastro(ctx, { erros = {}, valores = {} }) {
               <input type="checkbox" name="marketing" value="1" ${valores.marketing ? 'checked' : ''}>
               <span class="texto-pequeno">${e(ctx.settings.lgpd?.textoConsentimento || 'Autorizo o envio de ofertas e novidades.')}</span>
             </label>
+            <label class="check">
+              <input type="checkbox" name="consentimentoWhatsappMarketingDetalhes" value="1"
+                ${valores.consentimentoWhatsappMarketingDetalhes ? 'checked' : ''}>
+              <span class="texto-pequeno">Opcional: autorizo citar os produtos de higiene e beleza do meu carrinho nas mensagens de recuperação de ofertas pelo WhatsApp.</span>
+            </label>
             <button class="botao bloquinho" type="submit">Criar conta</button>
           </form>
           <p class="mt-2 mb-0">Já tem conta? <a href="/conta/login">Entrar</a></p>
@@ -398,6 +403,10 @@ export function telaDados(ctx, { erros = {} }) {
             ${campoForm({ nome: 'dataNascimento', rotulo: 'Data de nascimento', tipo: 'date', valor: u.dataNascimento || '' })}
             <label class="check"><input type="checkbox" name="marketing" value="1" ${u.marketing ? 'checked' : ''}>
               <span class="texto-pequeno">${e(ctx.settings.lgpd?.textoConsentimento || 'Autorizo o envio de ofertas e novidades.')}</span></label>
+            <label class="check"><input type="checkbox" name="consentimentoWhatsappMarketingDetalhes" value="1"
+              ${u.consentimentoWhatsappMarketingDetalhes ? 'checked' : ''}>
+              <span class="texto-pequeno">Opcional: citar os produtos elegíveis do meu carrinho em mensagens promocionais pelo WhatsApp.</span>
+            </label>
             <button class="botao" type="submit">Salvar alterações</button>
           </form>
         </div>

@@ -7,6 +7,7 @@ import { config, configureCloudflare } from '../config.js';
 import { avaliarAutomacaoInova } from '../lib/inovafarma-automation.js';
 import { corrigirReceitaAutomaticaInova } from '../lib/inovafarma-receita-automatica.js';
 import {processarFilaEvolution,possuiFilaEvolution} from '../lib/evolution-whatsapp.js';
+import { executarRecuperacao, temRecuperacaoMonitoravel } from '../lib/recuperacao-vendas.js';
 import { createApplication } from '../app.js';
 import { hashPassword, randomToken } from '../lib/security.js';
 import { CloudStore } from './store.js';
@@ -105,7 +106,7 @@ export class LojaDurableObject extends DurableObject {
   async programarAlarmeFinanceiro() {
     if (!temPixPendente(this.db) && !temEstornoPendente(this.db) &&
         !temCheckoutInterrompido(this.db) && !config.inova?.enabled &&
-        !possuiFilaEvolution(this.db)) return;
+        !possuiFilaEvolution(this.db) && !temRecuperacaoMonitoravel(this.db)) return;
     const atual = await this.ctx.storage.getAlarm();
     if (atual == null) await this.ctx.storage.setAlarm(Date.now() + 5 * 60_000);
   }
@@ -144,6 +145,12 @@ export class LojaDurableObject extends DurableObject {
             console.warn('[alarme financeiro] verificar fluxo:', fluxo),
         });
       } finally {
+        // Campanhas consentidas usam o MESMO agendador e instância Evolution.
+        // Nunca chamam o ERP ou alteram o catálogo/estoque.
+        try {
+          executarRecuperacao(this.db);
+          await this.db.flush();
+        } catch { console.warn('[recuperacao] ciclo não concluído'); }
         try{
           if(possuiFilaEvolution(this.db))
             await processarFilaEvolution(this.db,{
