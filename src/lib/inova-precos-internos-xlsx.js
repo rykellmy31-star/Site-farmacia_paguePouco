@@ -128,7 +128,7 @@ export function lerPrecosInovaXlsx(bytes){
       precoCentavos:preco,promocaoCentavos:promo,
       controlado,ativo:get('ativo').toLowerCase()!=='unchecked'});
   }
-  if(itens.length<1||resumo.codigosDuplicados||resumo.precoInvalido||resumo.promocaoInvalida)
-    failure('Existem preços ou códigos inconsistentes no Excel. Nenhum desconto foi preparado.');
+  if(itens.length<1||resumo.codigosDuplicados||resumo.precoInvalido>Math.max(5,resumo.linhas*0.01))
+    failure('Existem muitos preços ou códigos inconsistentes no Excel. Nenhum desconto foi preparado.');
   return {itens,resumo,hash:crypto.createHash('sha256').update(bytes).digest('hex')};
 }
