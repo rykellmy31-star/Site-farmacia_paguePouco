@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Collection } from '../src/lib/store.js';
 import {
-  reconciliarPix, temEstornoPendente, reconciliarEstornos,
+  reconciliarPix, reconciliarPagamentoOnline, temPagamentoOnlinePendente,
+  temEstornoPendente, reconciliarEstornos,
   temCheckoutInterrompido, reconciliarCheckoutsInterrompidos,
 } from '../src/lib/payments/reconciliation.js';
 import { config } from '../src/config.js';
 
-function dbTeste({ expiraEm, status = 'pending', provider = 'internal', hasPayment = true } = {}) {
+function dbTeste({ expiraEm, status = 'pending', provider = 'internal', hasPayment = true, metodo = 'pix' } = {}) {
   const cols = new Map();
   const db = { collection(name) {
     if (!cols.has(name)) cols.set(name, new Collection({ _commit() {} }, name));
@@ -16,12 +17,12 @@ function dbTeste({ expiraEm, status = 'pending', provider = 'internal', hasPayme
   db.collection('products').insert({ id: 'p', nome: 'Produto', estoque: { quantidade: 10, reservado: 2 }, vendas: 0 });
   db.collection('orders').insert({
     id: 'o', codigo: 'PP123', statusFinanceiro: 'pendente', statusOperacional: 'aguardando_pagamento',
-    metodoPagamento: 'pix', pagamentoId: hasPayment ? 'pg' : null,
+    metodoPagamento: metodo, pagamentoId: hasPayment ? 'pg' : null,
     totalCentavos: 2000, itens: [{ produtoId: 'p', quantidade: 2 }], historico: [],
   });
   db.collection('stockMovements').insert({ produtoId: 'p', pedidoId: 'o', tipo: 'reserva', quantidade: 2 });
   if (hasPayment) db.collection('payments').insert({
-    id: 'pg', pedidoId: 'o', provedor: provider, metodo: 'pix',
+    id: 'pg', pedidoId: 'o', provedor: provider, metodo,
     status, valorCentavos: 2000, pixExpiraEm: expiraEm, eventos: [],
   });
   return db;
@@ -275,4 +276,32 @@ test('duas cobranças ligadas ao mesmo pedido exigem revisão sem escolher ao ac
   });
   assert.equal(reconciliarCheckoutsInterrompidos(db).sinalizados, 1);
   assert.equal(db.collection('orders').get('o').pagamentoId, null);
+});
+
+
+test('conciliação considera cartão online pendente sem fingir aprovação',async()=>{
+ for (const metodo of ['credit_card','debit_card']) {
+   const db=dbTeste({metodo,status:'pending'});
+   assert.equal(temPagamentoOnlinePendente(db),true);
+   const r=await reconciliarPagamentoOnline(db);
+   assert.equal(r.pendentes,1);
+   assert.equal(r.atualizados,0);
+   assert.equal(db.collection('orders').get('o').statusFinanceiro,'pendente');
+   assert.equal(db.collection('products').get('p').estoque.reservado,2);
+ }
+});
+test('conciliação de cartão registrado como aprovado confirma e baixa estoque uma vez',async()=>{
+ const db=dbTeste({metodo:'credit_card',status:'approved'});
+ assert.equal((await reconciliarPagamentoOnline(db)).atualizados,1);
+ assert.equal(db.collection('orders').get('o').statusFinanceiro,'aprovado');
+ assert.equal(db.collection('products').get('p').estoque.quantidade,8);
+ assert.equal((await reconciliarPagamentoOnline(db)).atualizados,0);
+});
+test('conciliação não usa cobrança Pix para confirmar pedido de cartão',async()=>{
+ const db=dbTeste({metodo:'credit_card',status:'approved'});
+ db.collection('payments').update('pg',{metodo:'pix'});
+ const r=await reconciliarPagamentoOnline(db);
+ assert.equal(r.erros,1);
+ assert.equal(db.collection('orders').get('o').statusFinanceiro,'pendente');
+ assert.equal(db.collection('products').get('p').estoque.quantidade,10);
 });

@@ -103,7 +103,7 @@ test('sem mídia ainda permite ensaiar somente o banco sem diretório externo', 
   assert.equal(result.transitoriosDescartados, 3);
 });
 
-test('alarme da Cloudflare reprograma usando função existente Pix+estornos', async () => {
+test('alarme da Cloudflare reprograma usando pagamentos online e estornos', async () => {
   const worker = await fs.readFile(path.join(base, 'src/cloudflare/worker.js'), 'utf8');
   assert.match(worker, /async programarAlarmeFinanceiro\(\)/);
   assert.doesNotMatch(worker, /programarAlarmePix/, 'não deve sobrar chamada ao nome antigo');
@@ -112,5 +112,5 @@ test('alarme da Cloudflare reprograma usando função existente Pix+estornos', a
   assert.match(worker, /reagendar: \(\) => this\.programarAlarmeFinanceiro\(\)/,
     'alarme deve delegar o reagendamento à rotina testada sob falhas');
   assert.match(worker, /executarAlarmeFinanceiro\(/);
-  assert.match(worker, /temPixPendente\(this\.db\).*temEstornoPendente\(this\.db\)/);
+  assert.match(worker, /temPagamentoOnlinePendente\(this\.db\).*temEstornoPendente\(this\.db\)/);
 });

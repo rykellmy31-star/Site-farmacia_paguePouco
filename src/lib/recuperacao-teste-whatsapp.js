@@ -13,8 +13,8 @@ const TESTE_ID='testeRecuperacaoWhatsapp';
 export const TIPOS_TESTE_RECUPERACAO=Object.freeze({
   carrinho_global_lembrete:'🌎 Carrinho global — lembrete',
   carrinho_global_cupom:'🌎 Carrinho global — cupom',
-  pix_pendente_lembrete:'💳 Pedido global Pix pendente — lembrete',
-  pix_encerrado_cupom:'💳 Pedido global Pix encerrado — cupom',
+  pagamento_pendente_lembrete:'💳 Pagamento global pendente — lembrete',
+  pagamento_encerrado_cupom:'💳 Pagamento global não concluído — cupom',
   carrinho_local_lembrete:'🏪 Carrinho local — lembrete',
   carrinho_local_cupom:'🏪 Carrinho local — cupom',
 });
@@ -24,7 +24,7 @@ const brl=centavos=>(Number(centavos||0)/100).toLocaleString('pt-BR',{
 function textoTeste(db,tipo) {
   const sitio=String(config.publicBaseUrl||'https://site.farmaciapaguepouco.app').replace(/\/+$/,'');
   const modo=tipo.startsWith('carrinho_local_')?'local':
-    tipo.startsWith('pix_')?'pedido':'nacional';
+    tipo.startsWith('pagamento_')?'pedido':'nacional';
   const cfg=modo==='local'?configRecuperacaoLocal(db):
     modo==='pedido'?configRecuperacaoPedido(db):configRecuperacao(db);
   const desconto=String(cfg.descontoPercentual).replace('.',',');
@@ -40,11 +40,11 @@ function textoTeste(db,tipo) {
     case 'carrinho_global_cupom':
       mensagem='🛒 Você deixou produtos no carrinho.\n'+cupom+'Retome sua compra: '+sitio;
       break;
-    case 'pix_pendente_lembrete':
+    case 'pagamento_pendente_lembrete':
       mensagem='💳 O pagamento do pedido de exemplo *#TESTE-123* ainda não foi confirmado.\n'+
         'Confira o pedido no site, sem gerar uma cobrança duplicada: '+sitio;
       break;
-    case 'pix_encerrado_cupom':
+    case 'pagamento_encerrado_cupom':
       mensagem='💳 A cobrança de exemplo foi encerrada sem aprovação.\n'+
         cupom+'Você pode retomar a compra e gerar um novo pagamento pelo site: '+sitio;
       break;

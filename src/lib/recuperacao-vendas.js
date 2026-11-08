@@ -307,14 +307,15 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
 }
 
 /**
- * Pedidos online Pix registrados não são carrinhos abandonados.
+ * Pedidos online com cobrança registrada (Pix ou cartão) não são carrinhos abandonados.
  * Para evitar indicar incorretamente que alguém não pagou, somente mensagens
  * de pagamento ainda pendente exigem confirmação autenticada do provedor há
  * menos de 15 minutos. Novo desconto apenas após expiração/recusa confirmada.
  */
 export function pedidoOnlineRecuperavel(db,pedido,{agora=Date.now(),cupom=false}={}) {
   if (!pedido?.clienteId || pedido.pagamentoPresencial ||
-      pedido.metodoPagamento!=='pix' || !pedido.pagamentoId ||
+      !['pix','credit_card','debit_card'].includes(pedido.metodoPagamento) ||
+      !pedido.pagamentoId ||
       pedido.statusOperacional==='cancelado' && pedido.statusFinanceiro==='pendente' ||
       !['pendente','expirado','recusado'].includes(pedido.statusFinanceiro) ||
       pedido.pendenciaPagamento==='conciliacao_necessaria') return false;
@@ -323,7 +324,7 @@ export function pedidoOnlineRecuperavel(db,pedido,{agora=Date.now(),cupom=false}
   if (destinoPedidoLocal(cep,sede)) return false;
   const pagamento=db.collection('payments').get(pedido.pagamentoId);
   if (!pagamento || pagamento.provedor!=='mercadopago' ||
-      pagamento.metodo!=='pix' || pagamento.pedidoId!==pedido.id ||
+      pagamento.metodo!==pedido.metodoPagamento || pagamento.pedidoId!==pedido.id ||
       Number(pagamento.valorCentavos)!==Number(pedido.totalCentavos)) return false;
   const mesmoCliente=db.collection('orders').all().filter(o=>o.clienteId===pedido.clienteId && o.id!==pedido.id);
   if (mesmoCliente.some(o=>o.statusFinanceiro==='aprovado' &&
@@ -411,7 +412,7 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
         criadoEm:nowISO(),cupomId:null,token});
       resumo.pedidosLembretes=(resumo.pedidosLembretes||0)+1;
     }
-    // Não ofereça desconto enquanto existir Pix válido/pagamento incerto.
+    // Não ofereça desconto enquanto houver cobrança válida ou situação de pagamento incerta.
     if (idadeHoras<cfg.enviarCupomAposHoras ||
         !pedidoOnlineRecuperavel(db,pedido,{agora,cupom:true})) continue;
     const cupomId='recuperacao:pedido:cupom:'+pedido.id;
@@ -476,6 +477,7 @@ export function painelRecuperacao(db) {
     lembretesPedidos:campanhas.filter(c=>c.tipo==='pedido_lembrete').length,
     cuponsPedidos:campanhas.filter(c=>c.tipo==='pedido_cupom').length,
     pedidosOnlinePendentes:pedidos.filter(p=>!p.pagamentoPresencial &&
+      ['pix','credit_card','debit_card'].includes(p.metodoPagamento) &&
       p.statusFinanceiro==='pendente').length,
     receitaRecuperadaCentavos:recuperados.reduce((n,p)=>n+Number(p.totalCentavos||0),0),
     linhas:campanhas.slice(0,100).map(c=>({

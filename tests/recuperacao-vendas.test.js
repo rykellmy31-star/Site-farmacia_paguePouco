@@ -309,7 +309,7 @@ test('mudança de destino antes do envio cancela campanha local e não entrega d
 });
 
 
-function pixOnlineFixture({idade=2,estado='pendente',consentido=true,cepPedido='29885000'}={}) {
+function pixOnlineFixture({idade=2,estado='pendente',consentido=true,cepPedido='29885000',metodo='pix'}={}) {
   const x=fixture({idade:26,cepDestino:'45970000',localAtivo:true});
   const {db,agora,iso}=x;
   db.collection('settings').insert({id:'recuperacaoPedidoOnline',ativo:true,
@@ -319,14 +319,14 @@ function pixOnlineFixture({idade=2,estado='pendente',consentido=true,cepPedido='
   db.collection('customers').update('cliente-1',{marketing:consentido});
   const pedido=db.collection('orders').insert({id:'pedido-online',codigo:'PP-1234',
     clienteId:'cliente-1',carrinhoId:'c-1',
-    criadoEm:iso(idade),metodoPagamento:'pix',pagamentoId:'mp_101',
+    criadoEm:iso(idade),metodoPagamento:metodo,pagamentoId:'mp_101',
     pagamentoPresencial:null,pendenciaPagamento:null,
     statusFinanceiro:estado,totalCentavos:15200,
     endereco:{cep:cepPedido,cidade:'Ponto Belo',uf:'ES'},
   });
   const pago=estado==='expirado'?'expired':estado==='recusado'?'rejected':'pending';
   const pagamento=db.collection('payments').insert({id:'mp_101',
-    pedidoId:pedido.id,metodo:'pix',provedor:'mercadopago',valorCentavos:15200,
+    pedidoId:pedido.id,metodo,provedor:'mercadopago',valorCentavos:15200,
     status:pago,ultimoStatusConfirmado:pago,
     ultimaConfirmacaoProvedorEm:new Date(agora-60_000).toISOString(),
   });
@@ -454,4 +454,52 @@ test('configuração de pedido online isolada, desligada de fábrica e limites c
  assert.match(ui,/Cupom de pedido não pago após/);
  assert.match(conta,/novoCarrinhoId\(\)/);
  assert.match(recon,/ultimaConfirmacaoProvedorEm/);
+});
+
+
+test('recuperação de pagamento aceita cartão de crédito pendente quando provedor confirma',()=>{
+ const {db,agora,pedido,pagamento}=pixOnlineFixture({metodo:'credit_card',idade:2});
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora}),true);
+ const r=executarRecuperacao(db,{agora});
+ assert.equal(r.pedidosLembretes,1);
+ assert.equal(r.lembretes,0);
+ const item=db.collection('evolutionWhatsappOutbox').all()[0];
+ assert.equal(item.tipo,'recuperacao_pedido_lembrete');
+ assert.match(item.texto,/pagamento do seu pedido/);
+ assert.doesNotMatch(item.texto,/pix/i);
+ db.collection('payments').update(pagamento.id,{ultimoStatusConfirmado:'approved'});
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora}),false);
+});
+test('recuperação de cartão de débito recusado permite cupom só após status terminal confirmado',()=>{
+ const {db,agora,pedido,pagamento}=pixOnlineFixture({
+   metodo:'debit_card',idade:6,estado:'recusado'
+ });
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora,cupom:true}),true);
+ const r=executarRecuperacao(db,{agora});
+ assert.equal(r.pedidosCupons,1);
+ const cupom=db.collection('coupons').all()[0];
+ assert.equal(cupom.modoRecuperacao,'pedido');
+ assert.equal(cupom.valor,7);
+ db.collection('payments').update(pagamento.id,{ultimoStatusConfirmado:'pending'});
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora,cupom:true}),false);
+});
+test('nunca mistura método de pagamento do pedido com cobrança e não inclui dinheiro presencial',()=>{
+ const x=pixOnlineFixture({metodo:'credit_card',idade:2});
+ x.db.collection('payments').update('mp_101',{metodo:'pix'});
+ assert.equal(pedidoOnlineRecuperavel(x.db,x.pedido,{agora:x.agora}),false);
+ const y=pixOnlineFixture({metodo:'credit_card',idade:2});
+ y.db.collection('orders').update(y.pedido.id,{pagamentoPresencial:{metodo:'card_machine'}});
+ assert.equal(pedidoOnlineRecuperavel(y.db,y.db.collection('orders').get(y.pedido.id),{agora:y.agora}),false);
+});
+test('painel e testador não exibem modalidade limitada a Pix',()=>{
+ const ui=readFileSync(new URL('../src/views/admin/recuperacao-vendas.js',import.meta.url),'utf8');
+ const testador=readFileSync(new URL('../src/lib/recuperacao-teste-whatsapp.js',import.meta.url),'utf8');
+ const worker=readFileSync(new URL('../src/cloudflare/worker.js',import.meta.url),'utf8');
+ assert.match(ui,/Pagamento global pendente/);
+ assert.match(ui,/Lembretes de pagamento/);
+ assert.doesNotMatch(ui,/Lembretes de Pix|Pedido global Pix|Pix não pago/);
+ assert.match(testador,/Pagamento global pendente/);
+ assert.doesNotMatch(testador,/Pedido global Pix pendente/);
+ assert.match(worker,/reconciliarPagamentoOnline/);
+ assert.match(worker,/temPagamentoOnlinePendente/);
 });

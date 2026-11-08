@@ -42,12 +42,12 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
   };
   const formPedido = '<form method="post" action="/admin/recuperacao-vendas/pedidos/configurar">'+
     '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
-    c({nome:'ativo',rotulo:'Ativar recuperação global de pedidos online Pix não pagos',tipo:'checkbox',valor:pedido.ativo})+
+    c({nome:'ativo',rotulo:'Ativar recuperação global de pagamentos online não confirmados',tipo:'checkbox',valor:pedido.ativo})+
     '<p class="texto-pequeno">Funciona separadamente dos carrinhos globais e locais. '+
-    'Acompanha pedidos online após a emissão do Pix. Envia lembrete somente após '+
+    'Acompanha pedidos com pagamento online gerado (Pix ou cartão, conforme disponibilidade). Envia lembrete somente após '+
     'confirmar no Mercado Pago que a cobrança continua pendente. '+
     'Cupom para uma nova compra somente após a cobrança anterior ser confirmada como expirada ou recusada. '+
-    'Não gera Pix adicional automaticamente e não altera o valor da cobrança antiga.</p>'+
+    'Não gera nova cobrança automaticamente e não altera o valor do pagamento anterior.</p>'+
     '<div style="display:flex;flex-wrap:wrap;gap:15px">'+
       c({nome:'primeiroLembreteHoras',rotulo:'Lembrete de pagamento após (horas)',tipo:'number',valor:pedido.primeiroLembreteHoras,min:1,max:168,step:1})+
       c({nome:'enviarCupomAposHoras',rotulo:'Cupom de pedido não pago após (horas)',tipo:'number',valor:pedido.enviarCupomAposHoras,min:2,max:720,step:1})+
@@ -123,7 +123,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
     '<p><button type="submit" class="botao destaque">📲 Enviar mensagem de teste</button></p>'+
     '</form>'+
     '<p class="texto-pequeno">Envio imediato por clique, sem esperar 1 hora. '+
-    'Não gera cupons, pedidos, Pix ou campanhas e não altera métricas. '+
+    'Não gera cupons, pedidos, cobranças ou campanhas e não altera métricas. '+
     'Há intervalo mínimo de 60 segundos entre testes. O aceite pela API não garante a entrega no aparelho.</p>'+
     '</section>';
   const linhas=resumo.linhas.map(x=>
@@ -148,7 +148,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
     linhaResumo('Cupons individuais',resumo.cuponsGerados)+
     linhaResumo('Cupons locais',resumo.cuponsLocais)+
     linhaResumo('Cupons nacionais',resumo.cuponsNacionais)+
-    linhaResumo('Lembretes de Pix',resumo.lembretesPedidos)+
+    linhaResumo('Lembretes de pagamento',resumo.lembretesPedidos)+
     linhaResumo('Cupons de pedidos não pagos',resumo.cuponsPedidos)+
     linhaResumo('Pedidos online pendentes',resumo.pedidosOnlinePendentes)+
     linhaResumo('Mensagens enviadas',resumo.enviados)+
@@ -163,14 +163,14 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
       '<p>Recupere carrinhos autorizados usando o <strong>mesmo número e instância da Evolution API dos pedidos</strong>. '+
       'As mensagens usam ❤️ e o lema <strong>Farmácia Pague Pouco, cuidando da sua saúde.</strong></p>'+
       (erro?'<div class="alerta erro" role="alert">'+e(erro)+'</div>':'')+
-      '<p class="texto-pequeno">Carrinho global: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong> • Pix não pago: <strong>'+(pedido.ativo?'Ativado':'Desativado')+'</strong> • Local: <strong>'+(local.ativo?'Ativado':'Desativado')+'</strong>. '+
+      '<p class="texto-pequeno">Carrinho global: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong> • Pagamento não confirmado: <strong>'+(pedido.ativo?'Ativado':'Desativado')+'</strong> • Local: <strong>'+(local.ativo?'Ativado':'Desativado')+'</strong>. '+
         'Apenas clientes com consentimento de ofertas, endereço conhecido e carrinhos recentes elegíveis são contatados. '+
-        'Quando um pedido é gerado, o carrinho para de enviar mensagens. Pedidos Pix não pagos seguem suas regras próprias; após pagamento aprovado, a recuperação é interrompida. '+
+        'Quando um pedido é gerado, o carrinho para de enviar mensagens. Pedidos online não pagos seguem suas regras próprias; após pagamento aprovado, a recuperação é interrompida. '+
         'O cliente pode cancelar ofertas em Minha conta → Meus dados.</p>'+
       indicadores+
       painel({titulo:'📲 Testar envio de recuperação pelo WhatsApp',corpo:painelTeste})+
       painel({titulo:'🌎 Carrinho global abandonado — configurações e cupons',corpo:form})+
-      painel({titulo:'💳 Pedido global não pago — configurações e cupons',corpo:formPedido})+
+      painel({titulo:'💳 Pagamento global pendente — configurações e cupons',corpo:formPedido})+
       painel({titulo:'🏪 Recuperação local — configurações e cupons',corpo:formLocal})+
       painel({titulo:'Histórico das últimas 100 ações',corpo:historico,semPadding:true})+
       '<p class="texto-pequeno">Receita recuperada conta somente pedidos com pagamento aprovado e cupom individual utilizado. '+

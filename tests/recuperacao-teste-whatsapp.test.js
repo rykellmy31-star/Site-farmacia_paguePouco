@@ -49,7 +49,7 @@ test('os seis modelos de teste são reais exemplos, sem cupom ou cobrança',()=>
  }
  const global=prepararTesteRecuperacao(db,{numero,tipo:'carrinho_global_cupom',confirmado:true});
  const local=prepararTesteRecuperacao(db,{numero,tipo:'carrinho_local_cupom',confirmado:true});
- const pagamento=prepararTesteRecuperacao(db,{numero,tipo:'pix_encerrado_cupom',confirmado:true});
+ const pagamento=prepararTesteRecuperacao(db,{numero,tipo:'pagamento_encerrado_cupom',confirmado:true});
  assert.match(global.texto,/5%/);
  assert.match(local.texto,/4%/);
  assert.match(pagamento.texto,/7%/);
@@ -79,7 +79,7 @@ test('um clique envia uma mensagem apenas para número escolhido usando Evolutio
  const enviadas=[];
  const agora=Date.now();
  const enviar=async(url,opts)=>{enviadas.push({url,opts});return {ok:true,status:200};};
- const dados={numero,tipo:'pix_pendente_lembrete',confirmado:true};
+ const dados={numero,tipo:'pagamento_pendente_lembrete',confirmado:true};
  const r=await enviarTesteRecuperacao(db,env,dados,{enviar,agora});
  assert.deepEqual(r,{ok:true,codigo:'enviado'});
  assert.equal(enviadas.length,1);
