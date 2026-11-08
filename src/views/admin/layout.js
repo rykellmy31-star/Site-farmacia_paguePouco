@@ -15,6 +15,7 @@ const MENU = [
   { id: 'relatorio_vendas_operacional', rotulo: 'Relatório de vendas', href: '/admin/relatorio-vendas', perm: 'pedidos.ver', icone: '📋' },
   { id: 'vendedores', rotulo: 'Vendedores', href: '/admin/vendedores', perm: 'vendedores.ver', icone: '🏷️' },
   { id: 'clientes', rotulo: 'Clientes', href: '/admin/clientes', perm: 'clientes.ver', icone: '👥' },
+  { id: 'visitas_site', rotulo: 'Visitas e conversões', href: '/admin/visitas', perm: 'relatorios.ver', somenteAdmin: true, icone: '👁️' },
   { id: 'promocoes', rotulo: 'Cupons e promoções', href: '/admin/promocoes', perm: 'promocoes.ver', icone: '🏷️' },
   { id: 'pagamentos', rotulo: 'Pagamentos', href: '/admin/pagamentos', perm: 'pagamentos.ver', icone: '💳' },
   { id: 'relatorios', rotulo: 'Relatórios', href: '/admin/relatorios', perm: 'relatorios.ver', icone: '📈' },
@@ -38,7 +39,8 @@ export function paginaAdmin(ctx, { titulo, conteudo, ativo = '', headExtra = '',
   const empresa = ctx.settings.empresa || {};
   const menuHtml = MENU.map((item) => {
     if (item.separador) return `<li class="separador-menu">${e(item.separador)}</li>`;
-    if (!can(usuario, item.perm) || (item.somenteSuperadmin && usuario?.role !== 'super_admin')) return '';
+    if (!can(usuario, item.perm) || (item.somenteSuperadmin && usuario?.role !== 'super_admin') ||
+      (item.somenteAdmin && !['super_admin','admin'].includes(usuario?.role))) return '';
     return `<li><a href="${e(item.href)}" class="${ativo === item.id ? 'ativo' : ''}">
       <span aria-hidden="true">${item.icone}</span> ${e(item.rotulo)}</a></li>`;
   }).join('').replace(/<li class="separador-menu">(.*?)<\/li>(<li><\/li>)*/g, (m, p1) => {
