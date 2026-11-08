@@ -137,12 +137,15 @@ export function estoqueDisponivel(produto) {
 
 export function precoVigenteCentavos(produto, referencia = new Date()) {
   const normal = Number(produto?.precoCentavos || 0);
+  const interno = Number(produto?.precoInternoInovaCentavos || 0);
+  // Quando o InovaFarma informa um desconto no cadastro interno, este é
+  // o preço autoritativo do SKU. Não combinar com descontos manuais ou
+  // campanhas. Produtos sem promoção interna seguem as regras do site.
+  if (interno > 0 && interno < normal) return interno;
   const inova = precoPromocaoInovaVigente(produto, referencia);
   if (inova != null) return inova;
   const promo = Number(produto?.precoPromocionalCentavos || 0);
-  if (promo > 0 && promo < normal) return promo; // preço manual preservado
-  const interno = Number(produto?.precoInternoInovaCentavos || 0);
-  return interno > 0 && interno < normal ? interno : normal;
+  return promo > 0 && promo < normal ? promo : normal;
 }
 
 export function temPromocao(produto, referencia = new Date()) {
