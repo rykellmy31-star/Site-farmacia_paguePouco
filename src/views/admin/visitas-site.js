@@ -67,7 +67,7 @@ export function telaVisitasSite(ctx,{relatorio,db}) {
     </p>`;
   const body = linhas.map(v=>{
     const cliente = v.clienteId ? db.collection('customers').get(v.clienteId) : null;
-    const identificador = 'Navegador •••' + String(v.navegadorId).slice(-6);
+    const identificador = 'Visita •••' + String(v.codigoDia || v.navegadorId).slice(-6);
     const semPedido = Math.max(0,Number(v.iniciosCheckout||0)-Number(v.pedidosCriados||0));
     return '<tr>'+
       '<td>'+e(String(v.data).split('-').reverse().join('/'))+'</td>'+
