@@ -17,6 +17,7 @@ import { config } from '../config.js';
 import { uid } from '../lib/store.js';
 import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 import { pedidoPresencialPorCEP } from '../lib/pagamento-presencial.js';
+import { registrarVisita } from '../lib/visitas-site.js';
 
 function exigirLoginCompra(req, res, db) {
   if (req.user) return true;
@@ -88,6 +89,7 @@ export function registrarRotasCheckout(app, db) {
     const cart = normalizeCart(db, ctx.cart).cart;
     ctx.cart = cart;
     if (!cart.itens.length) return void res.html(telaCheckoutVazio(ctx));
+    registrarVisita(db,req,res,'checkout');
     const totais = calcularTotais(db, cart, {});
     const enderecos=req.user?.enderecos || [];
     const salvo=enderecos.find(en=>en.padrao)||enderecos[0]||null;
@@ -340,6 +342,7 @@ export function registrarRotasCheckout(app, db) {
     }
 
     const pedido = resultado.pedido;
+    registrarVisita(db,req,res,'pedido',{pedidoId:pedido.id});
     // Aceite registrado uma unica vez; nao altera preferencias de marketing.
     // E valido apenas para o mesmo numero e pode ser revogado em Meus dados.
     if (autorizouAgora && req.user && !autorizouWhatsappProdutos(req.user)) {
