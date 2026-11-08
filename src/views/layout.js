@@ -209,7 +209,7 @@ function rodape(ctx) {
   <footer class="rodape">
     <div class="container">
       <div class="rodape-grade">
-        <div>
+        <div class="rodape-loja">
           <h4>${e(empresa.nomeFantasia || 'Farmácia Pague Pouco')}</h4>
           <p>${e(textoInstitucionalDinamico(rodapeCfg.textoInstitucional || '', empresa))}</p>
           <p class="mb-0">
@@ -222,11 +222,11 @@ function rodape(ctx) {
           </div>
         </div>
         ${(rodapeCfg.colunas || []).map((col) => `
-          <div>
+          <div class="rodape-coluna">
             <h4>${e(col.titulo)}</h4>
             <ul>${(col.links || []).map((l) => `<li><a href="${e(l.url)}">${e(l.texto)}</a></li>`).join('')}</ul>
           </div>`).join('')}
-        <div>
+        <div class="rodape-atendimento">
           <h4>Atendimento</h4>
           <p>${e(empresa.horarioAtendimento || '')}</p>
           ${whatsapp.ativo && link ? `<p class="rodape-whatsapp-linha"><a class="rodape-whatsapp-link" href="${e(link)}" target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp"><span class="rodape-whatsapp-icone" aria-hidden="true">${ICONES.whatsapp}</span><span>Falar no WhatsApp</span></a></p>` : ''}
@@ -302,7 +302,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=selo-off-intensidade-20261108">
+<link rel="stylesheet" href="/styles.css?v=rodape-compacto-20261108">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
