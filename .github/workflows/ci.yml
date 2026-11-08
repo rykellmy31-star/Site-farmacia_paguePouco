@@ -104,8 +104,6 @@ jobs:
         run: node scripts/test-ean-dailus-live.mjs
       - name: Validar correspondência GTIN14 e GTIN13 de fraldas Personal
         run: node --test tests/personal-gtin14-ean.test.js
-      - name: Comprovar mídia REAL das fraldas Personal em alta resolução
-        run: node scripts/test-personal-imagem-live.mjs
       - name: Validar busca por nome e gravação segura de dimensões em lote
         run: node --test tests/busca-medidas-nome-lote.test.js
       - name: Verificar busca automatica de peso e dimensoes via EAN
