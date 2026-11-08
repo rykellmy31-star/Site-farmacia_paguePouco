@@ -74,6 +74,12 @@ export function registrarVisita(db, req, res, tipo, { cliente = null, pedidoId =
   return { registrado: true };
 }
 
+/** Ao sair da conta, impede atribuir navegação posterior à pessoa anterior. */
+export function separarVisitaAoSair(req,res) {
+  res?.clearCookie?.(COOKIE);
+  if (req.cookies) delete req.cookies[COOKIE];
+}
+
 export function revogarVisitas(db, req, res) {
   const id = String(req?.cookies?.[COOKIE] || '');
   if (ID_VALIDO.test(id)) db.collection(COLECAO).remove(id);
@@ -99,6 +105,8 @@ export function relatorioVisitas(db, { agora = Date.now(), dias = 90, limite = 2
     visitas: soma('visitas'), paginas: soma('paginas'),
     cliquesCarrinho: soma('cliquesCarrinho'), iniciosCheckout: soma('iniciosCheckout'),
     pedidosCriados: soma('pedidosCriados'), logins: soma('logins'),
+    possiveisDesistencias: todos.reduce((total,v)=>total+
+      Math.max(0,Number(v.iniciosCheckout||0)-Number(v.pedidosCriados||0)),0),
     linhas: todos.slice(0, Math.max(1, Math.min(500, limite))),
     dias,
   };
