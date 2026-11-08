@@ -118,7 +118,7 @@ export function registrarVisita(db, req, res, tipo, { cliente = null, pedidoId =
   let linha = diario.get(idDiario);
   if (!linha) {
     linha = diario.insert({
-      id: idDiario, navegadorId: id, data, primeiroAcesso: instante,
+      id: idDiario, navegadorId: id, data, codigoDia: randomToken(9), primeiroAcesso: instante,
       ultimoAcesso: instante, clienteId: clienteReal?.id || null,
       visitas: 0, paginas: 0, cliquesCarrinho: 0, iniciosCheckout: 0,
       pedidosCriados: 0, logins: 0, cadastros: 0,
