@@ -409,6 +409,16 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
           Já pagou? <a class="botao pequeno secundario" href="/checkout/confirmacao/${e(pedido.codigo)}">Atualizar situação do Pix</a>
           <span class="texto-pequeno texto-suave">Consulta segura ao Mercado Pago, no máximo uma vez por minuto. Não gera nova cobrança.</span>
         </p>` : ''}
+      </div>` : pagamento?.metodo === 'checkout_pro' ? `
+      <div class="cartao mt-2" role="status">
+        <h3>Pagamento com cartão — Mercado Pago</h3>
+        <p>Status atual: <strong>${e(String(pedido.statusFinanceiro || ''))}</strong>.</p>
+        ${pedido.statusFinanceiro === 'pendente' && !pagamento.transacaoId && pagamento.checkoutUrl
+          ? `<p>O pagamento ainda não foi concluído. Você pode continuar na página segura do Mercado Pago.</p>
+             <a class="botao destaque" href="${e(pagamento.checkoutUrl)}" rel="noopener noreferrer">
+               Continuar pagamento com cartão no Mercado Pago</a>`
+          : ''}
+        <p class="texto-pequeno texto-suave">A aprovação é confirmada diretamente pelo Mercado Pago. Não considere o pedido pago apenas por ter retornado ao site.</p>
       </div>` : `
       <div class="cartao mt-2">
         <h3>${pagamento?.metodo === 'pix' ? 'Pagamento Pix' : 'Pagamento com cartão'}</h3>
