@@ -76,7 +76,7 @@ export function registrarVisita(db, req, res, tipo, { cliente = null, pedidoId =
 
 export function revogarVisitas(db, req, res) {
   const id = String(req?.cookies?.[COOKIE] || '');
-  if (ID_VALIDO.test(id)) db.collection(COLECAO).delete(id);
+  if (ID_VALIDO.test(id)) db.collection(COLECAO).remove(id);
   res?.clearCookie?.(COOKIE);
   if (req.cookies) delete req.cookies[COOKIE];
 }
@@ -87,7 +87,7 @@ export function relatorioVisitas(db, { agora = Date.now(), dias = 90, limite = 2
   const fimRetencao = agora - LIMITE_DIAS * 86_400_000;
   for (const v of col.all()) {
     const ultimo = Date.parse(v.ultimoAcesso || '');
-    if (!Number.isFinite(ultimo) || ultimo < fimRetencao) col.delete(v.id);
+    if (!Number.isFinite(ultimo) || ultimo < fimRetencao) col.remove(v.id);
   }
   const inicio = agora - Math.max(1, Math.min(LIMITE_DIAS, Number(dias) || 90)) * 86_400_000;
   const todos = col.all().filter(v => Date.parse(v.ultimoAcesso) >= inicio)
