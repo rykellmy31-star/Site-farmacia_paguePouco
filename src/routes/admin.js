@@ -10,6 +10,8 @@ import { inovaAtiva } from '../lib/inovafarma-stock.js';
 import { telaImportacaoCatalogoInova } from '../views/admin/inovafarma-catalog.js';
 import { telaPreviaRelatorioInova } from '../views/admin/inova-csv.js';
 import { telaImportacaoEstoque } from '../views/admin/importacao-estoque.js';
+import { telaPreviaPrecosInternos } from '../views/admin/inova-precos-internos-previa.js';
+import { prepararPrecosInternos, consultarPrecosInternos, aplicarPrecosInternos } from '../lib/inova-precos-internos-aplicacao.js';
 import { telaSubstituirCatalogoInova, telaRevisaoSubstituirCatalogoInova, telaPendenciasSubstituicaoInova } from '../views/admin/substituir-catalogo-inova.js';
 import { prepararSubstituicaoCatalogoInova, consultarSubstituicaoCatalogoInova, aplicarSubstituicaoCatalogoInova, identificarBloqueiosSubstituicaoInova, conciliarQuarentenaSubstituicaoInova, ErroSubstituicaoInova } from '../lib/inovafarma-catalogo-substituicao.js';
 import { telaPreviaLimpezaInova } from '../views/admin/limpeza-catalogo-inova.js';
@@ -517,6 +519,72 @@ export function registrarRotasAdmin(app, db) {
       return void res.status(403).html('403 — Importação de estoque restrita ao Super Administrador.');
     res.set('Cache-Control', 'no-store');
     res.html(telaImportacaoEstoque(ctxAdmin(req, db)));
+  });
+
+
+  // Importação opcional do Excel de Gerenciar Produtos (preço VENDA e
+  // preço PROMOÇÃO internos). Totalmente separada do robô e de campanhas.
+  app.post('/admin/estoque/precos-internos/preparar',
+    {maxBodyBytes:8*1024*1024+128*1024},(req,res)=>{
+    if(!guard(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente Super Administrador pode conferir os preços.');
+    res.set('Cache-Control','no-store');
+    const arquivo=(req.files||[]).find(f=>f.field==='arquivo');
+    const nome=String(arquivo?.filename||'');
+    if(!arquivo||!arquivo.data?.length||arquivo.data.length>8*1024*1024||
+       !(/\.xlsx$/i.test(nome)||(!nome.includes('.')&&arquivo.data[0]===80&&arquivo.data[1]===75)))
+      return void res.status(400).html('Selecione a exportação XLSX de Gerenciar Produtos (até 8 MB).');
+    const resp=prepararPrecosInternos(db,arquivo.data,req.adminUser.id);
+    if(!resp.ok)return void res.status(resp.status||400).html(paginaAdmin(ctxAdmin(req,db),{
+      titulo:'Arquivo XLSX não aceito',ativo:'importacao_estoque',
+      conteudo:'<h1>Não foi possível ler os preços</h1><p>'+e(resp.erro)+
+        '</p><a href="/admin/estoque/importar">Voltar</a>'}));
+    logAdmin(db,req.adminUser,'conferiu_preco_interno_inovafarma','sistema',resp.id,{
+      produtos:resp.resumo.total,aptos:resp.resumo.aplicaveis,
+      descontos:resp.resumo.comDesconto
+    },req);
+    res.redirect('/admin/estoque/precos-internos/revisar/'+encodeURIComponent(resp.id));
+  });
+
+  app.get('/admin/estoque/precos-internos/revisar/:id',(req,res)=>{
+    if(!guard(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente Super Administrador pode conferir preços.');
+    const prev=consultarPrecosInternos(db,String(req.params.id),req.adminUser.id);
+    res.set('Cache-Control','no-store');
+    if(!prev.ok)return void res.status(prev.status||409).html(paginaAdmin(ctxAdmin(req,db),{
+      titulo:'Prévia indisponível',ativo:'importacao_estoque',
+      conteudo:'<h1>Prévia indisponível</h1><p>'+e(prev.erro)+
+        '</p><a href="/admin/estoque/importar">Reenviar Excel</a>'}));
+    res.html(telaPreviaPrecosInternos(ctxAdmin(req,db),prev));
+  });
+
+  app.post('/admin/estoque/precos-internos/aplicar',(req,res)=>{
+    if(!guard(req,res,'produtos.editar'))return;
+    if(req.adminUser.role!=='super_admin')
+      return void res.status(403).html('Somente Super Administrador pode aplicar preços.');
+    const resultado=aplicarPrecosInternos(db,String(req.body.loteId||''),
+      req.adminUser.id,{
+        confirmado:String(req.body.confirmado||''),
+        autorizacaoOnline:String(req.body.autorizacaoOnline||''),
+        frase:String(req.body.frase||''),
+      });
+    res.set('Cache-Control','no-store');
+    if(!resultado.ok)return void res.status(resultado.status||409).html(paginaAdmin(ctxAdmin(req,db),{
+      titulo:'Nenhum preço aplicado',ativo:'importacao_estoque',
+      conteudo:'<h1>Aplicação não concluída</h1><p>'+e(resultado.erro)+
+        '</p><a href="/admin/estoque/importar">Voltar à importação</a>'}));
+    logAdmin(db,req.adminUser,'aplicou_precos_internos_inovafarma',
+      'sistema',req.body.loteId,{atualizados:resultado.atualizados},req);
+    res.html(paginaAdmin(ctxAdmin(req,db),{
+      titulo:'Preços internos atualizados',ativo:'importacao_estoque',
+      conteudo:'<h1>Atualização concluída</h1>'+
+        '<div class="alerta sucesso"><strong>'+e(resultado.atualizados)+
+        ' produtos tiveram preços atualizados.</strong> Estoque, imagens, cadastro sanitário, '+
+        'EAN, ativação e campanhas não foram modificados.</div>'+
+        '<a href="/admin/estoque/importar">Voltar à importação</a>'
+    }));
   });
 
   // Relatório de promoções separado do estoque. Preview em memória, sem gravar
