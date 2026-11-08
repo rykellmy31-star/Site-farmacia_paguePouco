@@ -13,7 +13,7 @@ import { pedidosDoCliente, cancelarPedido } from '../lib/orders.js';
 import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
 import { sendMail } from '../lib/mailer.js';
-import { vincularCarrinhoAoCliente } from '../lib/cart.js';
+import { vincularCarrinhoAoCliente, aplicarCupom, calcularTotais, normalizeCart } from '../lib/cart.js';
 import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
@@ -329,6 +329,19 @@ export function registrarRotasConta(app, db) {
     res.cookie(config.cartCookie,cart.id,{
       maxAge:60*60*24*180,path:'/',httpOnly:false,sameSite:'Lax',
     });
+    // Para links de cupom já ENVIADOS: aplicar automaticamente à seleção original,
+    // validando a conta, o desconto e a validade como no checkout normal.
+    if (campanha.tipo==='cupom' && campanha.cupomId) {
+      const cupom=db.collection('coupons').get(campanha.cupomId);
+      if (cupom?.ativo && cupom.recuperacaoVenda) {
+        const revalidado=normalizeCart(db,cart).cart;
+        const totais=calcularTotais(db,revalidado);
+        aplicarCupom(db,revalidado,cupom.codigo,{
+          subtotalCentavos:totais.subtotalCentavos,
+          clienteId:req.user.id,itens:revalidado.itens,
+        });
+      }
+    }
     res.redirect('/carrinho');
   });
 
