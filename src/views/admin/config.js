@@ -12,6 +12,7 @@ import { ROLES, ROLE_LIST } from '../../lib/permissions.js';
 import { uploadStats } from '../../lib/uploads.js';
 import { normalizarFundoHome } from '../../lib/fundo-home.js';
 import { coresBarraTopo } from '../layout.js';
+import { intensidadeSeloDesconto, estiloSeloDesconto } from '../../lib/efeito-selo-desconto.js';
 
 /* ================================ FRETES ================================ */
 export function telaFretes(ctx, { frete, categorias, produtos }) {
@@ -299,6 +300,7 @@ export function telaConfiguracoes(ctx, { settings }) {
   const tema = settings.tema || {};
   const fundoHome = normalizarFundoHome(tema.fundoHome);
   const coresBarra = coresBarraTopo(tema);
+  const intensidadeSelo = intensidadeSeloDesconto(tema.seloDescontoPulsoIntensidade);
   const loja = settings.loja || {};
   const seo = settings.seo || {};
   const rod = settings.rodape || {};
@@ -384,6 +386,28 @@ export function telaConfiguracoes(ctx, { settings }) {
             </div>
             <span class="dica">Pulso forte com brilho e movimento do texto; respeita acessibilidade. As cores são independentes das demais partes da loja.</span>
           </div>
+          <h4 class="mt-2">Selos verdes de desconto (ex.: 33% OFF)</h4>
+          <p class="texto-pequeno texto-suave">Controle a intensidade da pulsação dos selos de oferta. Em 0%, o selo fica fixo; 100% é o efeito atual; até 200% fica mais forte.</p>
+          <div class="campo">
+            <label for="seloDescontoPulsoIntensidade">Intensidade da pulsação</label>
+            <input type="range" name="seloDescontoPulsoIntensidade" id="seloDescontoPulsoIntensidade"
+              min="0" max="200" step="10" value="${intensidadeSelo}" style="width:100%;max-width:440px">
+            <output for="seloDescontoPulsoIntensidade" id="valorIntensidadeSelo" aria-live="polite">${intensidadeSelo === 0 ? 'Fixo (sem pulsação)' : intensidadeSelo + '%'}</output>
+            <div class="linha" style="flex-wrap:wrap;gap:8px;margin:10px 0">
+              <button type="button" class="botao secundario pequeno" id="seloDescontoFixo">Deixar fixo (sem pulsar)</button>
+              <button type="button" class="botao secundario pequeno" id="seloDescontoPadrao">Voltar ao padrão (100%)</button>
+            </div>
+            <label>Prévia do selo de desconto</label>
+            <div id="previewSeloDesconto" class="preco-oferta" aria-label="Prévia: 33% OFF"
+              style="padding:15px 12px;min-height:65px;background:#fff;border:1px solid #ddd;border-radius:8px;max-width:360px;${estiloSeloDesconto(intensidadeSelo)}">
+              <div class="preco-oferta-topo">
+                <span class="etiqueta-desconto oferta-pulsante">33% OFF</span>
+                <span class="preco-antigo">R$ 59,90</span>
+              </div>
+              <strong style="font-size:1.16rem;color:#16803c">R$ 39,99</strong>
+            </div>
+            <span class="dica">A prévia muda imediatamente. Clique em Salvar aparência para aplicar no site.</span>
+          </div>
           ${campoAdmin({ nome: 'mostrarConsultaCep', rotulo: 'Exibir consulta de CEP no cabeçalho', tipo: 'checkbox', valor: tema.mostrarConsultaCep !== false })}
           <button class="botao" type="submit">Salvar aparência</button>`,
       })}
@@ -466,6 +490,7 @@ export function telaConfiguracoes(ctx, { settings }) {
         <button class="botao" type="submit">Salvar rodapé</button>`,
       })}
     </form>`,
+    corpoExtra: '<script src="/js/admin-selo-desconto.js?v=20261108" defer></script>',
   });
 }
 
