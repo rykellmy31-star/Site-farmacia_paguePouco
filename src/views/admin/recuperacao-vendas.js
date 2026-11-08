@@ -15,7 +15,7 @@ function linhaResumo(rotulo,valor){
   return '<div class="cartao" style="flex:1;min-width:165px;padding:16px"><small>'+e(rotulo)+
     '</small><br><strong style="font-size:1.4em">'+e(String(valor))+'</strong></div>';
 }
-export function telaRecuperacaoVendas(ctx,{cfg,resumo,erro=''}) {
+export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,resumo,erro=''}) {
   const c=campoAdmin;
   const form = '<form method="post" action="/admin/recuperacao-vendas/configurar">'+
     '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
@@ -33,8 +33,37 @@ export function telaRecuperacaoVendas(ctx,{cfg,resumo,erro=''}) {
     c({nome:'apenasPrimeiraCompra',rotulo:'Cupom exclusivo para primeira compra aprovada',tipo:'checkbox',valor:cfg.apenasPrimeiraCompra})+
     '<p class="texto-pequeno">Cupons individuais são vinculados à conta e aos produtos da seleção original. O limite e o prazo são validados no servidor. Nenhum desconto acumula com outro cupom. A validade começa na confirmação do envio.</p>'+
     '<p><button type="submit" class="botao destaque">Salvar configurações</button></p></form>';
+  const local = cfgLocal || {
+    ativo:false,primeiroLembreteHoras:1,enviarCupomAposHoras:4,
+    descontoPercentual:5,descontoMaximoCentavos:1500,
+    compraMinimaCentavos:6000,validadeHoras:48,intervaloDias:15,
+    apenasPrimeiraCompra:true,
+  };
+  const formLocal = '<form method="post" action="/admin/recuperacao-vendas/local/configurar">'+
+    '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+    c({nome:'ativo',rotulo:'Ativar recuperação automática de vendas locais',tipo:'checkbox',valor:local.ativo})+
+    '<p class="texto-pequeno">Configuração independente da recuperação nacional. '+
+    'Atualmente, o checkout permite pagamento presencial apenas para o MESMO CEP da sede. '+
+    'O cliente precisa ter esse CEP no carrinho ou como endereço principal na conta. '+
+    'Sem endereço conhecido, nenhuma modalidade é presumida.</p>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:15px">'+
+      c({nome:'primeiroLembreteHoras',rotulo:'Primeiro lembrete local após (horas)',tipo:'number',valor:local.primeiroLembreteHoras,min:1,max:168,step:1})+
+      c({nome:'enviarCupomAposHoras',rotulo:'Enviar cupom local após (horas)',tipo:'number',valor:local.enviarCupomAposHoras,min:2,max:720,step:1})+
+      c({nome:'descontoPercentual',rotulo:'Desconto local (%)',tipo:'number',valor:local.descontoPercentual,min:0.01,max:50,step:0.01})+
+      c({nome:'descontoMaximo',rotulo:'Desconto máximo local (R$)',tipo:'text',valor:real(local.descontoMaximoCentavos)})+
+      c({nome:'compraMinima',rotulo:'Compra mínima local (R$)',tipo:'text',valor:real(local.compraMinimaCentavos)})+
+      c({nome:'validadeHoras',rotulo:'Validade do cupom local (horas)',tipo:'number',valor:local.validadeHoras,min:1,max:720,step:1})+
+      c({nome:'intervaloDias',rotulo:'Intervalo mínimo entre ofertas locais (dias)',tipo:'number',valor:local.intervaloDias,min:1,max:365,step:1})+
+    '</div>'+
+    c({nome:'apenasPrimeiraCompra',rotulo:'Cupom local somente para primeira compra',tipo:'checkbox',valor:local.apenasPrimeiraCompra})+
+    '<p class="texto-pequeno">O cupom é individual e pode ser utilizado uma única vez no pedido. '+
+    'O pedido é registrado como aguardando pagamento presencial; a venda só entra na receita recuperada '+
+    'quando a equipe confirmar o recebimento. As mensagens param após a criação do pedido. '+
+    'Somente WhatsApp de clientes autorizados e itens promocionais elegíveis.</p>'+
+    '<p><button type="submit" class="botao destaque">Salvar recuperação local</button></p></form>';
   const linhas=resumo.linhas.map(x=>
     '<tr><td>'+e(data(x.criadoEm))+'</td><td>'+e(x.nome)+'</td>'+
+    '<td>'+e(x.modo==='local'?'🏪 Local':'🌎 Nacional')+'</td>'+ 
     '<td>'+e(x.tipo==='cupom'?'Cupom':'Lembrete')+'</td>'+
     '<td><strong>'+e(x.codigo)+'</strong></td>'+
     '<td>'+e(x.situacao)+'</td>'+
@@ -46,27 +75,33 @@ export function telaRecuperacaoVendas(ctx,{cfg,resumo,erro=''}) {
       : '—')+'</td></tr>'
   ).join('');
   const historico='<div class="tabela-rolagem"><table class="tabela">'+
-    '<thead><tr><th>Criado em</th><th>Cliente</th><th>Tipo</th><th>Código</th><th>WhatsApp</th><th>Expiração</th><th>Ação</th></tr></thead>'+
-    '<tbody>'+(linhas||'<tr><td colspan="7">Nenhuma campanha criada.</td></tr>')+'</tbody></table></div>';
+    '<thead><tr><th>Criado em</th><th>Cliente</th><th>Modalidade</th><th>Tipo</th><th>Código</th><th>WhatsApp</th><th>Expiração</th><th>Ação</th></tr></thead>'+
+    '<tbody>'+(linhas||'<tr><td colspan="8">Nenhuma campanha criada.</td></tr>')+'</tbody></table></div>';
   const indicadores='<div style="display:flex;flex-wrap:wrap;gap:10px">'+
     linhaResumo('Carrinhos com cliente',resumo.carrinhosElegiveis)+
     linhaResumo('Lembretes criados',resumo.lembretes)+
     linhaResumo('Cupons individuais',resumo.cuponsGerados)+
+    linhaResumo('Cupons locais',resumo.cuponsLocais)+
+    linhaResumo('Cupons nacionais',resumo.cuponsNacionais)+
     linhaResumo('Mensagens enviadas',resumo.enviados)+
     linhaResumo('Pedidos pagos recuperados',resumo.recuperados)+
-    linhaResumo('Receita recuperada','R$ '+real(resumo.receitaRecuperadaCentavos))+'</div>';
+    linhaResumo('Receita recuperada','R$ '+real(resumo.receitaRecuperadaCentavos))+
+    linhaResumo('Pedidos locais gerados',resumo.pedidosLocaisGerados)+
+    linhaResumo('Pedidos locais pagos',resumo.pedidosLocaisPagos)+
+    linhaResumo('Receita local recebida','R$ '+real(resumo.receitaLocalCentavos))+'</div>';
   return paginaAdmin(ctx,{
     titulo:'Recuperação Inteligente de Vendas',ativo:'recuperacao_vendas',
     conteudo:'<h1>🛒 Recuperação Inteligente de Vendas</h1>'+
       '<p>Recupere carrinhos autorizados usando o <strong>mesmo número e instância da Evolution API dos pedidos</strong>. '+
       'As mensagens usam ❤️ e o lema <strong>Farmácia Pague Pouco, cuidando da sua saúde.</strong></p>'+
       (erro?'<div class="alerta erro" role="alert">'+e(erro)+'</div>':'')+
-      '<p class="texto-pequeno">Estado: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong>. '+
-        'Apenas clientes com consentimento de ofertas e carrinhos recentes elegíveis são contatados. '+
+      '<p class="texto-pequeno">Nacional: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong> • Local: <strong>'+(local.ativo?'Ativado':'Desativado')+'</strong>. '+
+        'Apenas clientes com consentimento de ofertas, endereço conhecido e carrinhos recentes elegíveis são contatados. '+
         'Pedidos em andamento ou pagos interrompem os envios. '+
         'O cliente pode cancelar ofertas em Minha conta → Meus dados.</p>'+
       indicadores+
-      painel({titulo:'Configurações da campanha e do cupom',corpo:form})+
+      painel({titulo:'🌎 Recuperação nacional — configurações e cupons',corpo:form})+
+      painel({titulo:'🏪 Recuperação local — configurações e cupons',corpo:formLocal})+
       painel({titulo:'Histórico das últimas 100 ações',corpo:historico,semPadding:true})+
       '<p class="texto-pequeno">Receita recuperada conta somente pedidos com pagamento aprovado e cupom individual utilizado. '+
         'A entrega pelo WhatsApp depende da conexão ativa e do aceite do cliente. '+
