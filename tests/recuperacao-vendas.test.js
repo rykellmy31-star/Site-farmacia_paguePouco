@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao } from '../src/lib/recuperacao-vendas.js';
+import { executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel } from '../src/lib/recuperacao-vendas.js';
 import { processarFilaEvolution } from '../src/lib/evolution-whatsapp.js';
 import { validarCupom } from '../src/lib/cart.js';
 import { destinoRecuperacao } from '../src/lib/recuperacao-destino.js';
@@ -306,4 +306,152 @@ test('mudança de destino antes do envio cancela campanha local e não entrega d
  assert.equal(r.enviados,0);
  assert.equal(called,0);
  assert.equal(db.collection('evolutionWhatsappOutbox').all()[0].status,'cancelado');
+});
+
+
+function pixOnlineFixture({idade=2,estado='pendente',consentido=true,cepPedido='29885000'}={}) {
+  const x=fixture({idade:26,cepDestino:'45970000',localAtivo:true});
+  const {db,agora,iso}=x;
+  db.collection('settings').insert({id:'recuperacaoPedidoOnline',ativo:true,
+    ativadoEm:iso(48),primeiroLembreteHoras:1,enviarCupomAposHoras:4,
+    descontoPercentual:7,descontoMaximoCentavos:2000,compraMinimaCentavos:6000,
+    validadeHoras:24,intervaloDias:15,apenasPrimeiraCompra:true,maximoPorCiclo:8});
+  db.collection('customers').update('cliente-1',{marketing:consentido});
+  const pedido=db.collection('orders').insert({id:'pedido-online',codigo:'PP-1234',
+    clienteId:'cliente-1',carrinhoId:'c-1',
+    criadoEm:iso(idade),metodoPagamento:'pix',pagamentoId:'mp_101',
+    pagamentoPresencial:null,pendenciaPagamento:null,
+    statusFinanceiro:estado,totalCentavos:15200,
+    endereco:{cep:cepPedido,cidade:'Ponto Belo',uf:'ES'},
+  });
+  const pago=estado==='expirado'?'expired':estado==='recusado'?'rejected':'pending';
+  const pagamento=db.collection('payments').insert({id:'mp_101',
+    pedidoId:pedido.id,metodo:'pix',provedor:'mercadopago',valorCentavos:15200,
+    status:pago,ultimoStatusConfirmado:pago,
+    ultimaConfirmacaoProvedorEm:new Date(agora-60_000).toISOString(),
+  });
+  return {...x,pedido,pagamento};
+}
+test('pedido online usa CEP do pedido e não o CEP local cadastrado no perfil',()=>{
+ const {db,pedido,agora}=pixOnlineFixture();
+ const cliente=db.collection('customers').get('cliente-1');
+ assert.equal(cliente.enderecos[0].cep,'45970000');
+ assert.equal(pedido.endereco.cep,'29885000');
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora}),true);
+ const res=executarRecuperacao(db,{agora});
+ assert.equal(res.pedidosLembretes,1);
+ assert.equal(res.lembretes,0,'carrinho com pedido não recebe lembrete duplicado');
+ const item=db.collection('evolutionWhatsappOutbox').all()[0];
+ assert.equal(item.tipo,'recuperacao_pedido_lembrete');
+ assert.match(item.texto,/pagamento do seu pedido/i);
+ assert.match(item.texto,/\/conta\/pedidos\/PP-1234/);
+ assert.doesNotMatch(item.texto,/Fralda Desc/);
+ const msg=[];
+ return processarFilaEvolution(db,{
+   apiKey:'fake',baseUrl:'https://evolution.example.com',
+   enviar:async(url,opts)=>{msg.push(JSON.parse(opts.body));return {ok:true};},
+ }).then(r=>{
+   assert.equal(r.enviados,1);
+   assert.equal(msg[0].number,'5573999998888');
+ });
+});
+test('Pix pendente após prazo de cupom não cria cobrança nem cupom enquanto válido',()=>{
+ const {db,agora}=pixOnlineFixture({idade:6});
+ const res=executarRecuperacao(db,{agora});
+ assert.equal(res.pedidosCupons,0);
+ assert.equal(db.collection('coupons').count(),0);
+ assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
+});
+test('Pix encerrado por provedor cria cupom próprio sem reativar carrinho abandonado',async()=>{
+ const {db,agora,pedido}=pixOnlineFixture({idade:6,estado:'expirado'});
+ const res=executarRecuperacao(db,{agora});
+ assert.equal(res.pedidosCupons,1);
+ assert.equal(res.cupons,0);
+ assert.equal(db.collection('evolutionWhatsappOutbox').count(),1);
+ const item=db.collection('evolutionWhatsappOutbox').all()[0];
+ assert.equal(item.tipo,'recuperacao_pedido_cupom');
+ assert.match(item.texto,/novo pagamento/i);
+ const cupom=db.collection('coupons').get(item.cupomId);
+ assert.match(cupom.codigo,/^PP-PAGO-/);
+ assert.equal(cupom.valor,7);
+ assert.equal(cupom.descontoMaximoCentavos,2000);
+ assert.equal(cupom.pedidoOrigemId,pedido.id);
+ assert.equal(cupom.ativo,false);
+ const out=[];
+ const result=await processarFilaEvolution(db,{
+   apiKey:'fake',baseUrl:'https://evolution.example.com',
+   enviar:async(url,opt)=>{out.push(JSON.parse(opt.body));return {ok:true};},
+ });
+ assert.equal(result.enviados,1);
+ assert.equal(out.length,1);
+ assert.match(out[0].text,/recuperar-carrinho/);
+ const ativo=db.collection('coupons').get(cupom.id);
+ assert.equal(ativo.ativo,true);
+ assert.equal(Date.parse(ativo.expiraEm)-Date.parse(ativo.emitidoEm),24*3_600_000);
+ const itens=[{produtoId:'p1',categoriaId:'cat-1',quantidade:1,precoUnitarioCentavos:15000}];
+ assert.equal(validarCupom(db,cupom.codigo,{subtotalCentavos:15000,
+   clienteId:'cliente-1',itens}).desconto,1050);
+ assert.equal(validarCupom(db,cupom.codigo,{subtotalCentavos:15000,
+   clienteId:'outro',itens}).ok,false);
+ assert.equal(executarRecuperacao(db,{agora}).pedidosCupons,0);
+});
+test('confirmação de pagamento antes do disparo cancela aviso e desconto',async()=>{
+ const {db,agora}=pixOnlineFixture({idade:6,estado:'expirado'});
+ executarRecuperacao(db,{agora});
+ const item=db.collection('evolutionWhatsappOutbox').all()[0];
+ const cupom=db.collection('coupons').get(item.cupomId);
+ db.collection('orders').update('pedido-online',{statusFinanceiro:'aprovado'});
+ const sent=[];
+ const r=await processarFilaEvolution(db,{
+   apiKey:'fake',baseUrl:'https://evolution.example.com',
+   enviar:async()=>{sent.push(1);return {ok:true};},
+ });
+ assert.equal(r.enviados,0);
+ assert.equal(sent.length,0);
+ assert.equal(db.collection('evolutionWhatsappOutbox').get(item.id).status,'cancelado');
+ assert.equal(db.collection('coupons').get(cupom.id).ativo,false);
+});
+test('consulta Pix antiga ou indefinida nunca afirma pagamento pendente',()=>{
+ const {db,agora,pedido,pagamento}=pixOnlineFixture();
+ db.collection('payments').update(pagamento.id,{
+   ultimaConfirmacaoProvedorEm:new Date(agora-20*60_000).toISOString(),
+ });
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora}),false);
+ assert.equal(executarRecuperacao(db,{agora}).pedidosLembretes,0);
+ db.collection('payments').update(pagamento.id,{
+   ultimaConfirmacaoProvedorEm:new Date(agora).toISOString(),
+   ultimoStatusConfirmado:'in_process',
+ });
+ assert.equal(pedidoOnlineRecuperavel(db,pedido,{agora}),false);
+});
+test('pagar no recebimento, falta de marketing, provider interno e outra compra não disparam',()=>{
+ const local=pixOnlineFixture({cepPedido:'45970000'});
+ assert.equal(executarRecuperacao(local.db,{agora:local.agora}).pedidosLembretes,0);
+ const sem=pixOnlineFixture({consentido:false});
+ assert.equal(executarRecuperacao(sem.db,{agora:sem.agora}).pedidosLembretes,0);
+ const fake=pixOnlineFixture();
+ fake.db.collection('payments').update('mp_101',{provedor:'internal'});
+ assert.equal(executarRecuperacao(fake.db,{agora:fake.agora}).pedidosLembretes,0);
+ const nova=pixOnlineFixture();
+ nova.db.collection('orders').insert({id:'pedido-novo',clienteId:'cliente-1',
+   criadoEm:nova.iso(1),statusFinanceiro:'pendente'});
+ assert.equal(executarRecuperacao(nova.db,{agora:nova.agora}).pedidosLembretes,0);
+});
+test('configuração de pedido online isolada, desligada de fábrica e limites comerciais',()=>{
+ assert.equal(configRecuperacaoPedido(dbFake()).ativo,false);
+ const ok=validarConfigRecuperacaoPedido({
+   ativo:'1',primeiroLembreteHoras:'1',enviarCupomAposHoras:'6',
+   descontoPercentual:'9,5',descontoMaximo:'20',compraMinima:'60',
+   validadeHoras:'12',intervaloDias:'15',apenasPrimeiraCompra:'1',
+ });
+ assert.equal(ok.ok,true);
+ assert.equal(ok.config.descontoPercentual,9.5);
+ const admin=readFileSync(new URL('../src/routes/admin.js',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../src/views/admin/recuperacao-vendas.js',import.meta.url),'utf8');
+ const conta=readFileSync(new URL('../src/routes/account.js',import.meta.url),'utf8');
+ const recon=readFileSync(new URL('../src/lib/payments/reconciliation.js',import.meta.url),'utf8');
+ assert.match(admin,/app\.post\('\/admin\/recuperacao-vendas\/pedidos\/configurar'/);
+ assert.match(ui,/Cupom de pedido não pago após/);
+ assert.match(conta,/novoCarrinhoId\(\)/);
+ assert.match(recon,/ultimaConfirmacaoProvedorEm/);
 });
