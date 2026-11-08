@@ -403,6 +403,7 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
       const token=randomToken(24);
       fila.insert({id:lembreteId,tipo:'recuperacao_pedido_lembrete',modo:'pedido',
         pedidoId:pedido.id,carrinhoId:cart.id,clienteId:cliente.id,numero,
+        estadoAoCriar:pedido.statusFinanceiro,
         texto:mensagemPagamentoPendente(cliente,pedido,token,pedido.statusFinanceiro!=='pendente'),
         status:'fila',criadoEm:nowISO(),tentativas:0});
       campanhas.insert({id:lembreteId,pedidoId:pedido.id,carrinhoId:cart.id,
@@ -435,6 +436,7 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
       descricao:'Recuperação de pedido online sem pagamento confirmado'});
     fila.insert({id:cupomId,tipo:'recuperacao_pedido_cupom',modo:'pedido',
       pedidoId:pedido.id,carrinhoId:cart.id,clienteId:cliente.id,cupomId:cupom.id,
+      estadoAoCriar:pedido.statusFinanceiro,
       numero,texto:mensagemCupomPagamento(cliente,pedido,cupom,cfg,token),
       status:'fila',criadoEm:nowISO(),tentativas:0});
     campanhas.insert({id:cupomId,pedidoId:pedido.id,carrinhoId:cart.id,
