@@ -97,7 +97,9 @@ function barraCookies(cookies) {
     <div class="container">
       <div class="cresce">
         <strong>${e(cookies.titulo || 'Usamos cookies')}</strong><br>
-        ${e(cookies.texto || '')} <a href="${e(cookies.linkPolitica || '/pagina/politica-de-cookies')}">Saiba mais</a>.
+        ${e(cookies.texto || '')} O registro de visitas e tentativas de compra ocorre apenas com sua aceitação.
+        Se entrar na sua conta, esses totais poderão ser associados ao seu cadastro.
+        <a href="${e(cookies.linkPolitica || '/pagina/politica-de-cookies')}">Saiba mais</a>.
       </div>
       <button class="botao pequeno" data-cookies="aceitar">${e(cookies.textoBotaoAceitar || 'Aceitar')}</button>
       <button class="botao pequeno secundario" data-cookies="recusar">${e(cookies.textoBotaoRecusar || 'Recusar')}</button>
@@ -334,6 +336,7 @@ ${barraCookies(settings.cookies)}
     logado: !!ctx.usuario,
   })};</script>
 <script src="/js/app.js?v=carrossel-pausa-6s-10s-20261104" defer></script>
+<script src="/js/visitas-site.js?v=20261108" defer></script>
 <script src="/js/password-toggle.js?v=20261107" defer></script>
 </body>
 </html>`;
