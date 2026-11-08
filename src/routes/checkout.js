@@ -6,8 +6,9 @@ import {
   getCart, calcularTotais, normalizeCart, aplicarCupom, removerCupom, clearCart, attachCartCookie,
 } from '../lib/cart.js';
 import { calcularFreteIntegrado, resolverFreteIntegrado } from '../lib/melhor-envio.js';
-import { criarPedido, cancelarCriacaoComRecusaDefinitiva } from '../lib/orders.js';
-import { createPayment, installmentOptions, enabledMethods, providerPublicInfo } from '../lib/payments/index.js';
+import { criarPedido, cancelarCriacaoComRecusaDefinitiva, atualizarStatusFinanceiro } from '../lib/orders.js';
+import { createPayment, installmentOptions, enabledMethods, providerPublicInfo,
+  consultarRetornoCheckoutPro } from '../lib/payments/index.js';
 import { validate, validators as v, cleanText, onlyDigits, escapeHtml } from '../lib/security.js';
 import { lookupCep, UF_LIST, ufFromCep } from '../lib/cep.js';
 import { logCustomer } from '../lib/audit.js';
@@ -290,7 +291,9 @@ export function registrarRotasCheckout(app, db) {
     const metodo = String(req.body.metodoPagamento || '');
     const formas = enabledMethods(db);
     const permitido = local ? ['pix','credit_card','debit_card','cash'].includes(metodo)
-      : (metodo === 'pix' && formas.pix) || (metodo === 'credit_card' && formas.credit_card) || (metodo === 'debit_card' && formas.debit_card);
+      : (metodo === 'pix' && formas.pix) || (metodo === 'credit_card' && formas.credit_card) ||
+        (metodo === 'debit_card' && formas.debit_card) ||
+        (metodo === 'checkout_pro' && formas.checkout_pro);
     if (!permitido) {
       return void res.redirect('/checkout/pagamento?erro=' + encodeURIComponent('Forma de pagamento indisponível.'));
     }
@@ -389,7 +392,14 @@ export function registrarRotasCheckout(app, db) {
       cardToken: req.body.cardToken || null,
       paymentMethodId: req.body.paymentMethodId || null,
       issuerId: req.body.issuerId || null,
-      returnUrls: { notificationUrl: `${config.publicBaseUrl}/webhooks/mercadopago` },
+      returnUrls: {
+        notificationUrl: `${config.publicBaseUrl}/webhooks/mercadopago`,
+        success: `${config.publicBaseUrl}/checkout/confirmacao/${encodeURIComponent(pedido.codigo)}`,
+        failure: `${config.publicBaseUrl}/checkout/confirmacao/${encodeURIComponent(pedido.codigo)}`,
+        pending: `${config.publicBaseUrl}/checkout/confirmacao/${encodeURIComponent(pedido.codigo)}`,
+        creditoHabilitado: formas.checkout_pro_credit,
+        debitoHabilitado: formas.checkout_pro_debit,
+      },
     }); } catch (err) {
       erroIndeterminado = true;
       cobranca = { ok: false, erro: 'Não foi possível determinar se o provedor registrou a cobrança.' };
@@ -467,6 +477,9 @@ export function registrarRotasCheckout(app, db) {
     // impedir uma compra legítima em seguida.
     renovarCestaAposPedido(db, res, req.user?.id || null);
 
+    // URL HTTPS em domínio do Mercado Pago já validada no provedor.
+    if (metodo === 'checkout_pro' && cobranca?.checkoutUrl)
+      return void res.redirect(cobranca.checkoutUrl);
     res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
   });
 
@@ -475,6 +488,27 @@ export function registrarRotasCheckout(app, db) {
     const pedido = db.collection('orders').findOne((o) => o.codigo === req.params.codigo && o.clienteId === req.user.id && !pedidoOcultoDoCliente(o));
     if (!pedido) return void res.redirect('/conta/pedidos');
     await reconciliarPixAoConsultarPedido(db, pedido.id);
+    // Query de retorno do Mercado Pago jamais basta para aprovar a venda.
+    const remotoId = req.query.get('payment_id') || req.query.get('collection_id') || '';
+    if (pedido.metodoPagamento === 'checkout_pro' && /^\d{1,30}$/.test(remotoId)) {
+      const atual = db.collection('orders').get(pedido.id);
+      const pg = atual.pagamentoId ? db.collection('payments').get(atual.pagamentoId) : null;
+      const preferenciaQuery = req.query.get('preference_id') || '';
+      if (atual.statusFinanceiro === 'pendente' && pg?.metodo === 'checkout_pro' &&
+          (!preferenciaQuery || preferenciaQuery === pg.preferenciaId)) {
+        try {
+          const verificado = await consultarRetornoCheckoutPro(db, pedido.id, remotoId);
+          const mapa = { approved:'aprovado', rejected:'recusado', cancelled:'recusado',
+            refunded:'estornado', expired:'expirado' };
+          if (verificado.ok && mapa[verificado.status]) {
+            atualizarStatusFinanceiro(db, pedido.id, mapa[verificado.status], {
+              obs:'Retorno Checkout Pro confirmado por consulta autenticada ao Mercado Pago.',
+              por:'conciliacao',
+            });
+          }
+        } catch { /* Webhook permanece fonte de conciliação; não presumir aprovação. */ }
+      }
+    }
     const atualizado = db.collection('orders').get(pedido.id);
     const pagamento = atualizado.pagamentoId ? db.collection('payments').get(atualizado.pagamentoId) : null;
     const ctx = criarContexto(req, db);
