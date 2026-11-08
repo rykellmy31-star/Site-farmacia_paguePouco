@@ -1,6 +1,7 @@
 /** Evolution v2: avisos transacionais; nomes de itens só com autorização v2 do cliente. */
 import {getSetting} from './settings.js';
 import { destinoRecuperacao } from './recuperacao-destino.js';
+import { pedidoOnlineRecuperavel } from './recuperacao-vendas.js';
 import {nowISO} from './store.js';
 const COL='evolutionWhatsappOutbox', CFG='evolutionWhatsapp';
 export const DEFAULT_EVOLUTION=Object.freeze({
@@ -247,6 +248,36 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
         continue;
       }
     }
+    if (['recuperacao_pedido_lembrete','recuperacao_pedido_cupom'].includes(item.tipo)) {
+      const cfgPedido=getSetting(db,'recuperacaoPedidoOnline')||{};
+      const cliente=db.collection('customers').get(item.clienteId);
+      const pedido=db.collection('orders').get(item.pedidoId);
+      const carrinho=db.collection('carts').get(item.carrinhoId);
+      const cupom=item.cupomId?db.collection('coupons').get(item.cupomId):null;
+      const produtosAgora=[...new Set((carrinho?.itens||[]).map(i=>String(i.produtoId)))].sort();
+      const idMesmo=pedido?.clienteId===item.clienteId &&
+        pedido?.carrinhoId===item.carrinhoId;
+      const clienteOk=cliente?.ativo!==false && cliente?.marketing===true &&
+        numeroWhatsapp(cliente?.telefone)===item.numero;
+      const pagamentoOk=idMesmo && pedidoOnlineRecuperavel(db,pedido,{
+        cupom:item.tipo==='recuperacao_pedido_cupom',
+      });
+      const statusIgual=item.estadoAoCriar===pedido?.statusFinanceiro;
+      const itensIguais=!cupom || JSON.stringify(cupom.produtosExclusivos)===
+        JSON.stringify(produtosAgora);
+      const primeiraCompra=cfgPedido.apenasPrimeiraCompra===true &&
+        db.collection('orders').all().some(o=>
+          o.clienteId===item.clienteId && o.statusFinanceiro==='aprovado');
+      if (cfgPedido.ativo!==true || !clienteOk || !pagamentoOk || !statusIgual ||
+          primeiraCompra || !carrinho?.itens?.length || carrinho.clienteId!==item.clienteId ||
+          !itensIguais || (item.tipo==='recuperacao_pedido_cupom' &&
+            (!cupom || cupom.canceladoEm))) {
+        col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
+        if (cupom) db.collection('coupons').update(cupom.id,{ativo:false});
+        await persistir();
+        continue;
+      }
+    }
     col.update(item.id,{status:'enviando',tentativas:1,tentadoEm:nowISO()});
     await persistir(); // escrita durável ANTES do envio externo
     try{
@@ -262,7 +293,7 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
       if(response.ok){
         const enviadoEm=nowISO();
         col.update(item.id,{status:'enviado',enviadoEm,texto:null});enviados++;
-        if (item.tipo==='recuperacao_cupom' && item.cupomId) {
+        if (['recuperacao_cupom','recuperacao_pedido_cupom'].includes(item.tipo) && item.cupomId) {
           const cupom=db.collection('coupons').get(item.cupomId);
           if (cupom && !cupom.canceladoEm) {
             const horas=Math.max(1,Math.min(720,Number(cupom.validadeHoras)||48));

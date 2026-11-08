@@ -15,7 +15,7 @@ function linhaResumo(rotulo,valor){
   return '<div class="cartao" style="flex:1;min-width:165px;padding:16px"><small>'+e(rotulo)+
     '</small><br><strong style="font-size:1.4em">'+e(String(valor))+'</strong></div>';
 }
-export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,resumo,erro=''}) {
+export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''}) {
   const c=campoAdmin;
   const form = '<form method="post" action="/admin/recuperacao-vendas/configurar">'+
     '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
@@ -33,6 +33,34 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,resumo,erro=''}) {
     c({nome:'apenasPrimeiraCompra',rotulo:'Cupom exclusivo para primeira compra aprovada',tipo:'checkbox',valor:cfg.apenasPrimeiraCompra})+
     '<p class="texto-pequeno">Cupons individuais são vinculados à conta e aos produtos da seleção original. O limite e o prazo são validados no servidor. Nenhum desconto acumula com outro cupom. A validade começa na confirmação do envio.</p>'+
     '<p><button type="submit" class="botao destaque">Salvar configurações</button></p></form>';
+  const pedido = cfgPedido || {
+    ativo:false,primeiroLembreteHoras:1,enviarCupomAposHoras:4,
+    descontoPercentual:7,descontoMaximoCentavos:2000,
+    compraMinimaCentavos:6000,validadeHoras:24,intervaloDias:15,
+    apenasPrimeiraCompra:true,
+  };
+  const formPedido = '<form method="post" action="/admin/recuperacao-vendas/pedidos/configurar">'+
+    '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+    c({nome:'ativo',rotulo:'Ativar recuperação global de pedidos online Pix não pagos',tipo:'checkbox',valor:pedido.ativo})+
+    '<p class="texto-pequeno">Funciona separadamente dos carrinhos globais e locais. '+
+    'Acompanha pedidos online após a emissão do Pix. Envia lembrete somente após '+
+    'confirmar no Mercado Pago que a cobrança continua pendente. '+
+    'Cupom para uma nova compra somente após a cobrança anterior ser confirmada como expirada ou recusada. '+
+    'Não gera Pix adicional automaticamente e não altera o valor da cobrança antiga.</p>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:15px">'+
+      c({nome:'primeiroLembreteHoras',rotulo:'Lembrete de pagamento após (horas)',tipo:'number',valor:pedido.primeiroLembreteHoras,min:1,max:168,step:1})+
+      c({nome:'enviarCupomAposHoras',rotulo:'Cupom de pedido não pago após (horas)',tipo:'number',valor:pedido.enviarCupomAposHoras,min:2,max:720,step:1})+
+      c({nome:'descontoPercentual',rotulo:'Desconto para pedido não pago (%)',tipo:'number',valor:pedido.descontoPercentual,min:0.01,max:50,step:0.01})+
+      c({nome:'descontoMaximo',rotulo:'Desconto máximo (R$)',tipo:'text',valor:real(pedido.descontoMaximoCentavos)})+
+      c({nome:'compraMinima',rotulo:'Compra mínima (R$)',tipo:'text',valor:real(pedido.compraMinimaCentavos)})+
+      c({nome:'validadeHoras',rotulo:'Validade do cupom (horas)',tipo:'number',valor:pedido.validadeHoras,min:1,max:720,step:1})+
+      c({nome:'intervaloDias',rotulo:'Intervalo entre cupons de pedidos (dias)',tipo:'number',valor:pedido.intervaloDias,min:1,max:365,step:1})+
+    '</div>'+
+    c({nome:'apenasPrimeiraCompra',rotulo:'Desconto de pedido somente para primeira compra aprovada',tipo:'checkbox',valor:pedido.apenasPrimeiraCompra})+
+    '<p class="texto-pequeno">Os dois cupons globais são independentes. Apenas clientes que '+
+    'autorizaram receber ofertas são contatados; itens sanitários sensíveis ficam excluídos. '+
+    'Se o pagamento for aprovado, os contatos param. A validade começa quando a mensagem é enviada.</p>'+
+    '<p><button type="submit" class="botao destaque">Salvar recuperação de pedidos não pagos</button></p></form>';
   const local = cfgLocal || {
     ativo:false,primeiroLembreteHoras:1,enviarCupomAposHoras:4,
     descontoPercentual:5,descontoMaximoCentavos:1500,
@@ -63,8 +91,8 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,resumo,erro=''}) {
     '<p><button type="submit" class="botao destaque">Salvar recuperação local</button></p></form>';
   const linhas=resumo.linhas.map(x=>
     '<tr><td>'+e(data(x.criadoEm))+'</td><td>'+e(x.nome)+'</td>'+
-    '<td>'+e(x.modo==='local'?'🏪 Local':'🌎 Nacional')+'</td>'+ 
-    '<td>'+e(x.tipo==='cupom'?'Cupom':'Lembrete')+'</td>'+
+    '<td>'+e(x.modo==='local'?'🏪 Local':x.modo==='pedido'?'💳 Pedido não pago':'🌎 Carrinho global')+'</td>'+ 
+    '<td>'+e(['cupom','pedido_cupom'].includes(x.tipo)?'Cupom':'Lembrete')+'</td>'+
     '<td><strong>'+e(x.codigo)+'</strong></td>'+
     '<td>'+e(x.situacao)+'</td>'+
     '<td>'+e(data(x.expiraEm))+'</td>'+
@@ -83,6 +111,9 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,resumo,erro=''}) {
     linhaResumo('Cupons individuais',resumo.cuponsGerados)+
     linhaResumo('Cupons locais',resumo.cuponsLocais)+
     linhaResumo('Cupons nacionais',resumo.cuponsNacionais)+
+    linhaResumo('Lembretes de Pix',resumo.lembretesPedidos)+
+    linhaResumo('Cupons de pedidos não pagos',resumo.cuponsPedidos)+
+    linhaResumo('Pedidos online pendentes',resumo.pedidosOnlinePendentes)+
     linhaResumo('Mensagens enviadas',resumo.enviados)+
     linhaResumo('Pedidos pagos recuperados',resumo.recuperados)+
     linhaResumo('Receita recuperada','R$ '+real(resumo.receitaRecuperadaCentavos))+
@@ -95,12 +126,13 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,resumo,erro=''}) {
       '<p>Recupere carrinhos autorizados usando o <strong>mesmo número e instância da Evolution API dos pedidos</strong>. '+
       'As mensagens usam ❤️ e o lema <strong>Farmácia Pague Pouco, cuidando da sua saúde.</strong></p>'+
       (erro?'<div class="alerta erro" role="alert">'+e(erro)+'</div>':'')+
-      '<p class="texto-pequeno">Nacional: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong> • Local: <strong>'+(local.ativo?'Ativado':'Desativado')+'</strong>. '+
+      '<p class="texto-pequeno">Carrinho global: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong> • Pix não pago: <strong>'+(pedido.ativo?'Ativado':'Desativado')+'</strong> • Local: <strong>'+(local.ativo?'Ativado':'Desativado')+'</strong>. '+
         'Apenas clientes com consentimento de ofertas, endereço conhecido e carrinhos recentes elegíveis são contatados. '+
-        'Pedidos em andamento ou pagos interrompem os envios. '+
+        'Quando um pedido é gerado, o carrinho para de enviar mensagens. Pedidos Pix não pagos seguem suas regras próprias; após pagamento aprovado, a recuperação é interrompida. '+
         'O cliente pode cancelar ofertas em Minha conta → Meus dados.</p>'+
       indicadores+
-      painel({titulo:'🌎 Recuperação nacional — configurações e cupons',corpo:form})+
+      painel({titulo:'🌎 Carrinho global abandonado — configurações e cupons',corpo:form})+
+      painel({titulo:'💳 Pedido global não pago — configurações e cupons',corpo:formPedido})+
       painel({titulo:'🏪 Recuperação local — configurações e cupons',corpo:formLocal})+
       painel({titulo:'Histórico das últimas 100 ações',corpo:historico,semPadding:true})+
       '<p class="texto-pequeno">Receita recuperada conta somente pedidos com pagamento aprovado e cupom individual utilizado. '+
