@@ -120,13 +120,13 @@ export async function createPayment({ db, order, method, payer, installments = 1
     const pref = await mpFetch('/checkout/preferences', {
       method: 'POST',
       body: {
-        items: (order.itens || []).map((it) => ({
-          id: it.produtoId,
-          title: it.nome,
-          quantity: it.quantidade,
-          unit_price: Number((it.precoUnitarioCentavos / 100).toFixed(2)),
-          currency_id: 'BRL',
-        })),
+        // Uma linha pelo total já validado (cupom e frete inclusos).
+        // Evita diferença de centavos e não expõe nomes de medicamentos ao MP.
+        items: [{
+          id: String(order.id),
+          title: 'Compra Farmácia Pague Pouco - ' + order.codigo,
+          quantity: 1, unit_price: valor, currency_id: 'BRL',
+        }],
         external_reference: order.codigo,
         notification_url: notificationUrl,
         back_urls: {
@@ -136,7 +136,17 @@ export async function createPayment({ db, order, method, payer, installments = 1
         },
         auto_return: 'approved',
         payer: { email: payer?.email || '', name: payer?.nome || '' },
-        shipment: { cost: Number((order.freteCentavos / 100).toFixed(2)), mode: 'not_specified' },
+        payment_methods: {
+          excluded_payment_types: [
+            { id: 'ticket' }, { id: 'atm' }, { id: 'bank_transfer' },
+            ...(!returnUrls.creditoHabilitado ? [{ id: 'credit_card' }] : []),
+            ...(!returnUrls.debitoHabilitado ? [{ id: 'debit_card' }] : []),
+          ],
+          // Regra da loja: no máximo 6x, com compra >= R$ 50 para 2x,
+          // e pelo menos R$ 25 por parcela sobre o principal.
+          installments: Math.min(6, Math.max(1,
+            Math.floor(order.totalCentavos / 2500))),
+        },
         metadata: { pedido_id: order.id },
       },
       idempotencyKey,
@@ -151,8 +161,23 @@ export async function createPayment({ db, order, method, payer, installments = 1
           : 'O provedor não aceitou os dados do pagamento.',
       };
     }
+    const prefId = String(pref.data?.id || '');
+    const url = String(pref.data?.init_point || pref.data?.sandbox_init_point || '');
+    let urlValida = false;
+    try {
+      const parsed = new URL(url);
+      urlValida = parsed.protocol === 'https:' &&
+        (parsed.hostname === 'mercadopago.com.br' ||
+         parsed.hostname.endsWith('.mercadopago.com.br') ||
+         parsed.hostname === 'mercadopago.com' ||
+         parsed.hostname.endsWith('.mercadopago.com'));
+    } catch { /* fail closed */ }
+    if (!prefId || !urlValida) {
+      return { ok: false, indeterminado: true,
+        erro: 'O Mercado Pago não retornou uma página segura de checkout. Conciliação necessária.' };
+    }
     const pagamento = payments.insert({
-      id: `mp_pref_${pref.data.id}`,
+      id: `mp_pref_${prefId}`,
       pedidoId: order.id,
       pedidoCodigo: order.codigo,
       provedor: 'mercadopago',
@@ -162,10 +187,10 @@ export async function createPayment({ db, order, method, payer, installments = 1
       parcelas: 1,
       criadoEm: nowISO(),
       atualizadoEm: nowISO(),
-      checkoutUrl: pref.data.init_point || pref.data.sandbox_init_point || '',
+      checkoutUrl: url,
       simulado: false,
       eventos: [{ status: 'pending', em: nowISO(), origem: 'criacao-preferencia' }],
-      raw: { preference: pref.data },
+      preferenciaId: prefId,
     });
     return { ok: true, pagamento, checkoutUrl: pagamento.checkoutUrl, simulado: false };
   } else {
@@ -232,16 +257,74 @@ export async function createPayment({ db, order, method, payer, installments = 1
   };
 }
 
+
+/**
+ * Identifica um pagamento real da preferência hospedada. Só aceita dados
+ * consultados autenticadamente na API do MP (nunca o retorno do navegador).
+ */
+function localizarCheckoutPro(db, remoto, dataId) {
+  const prefId = String(remoto?.preference_id || '');
+  if (!prefId || prefId.length > 180) return null;
+  const pagamento = db.collection('payments').get('mp_pref_' + prefId);
+  if (!pagamento || pagamento.provedor !== 'mercadopago' ||
+      pagamento.metodo !== 'checkout_pro' ||
+      (pagamento.transacaoId && String(pagamento.transacaoId) !== String(dataId))) return null;
+  const pedido = db.collection('orders').get(pagamento.pedidoId);
+  const centavos = Math.round(Number(remoto.transaction_amount) * 100);
+  if (!pedido || pedido.pagamentoId !== pagamento.id ||
+      remoto.external_reference !== pedido.codigo ||
+      String(remoto.id) !== String(dataId) ||
+      remoto.currency_id !== 'BRL' ||
+      !Number.isSafeInteger(centavos) || centavos !== Number(pedido.totalCentavos) ||
+      centavos !== Number(pagamento.valorCentavos) ||
+      (remoto.metadata?.pedido_id && String(remoto.metadata.pedido_id) !== String(pedido.id))) return null;
+  return { pagamento, pedido };
+}
+
+/** Confirma o retorno de um cliente autenticado; nunca confia em ?status=approved. */
+export async function consultarRetornoCheckoutPro({ db, pedidoId, pagamentoId, config }) {
+  const id = String(pagamentoId || '');
+  if (!/^\\d{1,30}$/.test(id)) return { ok: false, erro: 'Pagamento não identificado.' };
+  const pedido = db.collection('orders').get(pedidoId);
+  if (!pedido || pedido.metodoPagamento !== 'checkout_pro' ||
+      !pedido.pagamentoId || pedido.statusFinanceiro !== 'pendente') {
+    return { ok: false, erro: 'Pedido não está aguardando Checkout Pro.' };
+  }
+  const resposta = await mpFetch('/v1/payments/' + id, { config });
+  if (!resposta.ok) return { ok: false, erro: 'O provedor ainda não confirmou o pagamento.' };
+  const encontrado = localizarCheckoutPro(db, resposta.data || {}, id);
+  if (!encontrado || encontrado.pedido.id !== pedidoId)
+    return { ok: false, erro: 'Pagamento incompatível com a compra.' };
+  const status = String(resposta.data.status || '').toLowerCase();
+  if (!['approved','pending','in_process','authorized','rejected','cancelled','refunded','expired'].includes(status))
+    return { ok: false, erro: 'Situação do pagamento ainda desconhecida.' };
+  const antigo = encontrado.pagamento;
+  db.collection('payments').update(antigo.id, {
+    status, statusDetalhe: resposta.data.status_detail || null,
+    transacaoId: id, atualizadoEm: nowISO(),
+    bandeira: resposta.data.payment_method_id || null,
+    parcelas: Math.max(1, Number(resposta.data.installments) || 1),
+    ...(antigo.status !== status ? { eventos: [...(antigo.eventos||[]),
+      {status,em:nowISO(),origem:'retorno-consulta-autenticada'}] } : {}),
+  });
+  return { ok:true, status, pagamentoId:antigo.id, pedidoId };
+}
+
 export async function getStatus({ db, payment, config }) {
-  const mpId = String(payment.id || '').replace(/^mp_/, '').replace(/^mp_pref_/, '');
-  if (payment.metodo === 'checkout_pro') return { ok: true, status: payment.status, pagamento: payment };
+  const mpId = payment.metodo === 'checkout_pro'
+    ? String(payment.transacaoId || '')
+    : String(payment.id || '').replace(/^mp_/, '');
+  if (payment.metodo === 'checkout_pro' && !mpId)
+    return { ok: true, status: payment.status, pagamento: payment };
   const res = await mpFetch(`/v1/payments/${mpId}`, { config });
   if (!res.ok) return { ok: false, erro: `Falha ao consultar pagamento: ${res.status}` };
   const d = res.data || {};
   const pedido = db.collection('orders').get(payment.pedidoId);
   const valor = Math.round(Number(d.transaction_amount) * 100);
   if (!pedido || pedido.pagamentoId !== payment.id ||
-      String(d.id) !== mpId || d.external_reference !== pedido.codigo ||
+      String(d.id) !== mpId ||
+      (payment.metodo === 'checkout_pro' && !localizarCheckoutPro(db, d, mpId)) ||
+      d.external_reference !== pedido.codigo ||
       d.currency_id !== 'BRL' || !Number.isSafeInteger(valor) ||
       valor !== Number(payment.valorCentavos) || valor !== Number(pedido.totalCentavos) ||
       (d.metadata?.pedido_id && String(d.metadata.pedido_id) !== String(pedido.id))) {
@@ -308,8 +391,11 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
   const res = await mpFetch(`/v1/payments/${dataId}`, { config });
   if (!res.ok) return { ok: false, erro: 'Falha ao consultar cobrança no provedor.' };
   const remoto = res.data || {};
-  const pagamento = db.collection('payments').get(`mp_${dataId}`);
-  if (!pagamento || pagamento.provedor !== 'mercadopago' || String(pagamento.transacaoId) !== dataId) {
+  const direto = db.collection('payments').get(`mp_${dataId}`);
+  const pro = direto ? null : localizarCheckoutPro(db, remoto, dataId);
+  const pagamento = direto || pro?.pagamento;
+  if (!pagamento || pagamento.provedor !== 'mercadopago' ||
+      (direto && String(pagamento.transacaoId) !== dataId)) {
     return { ok: false, erro: 'Cobrança desconhecida; aguardando conciliação.' };
   }
   const pedido = db.collection('orders').get(pagamento.pedidoId);
@@ -341,6 +427,8 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
     db.collection('payments').update(pagamento.id, {
       status, statusDetalhe: remoto.status_detail || null,
       atualizadoEm: nowISO(), raw: remoto,
+      ...(pro ? { transacaoId: dataId, bandeira: remoto.payment_method_id || null,
+        parcelas: Math.max(1, Number(remoto.installments) || 1) } : {}),
       eventos: [...(pagamento.eventos || []), { status, em: nowISO(), origem: 'webhook' }],
     });
   }
@@ -349,7 +437,10 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
 
 export async function refund({ db, payment, amountCents, config }) {
   if (payment.status !== 'approved') return { ok: false, erro: 'Somente cobranças aprovadas podem ser estornadas.' };
-  const mpId = String(payment.id || '').replace(/^mp_/, '');
+  const mpId = payment.metodo === 'checkout_pro' ? String(payment.transacaoId || '') :
+    String(payment.id || '').replace(/^mp_/, '');
+  if (!/^\\d{1,30}$/.test(mpId))
+    return { ok:false, erro:'ID da transação não identificado para estorno.' };
   const res = await mpFetch(`/v1/payments/${mpId}/refunds`, {
     method: 'POST', body: undefined, idempotencyKey: `refund-${payment.id}`, config,
   });
