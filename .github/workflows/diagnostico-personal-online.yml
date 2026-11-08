@@ -1,0 +1,25 @@
+name: Diagnóstico externo de fotos Personal (manual)
+
+# Fontes externas podem retirar um EAN temporariamente. Não bloquear o
+# checkout ou o deploy por disponibilidade de catálogo de terceiro.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  consultar-midia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+      - name: Verificar mídia real das fraldas Personal (fontes externas)
+        run: node scripts/test-personal-imagem-live.mjs
