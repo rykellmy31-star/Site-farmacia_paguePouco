@@ -68,12 +68,16 @@ function sharedStrings(xml){
 }
 function celulas(linha,shared){
   const cells={};
-  for(const match of linha.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)){
+  // O Excel do Inova usa células vazias autoconclusivas, como <c r="A2" s="1" />.
+  // Se ignoradas, a leitura da primeira célula vazia "engole" a próxima célula
+  // com valor (B2 = Código), fazendo o importador rejeitar o cabeçalho correto.
+  for(const match of linha.matchAll(/<c\b([^>]*?)(?:\/\s*>|>([\s\S]*?)<\/c>)/g)){
     const col=/^([A-Z]+)[0-9]+$/.exec(attr(match[1],'r'))?.[1];
     if(!col)continue;
-    const kind=attr(match[1],'t'),v=/<v(?:\s[^>]*)?>([\s\S]*?)<\/v>/.exec(match[2])?.[1];
+    const conteudo=match[2]||'';
+    const kind=attr(match[1],'t'),v=/<v(?:\s[^>]*)?>([\s\S]*?)<\/v>/.exec(conteudo)?.[1];
     let val=v==null?'':kind==='s'?shared[Number(v)]??'':entidades(v);
-    if(kind==='inlineStr')val=entidades(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/.exec(match[2])?.[1]||'');
+    if(kind==='inlineStr')val=entidades(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/.exec(conteudo)?.[1]||'');
     cells[col]=String(val).trim();
   }
   return cells;
