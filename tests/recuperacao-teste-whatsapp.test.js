@@ -119,7 +119,7 @@ test('falhas HTTP ou timeout são relatados sem resposta bruta e sem segunda ten
  const agora=Date.now();
  let chamados=0;
  const falha=await enviarTesteRecuperacao(db,env,dados,{
-   agora,enviar:async()=>{chamados++;return {ok:false,status:401,text:async()=> 'apikey vaza se lido';},
+   agora,enviar:async()=>{chamados++;return {ok:false,status:401,text:async()=> 'apikey vaza se lido'};
  });
  assert.deepEqual(falha,{ok:false,codigo:'recusado'});
  assert.equal(chamados,1);
