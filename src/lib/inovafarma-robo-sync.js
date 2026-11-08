@@ -104,8 +104,7 @@ function validarLote(form){
         (!Number.isSafeInteger(i.precoPromocionalCentavos)||
          i.precoPromocionalCentavos<0||
          (i.precoPromocionalCentavos>0&&
-          (i.precoPromocionalCentavos>=i.precoCentavos||
-           i.precoPromocionalCentavos<Math.ceil(i.precoCentavos*0.2)))))||
+          i.precoPromocionalCentavos>=i.precoCentavos)))||
       typeof i.ean!=='string'||i.ean.length>25||
       typeof i.marca!=='string'||i.marca.length>80||
       /[<>\x00-\x1f]/.test(i.marca))return err('Código, preço, saldo ou descrição inválidos no bloco.',422);

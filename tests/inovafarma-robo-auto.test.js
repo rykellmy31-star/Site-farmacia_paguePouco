@@ -303,3 +303,15 @@ test('V3: desconto inválido é rejeitado antes de gravar lote ou alterar catál
   assert.equal(r.status,422);
   assert.equal(db.collection('inovaRoboExecucoes').count(),0);
 });
+
+
+test('robô V3: preço promocional válido superior a 80% de desconto não bloqueia lote',()=>{
+  const db=fakeDB();configurarRoboInova(db);
+  const itens=arquivo();
+  itens[0].precoPromocionalCentavos=100;
+  enviarTudo(db,itens);
+  assert.equal(aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:0}).ok,true);
+  const novo=db.collection('products').all().find(p=>p.codigoInterno==='800001');
+  assert.equal(novo.precoInternoInovaCentavos,100);
+  assert.equal(novo.ativo,false,'um produto novo continua inativo');
+});

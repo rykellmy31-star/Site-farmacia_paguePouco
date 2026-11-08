@@ -35,29 +35,26 @@ export function avaliarPrecosInternos(db, itens) {
     }else if(!p&&eans.length===1&&!idDe(eans[0])){
       p=eans[0];
     }else if(!p){motivo='sem_cadastro';resumo.semCadastro++;}
-    if(!motivo&&p&&linha.ean&&p.ean&&linha.ean!==p.ean){
-      motivo='ean_divergente';resumo.eanDivergente++;
-    }
+    // Código interno do InovaFarma é a chave principal. Um EAN antigo
+    // no catálogo não impede atualizar o mesmo código; EAN de outro SKU
+    // continua bloqueado pela conferência de identidade acima.
+    if(!motivo&&p&&linha.ean&&p.ean&&linha.ean!==p.ean)
+      resumo.eanDivergente++; // aviso; não alterar EAN sem conferência
     if(!motivo&&p?.inovaArquivado?.em){motivo='arquivado';resumo.arquivados++;}
-    if(!motivo&&linha.controlado){motivo='controlado';resumo.controlados++;}
+    if(!motivo&&(linha.controlado||p?.bloqueioControladoInova?.ativo||
+      p?.sanitario?.controlado)){motivo='controlado';resumo.controlados++;}
     const normal=Number(p?.precoCentavos||0);
+    // Preço do InovaFarma tem precedência comercial. Desconto manual,
+    // campanha pré-existente e mudança expressiva NÃO bloqueiam o preço
+    // exportado; todas as demais informações comerciais permanecem salvas.
     if(!motivo&&normal>0&&(linha.precoCentavos<normal*0.5||
-        linha.precoCentavos>normal*1.5)){
-      motivo='alteracao_grande';resumo.alertasPreco++;
-    }
-    // Preço promocional manual informado pelo administrador tem prioridade:
-    // nunca substituir por desconto interno sem revisão individual.
-    if(!motivo&&Number(p.precoPromocionalCentavos||0)>0){
-      motivo='desconto_manual';resumo.promocaoManual++;
-    }
-    if(!motivo&&Array.isArray(p.inovaPromocoes)&&p.inovaPromocoes.length&&
-        normal!==linha.precoCentavos){
-      motivo='campanha_preco_base';resumo.campanhaConflitante++;
-    }
-    if(!motivo&&normal<=0){motivo='preco_base_invalido';resumo.precoDivergente++;}
-    if(!motivo&&linha.promocaoCentavos>0&&linha.promocaoCentavos<linha.precoCentavos*0.2){
-      motivo='desconto_extremo';resumo.alertasPreco++;
-    }
+        linha.precoCentavos>normal*1.5||
+        (linha.promocaoCentavos>0&&
+         linha.promocaoCentavos<linha.precoCentavos*0.2)))
+      resumo.alertasPreco++;
+    if(!motivo&&Number(p?.precoPromocionalCentavos||0)>0)resumo.promocaoManual++;
+    if(!motivo&&Array.isArray(p?.inovaPromocoes)&&p.inovaPromocoes.length)
+      resumo.campanhaConflitante++;
     const atual=Number(p?.precoInternoInovaCentavos||0);
     if(!motivo&&normal===linha.precoCentavos&&atual===linha.promocaoCentavos){
       motivo='sem_mudanca';resumo.semMudanca++;
