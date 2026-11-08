@@ -180,7 +180,8 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     resumo.avaliados++;
     const idadeHoras=(agora-Date.parse(cart.atualizadoEm))/3_600_000;
     const lembreteId='recuperacao:lembrete:'+cart.id;
-    if (idadeHoras >= cfg.primeiroLembreteHoras && !fila.get(lembreteId)) {
+    if (idadeHoras >= cfg.primeiroLembreteHoras &&
+        idadeHoras < cfg.enviarCupomAposHoras && !fila.get(lembreteId)) {
       const token=randomToken(24);
       fila.insert({id:lembreteId,tipo:'recuperacao_lembrete',carrinhoId:cart.id,
         clienteId:cliente.id,numero,texto:mensagemLembrete(cliente,token),status:'fila',
