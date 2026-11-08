@@ -162,6 +162,16 @@ export async function createPayment(db, { order, method, payer, installments = 1
   return provider.createPayment({ db, order, method, payer, installments, cardToken, issuerId, paymentMethodId, returnUrls, config: mpConfigEfetiva(db) });
 }
 
+/** Confirma retorno hospedado apenas com consulta autenticada; não confia no navegador. */
+export async function consultarRetornoCheckoutPro(db, pedidoId, pagamentoId) {
+  const info = getProviderInfo(db);
+  if (!info.configurado || info.efetivo !== 'mercadopago')
+    return { ok:false, erro:'Mercado Pago indisponível.' };
+  return mercadoPago.consultarRetornoCheckoutPro({
+    db, pedidoId, pagamentoId, config:mpConfigEfetiva(db),
+  });
+}
+
 /** Consulta o status de uma cobrança no provedor. */
 export async function getPaymentStatus(db, payment) {
   const provider = payment.provedor === 'mercadopago' ? mercadoPago : internalProvider;
