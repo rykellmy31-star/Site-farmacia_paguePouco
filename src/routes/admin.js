@@ -1198,7 +1198,11 @@ export function registrarRotasAdmin(app, db) {
       return void res.html('<h1>403 — Acesso restrito aos administradores.</h1>',403);
     res.set('Cache-Control','no-store');
     const ctx = ctxAdmin(req, db);
-    res.html(telaVisitasSite(ctx,{ relatorio: relatorioVisitas(db), db }));
+    const periodo = req.query.get('periodo') || 'hoje';
+    const data = req.query.get('data') || '';
+    res.html(telaVisitasSite(ctx,{
+      relatorio: relatorioVisitas(db, { periodo, data }), db,
+    }));
   });
 
   /* ============================= PAGAMENTOS ============================= */
