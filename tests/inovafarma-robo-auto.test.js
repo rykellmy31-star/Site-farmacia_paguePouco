@@ -235,3 +235,71 @@ test('rotas autenticadas /webhooks e painel Superadmin, sem remover CSRF geral',
   const source=fs.readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
   assert.match(source,/registrarRotasRoboInova\(app, db\)/);
 });
+
+
+test('V3: atualiza no mesmo bloco saldo, preço normal e promoção interna; mantém campanhas/manuais',()=>{
+  const db=fakeDB();configurarRoboInova(db);
+  db.collection('products').insert({
+    id:'aptamil',codigoInterno:'800001',ean:'7891000000001',
+    nome:'Aptamil',precoCentavos:8490,precoPromocionalCentavos:6990,
+    precoInternoInovaCentavos:7390,
+    inovaPromocoes:[{inicio:'2026-11-01',fim:'2026-11-30',
+      precoVendaCentavos:8490,precoPromocionalCentavos:6490}],
+    ativo:true,imagens:['nao-alterar.png'],estoque:{quantidade:21,reservado:0,quarentena:0}
+  });
+  const itens=arquivo();itens[0].quantidade=18;
+  itens[0].precoCentavos=8990;itens[0].precoPromocionalCentavos=7790;
+  enviarTudo(db,itens);
+  const antes=db.collection('products').get('aptamil');
+  assert.equal(antes.precoInternoInovaCentavos,7390);
+  assert.equal(antes.estoque.quantidade,21);
+  const aplicado=aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:0});
+  assert.equal(aplicado.ok,true);
+  const produto=db.collection('products').get('aptamil');
+  assert.equal(produto.estoque.quantidade,18);
+  assert.equal(produto.precoCentavos,8990);
+  assert.equal(produto.precoInternoInovaCentavos,7790);
+  assert.equal(produto.precoPromocionalCentavos,6990);
+  assert.deepEqual(produto.imagens,['nao-alterar.png']);
+  assert.equal(produto.ativo,true);
+  assert.equal(produto.inovaPromocoes[0].precoPromocionalCentavos,6490);
+  const alteracoes=consultarAlteracoesUltimoRoboInova(db);
+  // Outros blocos ainda não aplicados: relatório completo ainda não disponível.
+  assert.equal(alteracoes.disponivel,false);
+});
+
+test('V3: promoção zero remove desconto interno, mas CSV antigo sem campo não altera promoção',()=>{
+  const db=fakeDB();configurarRoboInova(db);
+  db.collection('products').insert({
+    id:'test1',codigoInterno:'800001',ean:'7891000000001',
+    nome:'Produto',precoCentavos:1525,precoInternoInovaCentavos:1000,
+    precoPromocionalCentavos:0,ativo:true,
+    estoque:{quantidade:2,reservado:0,quarentena:0}
+  });
+  const itens=arquivo();itens[0].precoPromocionalCentavos=0;
+  enviarTudo(db,itens);
+  const r=aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:0});
+  assert.equal(r.ok,true);
+  assert.equal(db.collection('products').get('test1').precoInternoInovaCentavos,0);
+  assert.equal(db.collection('products').get('test1').estoque.quantidade,2);
+  const db2=fakeDB();configurarRoboInova(db2);
+  db2.collection('products').insert({
+    id:'test2',codigoInterno:'800001',ean:'7891000000001',
+    nome:'Produto',precoCentavos:1525,precoInternoInovaCentavos:1000,
+    precoPromocionalCentavos:0,ativo:true,
+    estoque:{quantidade:2,reservado:0,quarentena:0}
+  });
+  enviarTudo(db2,arquivo());
+  assert.equal(aplicarBlocoRoboInova(db2,{arquivoHash:sha,bloco:0}).ok,true);
+  assert.equal(db2.collection('products').get('test2').precoInternoInovaCentavos,1000);
+});
+
+test('V3: desconto inválido é rejeitado antes de gravar lote ou alterar catálogo',()=>{
+  const db=fakeDB();configurarRoboInova(db);
+  const itens=arquivo();itens[0].precoPromocionalCentavos=2000;
+  const r=receberBlocoRoboInova(db,{arquivoHash:sha,geradoEm:'2026-10-24T19:38:56-03:00',
+    total:3000,blocos:15,bloco:0,itens:itens.slice(0,200)});
+  assert.equal(r.ok,false);
+  assert.equal(r.status,422);
+  assert.equal(db.collection('inovaRoboExecucoes').count(),0);
+});
