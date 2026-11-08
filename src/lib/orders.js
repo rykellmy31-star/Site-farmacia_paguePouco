@@ -197,8 +197,10 @@ export async function criarPedido(db, { cart, cliente, endereco, freteOpcaoId, m
   }
 
   // 3) Frete recalculado no servidor
+  // Reutiliza o OAuth criptografado da loja durante a confirmação do pedido,
+  // assim como nas etapas de endereço e pagamento.
   const frete = await resolverFreteIntegrado({
-    config: freteConfig, cepFarmacia,
+    db, config: freteConfig, cepFarmacia,
     cep: endereco.cep,
     uf: endereco.uf,
     cidade: endereco.cidade,
