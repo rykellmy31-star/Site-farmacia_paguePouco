@@ -131,6 +131,9 @@ test('cada dia na Bahia gera linha nova para o mesmo navegador, sem repetir o di
   registrarVisita(db,req,res,'pagina',{agora:depoisMeiaNoite+1000});
   assert.equal(cookies.pp_visitante,idOriginal);
   assert.equal(db.collection('visitasSitePorDia').all().length,2);
+  const codigos = db.collection('visitasSitePorDia').all().map(v=>v.codigoDia);
+  assert.ok(codigos.every(Boolean));
+  assert.notEqual(codigos[0],codigos[1],'cada dia tem um código de exibição diferente');
   const hoje=relatorioVisitas(db,{agora:depoisMeiaNoite});
   const ontem=relatorioVisitas(db,{agora:depoisMeiaNoite,periodo:'ontem'});
   assert.equal(hoje.registros,1);
