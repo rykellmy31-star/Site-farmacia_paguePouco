@@ -18,7 +18,7 @@ import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revoc
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
 import { autorizouWhatsappPedidos, autorizouWhatsappProdutos, atualizarAutorizacaoItensPedidosPendentes, numeroWhatsapp } from '../lib/evolution-whatsapp.js';
-import { registrarVisita } from '../lib/visitas-site.js';
+import { registrarVisita, separarVisitaAoSair } from '../lib/visitas-site.js';
 import { config } from '../config.js';
 import { UF_LIST } from '../lib/cep.js';
 
@@ -222,6 +222,7 @@ export function registrarRotasConta(app, db) {
   app.get('/conta/sair', (req, res) => {
     if (req.session) destroySession(db, req.session.id);
     res.clearCookie(config.sessionCookie);
+    separarVisitaAoSair(req,res);
     res.redirect('/');
   });
 
