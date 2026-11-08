@@ -57,7 +57,24 @@ export function telaImportacaoEstoque(ctx) {
           e os produtos novos permanecerão inativos e sem preço.</p>`,
       })}
       ${painel({
-        titulo: '3. Conferir descontos e promoções do InovaFarma',
+        titulo: '3. Preços promocionais internos — Gerenciar Produtos (XLSX)',
+        corpo: '<p>Importação diferente das campanhas: lê Código, Código Barra, '+
+          'Preço Venda e Preço Promoção da exportação Excel de Gerenciar Produtos.</p>'+
+          '<div class="alerta aviso"><strong>Não altera preços no envio.</strong> '+
+          'O XLSX gera uma prévia, e qualquer atualização exige uma segunda confirmação. '+
+          'Descontos manuais e campanhas são preservados. Não altera estoque, '+
+          'EAN, fotos, situação ou aprovação sanitária.</div>'+
+          '<form method="post" action="/admin/estoque/precos-internos/preparar" '+
+          'enctype="multipart/form-data">'+
+          '<input type="hidden" name="_csrf" value="'+e(ctx.csrf)+'">'+
+          '<div class="campo"><label for="arquivoPrecosInternosInova">'+
+          'Arquivo Excel XLSX de Gerenciar Produtos</label>'+
+          '<input type="file" name="arquivo" id="arquivoPrecosInternosInova" '+
+          'accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></div>'+
+          '<button class="botao" type="submit">Conferir preços internos antes de aplicar</button></form>',
+      })}
+      ${painel({
+        titulo: '4. Conferir campanhas de promoções do InovaFarma',
         corpo: `<p>O <strong>Relatório de Promoções</strong> é diferente do relatório de estoque:
           ele mostra campanhas, preços promocionais, desconto percentual e período.
           Envie o CSV que você exportou no menu Relatório de Promoções do InovaFarma.</p>
@@ -98,7 +115,7 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '4. Limpeza por comparação (alternativa, sem zerar tudo)',
+        titulo: '5. Limpeza por comparação (alternativa, sem zerar tudo)',
         corpo: `<p>Compare os produtos já cadastrados no site com o relatório atualizado
           da <strong>Posição de Estoque do InovaFarma</strong> (CSV). A comparação utiliza
           EAN e código interno, inclusive em produtos que já existiam antes da
@@ -119,7 +136,7 @@ export function telaImportacaoEstoque(ctx) {
           </form>`,
       })}
       ${painel({
-        titulo: '5. Robô InovaFarma — envio automático do CSV',
+        titulo: '6. Robô InovaFarma — envio automático do CSV',
         corpo: `<p class="texto-pequeno"><strong>Sincronização automática por exportação CSV disponível.</strong>
           Depois do pareamento inicial no computador Windows, basta exportar o
           relatório de Posição de Estoque para C:\\InovaExportacoes. O robô envia
