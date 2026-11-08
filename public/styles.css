@@ -1367,3 +1367,109 @@ body.admin #previewBotaoWhatsApp.whatsapp-pulso-suave {
 .campo-senha-visivel > .alternar-visibilidade-senha:focus-visible {
   outline:2px solid var(--primaria); outline-offset:-3px;
 }
+
+/* Rodapé compacto: evita a quinta coluna quebrar em uma segunda linha no desktop.
+   As informações legais, o contato e todos os links continuam acessíveis. */
+body .rodape {
+  margin-top: 22px;
+  padding-top: 16px;
+  font-size: .8rem;
+  line-height: 1.38;
+}
+body .rodape .rodape-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, .8fr)) minmax(0, 1.1fr);
+  align-items: start;
+  gap: 12px 18px;
+}
+body .rodape .rodape-grade > * { min-width: 0; }
+body .rodape h4 { font-size: .84rem; margin: 0 0 5px; line-height: 1.3; }
+body .rodape .rodape-grade p { margin: 0 0 5px; overflow-wrap: anywhere; }
+body .rodape .rodape-grade li { padding: 1px 0; line-height: 1.35; }
+body .rodape .rodape-grade ul { margin: 0; }
+body .rodape .rodape-whatsapp-linha { margin: 5px 0 7px; }
+body .rodape .rodape-whatsapp-link {
+  min-height: 34px;
+  padding: 5px 10px;
+  font-size: .76rem;
+  gap: 6px;
+}
+body .rodape .rodape-whatsapp-icone,
+body .rodape .rodape-whatsapp-icone svg {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
+  flex-basis: 18px;
+}
+body .rodape .selos { gap: 4px; margin-top: 6px; }
+body .rodape .selo { padding: 3px 6px; font-size: .69rem; }
+body .rodape .rodape-inferior {
+  margin-top: 12px;
+  padding: 9px 0 11px;
+  font-size: .69rem;
+  line-height: 1.4;
+}
+body .rodape .rodape-inferior p { margin: 0 0 3px; }
+@media (min-width: 768px) and (max-width: 1099px) {
+  body .rodape .rodape-grade {
+    grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, .75fr)) minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+@media (max-width: 767px) {
+  body .rodape { margin-top: 16px; padding-top: 13px; font-size: .76rem; }
+  body .rodape .rodape-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 14px;
+  }
+  body .rodape .rodape-loja {
+    grid-column: 1 / -1;
+  }
+  body .rodape .rodape-atendimento {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 3px 10px;
+    padding-top: 8px;
+    border-top: 1px solid #ecd7d7;
+  }
+  body .rodape .rodape-atendimento h4 { grid-column: 1 / -1; }
+  body .rodape .rodape-atendimento > p { margin: 0; }
+  body .rodape .rodape-atendimento .rodape-whatsapp-linha {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  body .rodape .rodape-atendimento > p:last-child:not(.rodape-whatsapp-linha) {
+    grid-column: 1 / -1;
+  }
+  body .rodape .rodape-inferior { margin-top: 9px; padding: 8px 0 10px; }
+  body .whatsapp-flutuante {
+    right: 10px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+  body .whatsapp-flutuante.esquerda { left: 10px; right: auto; }
+  body .whatsapp-flutuante .botao-whatsapp {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    justify-content: center;
+    gap: 0;
+  }
+  body .whatsapp-flutuante .botao-whatsapp .texto { display: none !important; }
+  body .whatsapp-flutuante .botao-whatsapp svg { width: 22px; height: 22px; }
+}
+@media (max-width: 360px) {
+  body .rodape .rodape-grade { gap: 10px; }
+  body .rodape .rodape-atendimento { grid-template-columns: minmax(0, 1fr); }
+  body .rodape .rodape-atendimento .rodape-whatsapp-linha {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+}
