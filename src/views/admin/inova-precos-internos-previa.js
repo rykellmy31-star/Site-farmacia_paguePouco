@@ -26,16 +26,22 @@ export function telaPreviaPrecosInternos(ctx,previa){
     ' · Produtos controlados ignorados: '+e(r.controlados)+
     ' · Campanhas conflitantes: '+e(r.campanhaConflitante)+
     ' · Alterações grandes/desc. extremos: '+e(r.alertasPreco)+'.</p>';
-  const linhas=previa.plano.slice(0,100).map(p=>
+  // Busca um SKU mesmo quando não está entre os 100 primeiros.
+  const filtro=String(ctx.req?.query?.get('codigo')||'').trim().slice(0,80);
+  const filtrados=filtro?previa.plano.filter(p=>String(p.codigo)===filtro||
+    String(p.nome||'').toLocaleLowerCase('pt-BR').includes(filtro.toLocaleLowerCase('pt-BR'))):previa.plano;
+  const linhas=filtrados.slice(0,100).map(p=>
     '<tr><td><code>'+e(p.codigo)+'</code></td><td>'+e(p.nome)+'</td>'+
     '<td>'+dinheiro(p.atualBase)+'</td><td>'+dinheiro(p.novoBase)+'</td>'+
+    '<td>'+(p.atualPromo?dinheiro(p.atualPromo):'Sem desconto')+'</td>'+
     '<td>'+(p.novoPromo?dinheiro(p.novoPromo):'Sem desconto')+'</td>'+
     '<td>'+e(motivos[p.motivo]||p.motivo)+'</td></tr>').join('');
   const tabela='<div class="tabela-rolagem"><table class="tabela">'+
     '<thead><tr><th>Código</th><th>Produto</th><th>Preço atual</th>'+
-    '<th>Preço venda Excel</th><th>Preço promoção Excel</th><th>Situação</th></tr></thead>'+
+    '<th>Preço venda Excel</th><th>Promoção atual no site</th><th>Preço promoção Excel</th><th>Situação</th></tr></thead>'+
     '<tbody>'+linhas+'</tbody></table></div>'+
-    (previa.plano.length>100?'<p>Exibindo 100 linhas; a conferência considera todos os itens.</p>':'');
+    (!filtrados.length?'<p class="alerta aviso">Nenhum produto encontrado neste arquivo com o código ou nome informado.</p>':'')+
+    (filtrados.length>100?'<p>Exibindo 100 dos '+filtrados.length+' resultados. Filtre por código.</p>':'');
   const confirmar=previa.aplicado
     ?'<div class="alerta sucesso">Este lote já foi aplicado.</div>'
     :r.aplicaveis?'<div class="alerta aviso"><strong>Antes de aplicar:</strong> confirme '+
@@ -60,6 +66,11 @@ export function telaPreviaPrecosInternos(ctx,previa){
       'Este é o Excel de Gerenciar Produtos, não o relatório de promoções por período. '+
       'EAN, estoque, ativação, imagens, dados sanitários e pedidos são preservados.</div>'+
       painel({titulo:'Conferência antes de atualizar',corpo:resumo+
+        '<form method="get" action="/admin/estoque/precos-internos/revisar/'+encodeURIComponent(previa.id)+'">'+
+        '<label for="codigoInovaConferir">Localizar código interno ou nome no Excel</label>'+
+        '<input id="codigoInovaConferir" type="search" name="codigo" value="'+e(filtro)+
+        '" placeholder="Ex.: 797222" maxlength="80">'+
+        '<button class="botao secundario" type="submit">Verificar produto</button></form>'+
         '<div class="alerta info">Descontos internos sem data final informada no arquivo. '+
         'Não se combinam com as campanhas por período. Os descontos manuais existentes são preservados. '+
         'Uma nova exportação XLSX será necessária para atualizar alterações futuras.</div>'+
