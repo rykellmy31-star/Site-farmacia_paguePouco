@@ -7,6 +7,7 @@ import { escapeHtml, sanitizeHtml } from '../lib/security.js';
 import { formatBRL, FUSO_LOJA } from '../lib/format.js';
 import { montarArvore } from '../lib/catalog.js';
 import { normalizarFundoHome } from '../lib/fundo-home.js';
+import { estiloSeloDesconto } from '../lib/efeito-selo-desconto.js';
 import { textoInstitucionalDinamico, dadosEmpresaVisiveis, campoCadastrado } from '../lib/dados-institucionais.js';
 import { escapeHtml as e } from '../lib/security.js';
 
@@ -299,7 +300,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=senha-olhinho-20261107">
+<link rel="stylesheet" href="/styles.css?v=selo-off-intensidade-20261108">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
@@ -308,6 +309,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
   --texto:${e(tema.corTexto || '#8b0000')};
   --marca-texto:${e(tema.corTexto || '#8b0000')};
   --fundo:${e(tema.corFundo || '#fffafa')};
+  ${estiloSeloDesconto(tema.seloDescontoPulsoIntensidade)}
 }
 ${classeFundoHome ? `body.pagina-inicial.fundo-personalizado{--fundo-home-cor:${fundoHome.cor};}` : ''}
 ${fundoHome.modo === 'imagem' && classeFundoHome ? `body.pagina-inicial.fundo-imagem::before{background-image:url("${e(fundoHome.imagemUrl)}");background-position:${fundoHome.posicaoCss};}` : ''}

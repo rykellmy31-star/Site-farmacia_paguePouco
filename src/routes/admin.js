@@ -55,6 +55,7 @@ import {
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
+import { intensidadeSeloDesconto } from '../lib/efeito-selo-desconto.js';
 import { UFS, UF_LIST } from '../lib/cep.js';
 import { buscarMedidasPorEAN, buscarMedidasNoCatalogo, aplicarMedidasAusentes, eanValido } from '../lib/busca-medidas-ean.js';
 import { buscarDadosExternosEAN, imagemAutomaticaAntiga } from '../lib/enriquecimento-ean.js';
@@ -2648,6 +2649,12 @@ function registrarApi(app, db) {
   app.post('/admin/api/config/tema', async (req, res) => {
     if (!guardApi(req, res, 'configuracoes.editar')) return;
     const temaAtual = getSetting(db, 'tema') || {};
+    const novaIntensidade = req.body.seloDescontoPulsoIntensidade;
+    if (novaIntensidade !== undefined &&
+        (!/^\d{1,3}$/.test(String(novaIntensidade)) ||
+         Number(novaIntensidade) > 200)) {
+      return void res.json({ ok: false, erro: 'A intensidade do selo deve ficar entre 0 e 200%.' }, 400);
+    }
     const barraTopoCorFundo = String(req.body.barraTopoCorFundo ?? temaAtual.barraTopoCorFundo ?? '#16803c');
     const barraTopoCorTexto = String(req.body.barraTopoCorTexto ?? temaAtual.barraTopoCorTexto ?? '#ffffff');
     if (!/^#[0-9a-f]{6}$/i.test(barraTopoCorFundo) || !/^#[0-9a-f]{6}$/i.test(barraTopoCorTexto)) {
@@ -2667,6 +2674,9 @@ function registrarApi(app, db) {
       barraTopoEstiloVersao: 'abaixo-menu-verde-20261107',
       barraTopoPulsante: req.body.barraTopoPulsanteDefinida === '1'
         ? req.body.barraTopoPulsante === '1' : temaAtual.barraTopoPulsante !== false,
+      seloDescontoPulsoIntensidade: novaIntensidade === undefined
+        ? intensidadeSeloDesconto(temaAtual.seloDescontoPulsoIntensidade)
+        : Number(novaIntensidade),
       mostrarConsultaCep: req.body.mostrarConsultaCep === '1',
     };
     const arquivo = (req.files || [])[0];
