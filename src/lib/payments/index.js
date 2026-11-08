@@ -76,6 +76,12 @@ export function enabledMethods(db) {
     // Cartão real permanece bloqueado até a tokenização no navegador ser homologada.
     credit_card: info.configurado && info.efetivo === 'internal' && list.credit_card !== false,
     debit_card: info.configurado && info.efetivo === 'internal' && list.debit_card === true,
+    // Cartão real é processado no Checkout Pro hospedado pelo Mercado Pago:
+    // não capturamos dados nem criamos pagamentos com cartão sem token.
+    checkout_pro: info.configurado && info.efetivo === 'mercadopago' &&
+      (list.credit_card !== false || list.debit_card === true),
+    checkout_pro_credit: list.credit_card !== false,
+    checkout_pro_debit: list.debit_card === true,
     provider: info.efetivo,
     real: info.efetivo === 'mercadopago' && info.configurado,
   };
