@@ -224,9 +224,13 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CFG.csrf || '' },
         body: JSON.stringify({ acao: acao }),
-      }).then(() => {
+      }).then(resp => {
+        if (!resp.ok) return;
         const barra = $('#barraCookies');
         if (barra) barra.classList.remove('visivel');
+        document.dispatchEvent(new CustomEvent('pp:consentimento', {
+          detail: { aceito: acao === 'aceitar' },
+        }));
       });
       return;
     }

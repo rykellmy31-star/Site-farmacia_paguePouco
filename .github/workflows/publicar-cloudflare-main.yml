@@ -62,7 +62,7 @@ jobs:
       - name: Validar botão compacto do WhatsApp no rodapé
         run: node --test tests/whatsapp-rodape-compacto.test.js
       - name: Validar pulsação dos selos de desconto
-        run: node --test tests/descontos-pulsantes.test.js tests/selo-desconto-controle-admin.test.js
+        run: node --test tests/descontos-pulsantes.test.js tests/selo-desconto-controle-admin.test.js tests/visitas-site-analytics.test.js
       - name: Validar barra superior pulsante, cores e segurança
         run: node --test tests/barra-topo-pulsante.test.js
       - name: Validar fundo personalizável da página inicial

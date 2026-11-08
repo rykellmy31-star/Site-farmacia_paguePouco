@@ -10,6 +10,7 @@ import { searchProducts } from '../lib/catalog.js';
 import { htmlGavetaCarrinho, htmlRodapeCarrinho, htmlItensCarrinho, htmlResumoCarrinho } from '../views/cart.js';
 import { rateLimitMiddleware } from '../lib/security.js';
 import { logSystem } from '../lib/audit.js';
+import { registrarVisita, revogarVisitas, autorizouVisitas } from '../lib/visitas-site.js';
 
 function responderCarrinho(req, res, db, { avisos = [] } = {}) {
   const cart = getCart(db, req);
@@ -52,6 +53,7 @@ export function registrarRotasApi(app, db) {
     const quantidade = req.body.quantidade ?? 1;
     const r = addItem(db, cart, produtoId, quantidade);
     if (!r.ok) return void res.json({ ok: false, erro: r.erro, codigo: r.codigo }, 400);
+    registrarVisita(db, req, res, 'carrinho');
     const resposta = responderCarrinho(req, res, db);
     resposta.mensagem = 'Produto adicionado à cesta.';
     res.json(resposta);
@@ -138,8 +140,19 @@ export function registrarRotasApi(app, db) {
   });
 
   /* --------------------- PREFERÊNCIA DE COOKIES ----------------------- */
+  /* -------------------- MÉTRICAS COM CONSENTIMENTO -------------------- */
+  app.post('/api/visitantes/evento', { maxBodyBytes: 1024 }, (req,res) => {
+    if (!autorizouVisitas(req)) return void res.json({ok:true,registrado:false});
+    if (String(req.body?.tipo || '') !== 'pagina')
+      return void res.json({ok:false,erro:'Evento não permitido.'},400);
+    const retorno = registrarVisita(db,req,res,'pagina');
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,registrado:retorno.registrado});
+  });
+
   app.post('/api/cookies', { maxBodyBytes: 8 * 1024 }, (req, res) => {
     const aceitar = String(req.body.acao || '') === 'aceitar';
+    if (!aceitar) revogarVisitas(db, req, res);
     res.cookie('pp_cookies', aceitar ? 'aceito' : 'recusado', { maxAge: 60 * 60 * 24 * 365, httpOnly: false });
     res.json({ ok: true, aceito: aceitar });
   });

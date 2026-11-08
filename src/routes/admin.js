@@ -53,6 +53,8 @@ import {
   cancelarPedido, validarCancelamentoOperacional, pedidoPrecisaConferencia, metricas, vendasPorDia, produtosMaisVendidos, produtoComEstoqueParaPainel, validarReservaParaAprovacao,
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
+import { relatorioVisitas } from '../lib/visitas-site.js';
+import { telaVisitasSite } from '../views/admin/visitas-site.js';
 import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { intensidadeSeloDesconto } from '../lib/efeito-selo-desconto.js';
@@ -1186,6 +1188,17 @@ export function registrarRotasAdmin(app, db) {
       pedidos: db.collection('orders').find((o) => o.clienteId === cliente.id).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))),
       enderecos: cliente.enderecos || [],
     }));
+  });
+
+  /* ===================== VISITAS E CONVERSÕES ===================== */
+  app.get('/admin/visitas', (req, res) => {
+    if (!guard(req, res, 'relatorios.ver')) return;
+    if (!['super_admin','admin'].includes(req.adminUser?.role) ||
+        !can(req.adminUser,'clientes.ver'))
+      return void res.html('<h1>403 — Acesso restrito aos administradores.</h1>',403);
+    res.set('Cache-Control','no-store');
+    const ctx = ctxAdmin(req, db);
+    res.html(telaVisitasSite(ctx,{ relatorio: relatorioVisitas(db), db }));
   });
 
   /* ============================= PAGAMENTOS ============================= */
