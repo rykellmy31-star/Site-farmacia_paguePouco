@@ -4,10 +4,10 @@ import {paginaAdmin,painel} from './layout.js';
 const dinheiro=n=>(Number(n||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const motivos={
   apto:'Apto para atualizar',sem_cadastro:'Não existe no site',
-  identificacao_ambigua:'Código/EAN ambíguo',ean_divergente:'EAN diferente — conferir',
+  identificacao_ambigua:'Código/EAN ambíguo',ean_divergente:'EAN divergente (código interno validado)',
   arquivado:'Produto arquivado',controlado:'Produto controlado — não aplicar',
-  alteracao_grande:'Preço base variou mais de 50%',desconto_manual:'Desconto manual preservado',
-  campanha_preco_base:'Campanha existente com base divergente',
+  alteracao_grande:'Diferença expressiva do preço base',desconto_manual:'Desconto manual no site',
+  campanha_preco_base:'Campanha existente no site',
   preco_base_invalido:'Preço atual inválido',desconto_extremo:'Desconto superior a 80%',
   sem_mudanca:'Sem alteração',
 };
@@ -20,12 +20,12 @@ export function telaPreviaPrecosInternos(ctx,previa){
     '<p>Alterações aptas: <strong>'+e(r.aplicaveis)+'</strong> · '+
     'Com desconto: '+e(r.comDesconto)+' · Sem desconto: '+e(r.semDesconto)+
     ' · Já iguais: '+e(r.semMudanca)+'.</p>'+
-    '<p>Sem cadastro: '+e(r.semCadastro)+' · EAN divergente: '+e(r.eanDivergente)+
+    '<p>Sem cadastro: '+e(r.semCadastro)+' · EAN divergente (aviso): '+e(r.eanDivergente)+
     ' · Identificações ambíguas: '+e(r.identificacaoAmbigua)+
-    ' · Descontos manuais preservados: '+e(r.promocaoManual)+
+    ' · Produtos com desconto manual (sem bloqueio): '+e(r.promocaoManual)+
     ' · Produtos controlados ignorados: '+e(r.controlados)+
-    ' · Campanhas conflitantes: '+e(r.campanhaConflitante)+
-    ' · Alterações grandes/desc. extremos: '+e(r.alertasPreco)+'.</p>';
+    ' · Produtos com campanhas (sem bloqueio): '+e(r.campanhaConflitante)+
+    ' · Diferenças expressivas (aviso): '+e(r.alertasPreco)+'.</p>';
   // Busca um SKU mesmo quando não está entre os 100 primeiros.
   const filtro=String(ctx.req?.query?.get('codigo')||'').trim().slice(0,80);
   const filtrados=filtro?previa.plano.filter(p=>String(p.codigo)===filtro||
@@ -72,7 +72,7 @@ export function telaPreviaPrecosInternos(ctx,previa){
         '" placeholder="Ex.: 797222" maxlength="80">'+
         '<button class="botao secundario" type="submit">Verificar produto</button></form>'+
         '<div class="alerta info">Descontos internos sem data final informada no arquivo. '+
-        'Não se combinam com as campanhas por período. Os descontos manuais existentes são preservados. '+
+        'O desconto interno do Inova tem prioridade; promoções manuais e campanhas permanecem cadastradas. '+
         'Uma nova exportação XLSX será necessária para atualizar alterações futuras.</div>'+
         tabela+confirmar}),
   });
