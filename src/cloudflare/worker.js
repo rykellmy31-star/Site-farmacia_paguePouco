@@ -16,7 +16,7 @@ import { adicionarCreditoDesenvolvedor } from '../lib/developer-credit.js';
 import { executarAlarmeFinanceiro } from '../lib/payments/alarm-runner.js';
 import { registrarCicloFinanceiro } from '../lib/payments/ops-health.js';
 import {
-  reconciliarPix, temPixPendente, reconciliarEstornos, temEstornoPendente,
+  reconciliarPagamentoOnline, temPagamentoOnlinePendente, reconciliarEstornos, temEstornoPendente,
   temCheckoutInterrompido, reconciliarCheckoutsInterrompidos,
 } from '../lib/payments/reconciliation.js';
 import initialData from '../../.cloudflare/seed.json';
@@ -104,7 +104,7 @@ export class LojaDurableObject extends DurableObject {
   }
   // Durable Object Alarms: Pix e estornos não dependem de visitas do cliente.
   async programarAlarmeFinanceiro() {
-    if (!temPixPendente(this.db) && !temEstornoPendente(this.db) &&
+    if (!temPagamentoOnlinePendente(this.db) && !temEstornoPendente(this.db) &&
         !temCheckoutInterrompido(this.db) && !config.inova?.enabled &&
         !possuiFilaEvolution(this.db) && !temRecuperacaoMonitoravel(this.db)) return;
     const atual = await this.ctx.storage.getAlarm();
@@ -133,7 +133,7 @@ export class LojaDurableObject extends DurableObject {
       try {
         await executarAlarmeFinanceiro({
           pedidos: observar('pedidos', () => reconciliarCheckoutsInterrompidos(this.db)),
-          pix: observar('pix', () => reconciliarPix(this.db)),
+          pix: observar('pix', () => reconciliarPagamentoOnline(this.db)),
           estornos: observar('estornos', () => reconciliarEstornos(this.db)),
           persistir: async () => {
             registrarCicloFinanceiro(this.db, { resultados, falhas });
