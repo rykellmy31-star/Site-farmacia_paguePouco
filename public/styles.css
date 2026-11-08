@@ -1426,12 +1426,6 @@ body .rodape .rodape-inferior p { margin: 0 0 3px; }
   body .rodape .rodape-loja {
     grid-column: 1 / -1;
   }
-  body .rodape .rodape-loja > p:first-of-type {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    overflow: hidden;
-  }
   body .rodape .rodape-atendimento {
     grid-column: 1 / -1;
     display: grid;
