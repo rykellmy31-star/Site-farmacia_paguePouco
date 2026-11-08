@@ -15,6 +15,7 @@ const MENU = [
   { id: 'relatorio_vendas_operacional', rotulo: 'Relatório de vendas', href: '/admin/relatorio-vendas', perm: 'pedidos.ver', icone: '📋' },
   { id: 'vendedores', rotulo: 'Vendedores', href: '/admin/vendedores', perm: 'vendedores.ver', icone: '🏷️' },
   { id: 'clientes', rotulo: 'Clientes', href: '/admin/clientes', perm: 'clientes.ver', icone: '👥' },
+  { id: 'recuperacao_vendas', rotulo: 'Recuperação Inteligente de Vendas', href: '/admin/recuperacao-vendas', perm: 'promocoes.ver', somenteAdmin: true, icone: '🛒' },
   { id: 'visitas_site', rotulo: 'Visitas e conversões', href: '/admin/visitas', perm: 'relatorios.ver', somenteAdmin: true, icone: '👁️' },
   { id: 'promocoes', rotulo: 'Cupons e promoções', href: '/admin/promocoes', perm: 'promocoes.ver', icone: '🏷️' },
   { id: 'pagamentos', rotulo: 'Pagamentos', href: '/admin/pagamentos', perm: 'pagamentos.ver', icone: '💳' },
