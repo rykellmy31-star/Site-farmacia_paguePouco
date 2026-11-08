@@ -41,7 +41,17 @@ export async function reconciliarPix(db, { limit = 50, pedidoId = null } = {}) {
       resultado.erros++;
       continue;
     }
-    const destino = TERMINAL[String(consulta.status || '').toLowerCase()];
+    // A recuperação de pedidos online só poderá informar "ainda pendente"
+    // após consulta autenticada recente ao provedor (sem inferir pelo banco).
+    const statusConsultado=String(consulta.status||'').toLowerCase();
+    if (['pending','in_process','in_mediation','authorized','approved','rejected',
+      'cancelled','expired','refunded','charged_back'].includes(statusConsultado)) {
+      db.collection('payments').update(pagamento.id,{
+        ultimoStatusConfirmado:statusConsultado,
+        ultimaConfirmacaoProvedorEm:nowISO(),
+      });
+    }
+    const destino = TERMINAL[statusConsultado];
     if (!destino) {
       resultado.pendentes++;
       continue;
