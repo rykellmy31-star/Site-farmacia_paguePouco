@@ -171,6 +171,16 @@ export function validarCupom(db, codigo, { subtotalCentavos, clienteId = null, i
     return { ok: false, erro: 'Configuração de desconto inválida.' };
   }
   const agora = Date.now();
+  if (cupom.recuperacaoVenda === true) {
+    if (!clienteId || !cupom.clienteExclusivoId || cupom.clienteExclusivoId !== clienteId)
+      return { ok:false, erro:'Cupom individual de outro cliente.' };
+    if (!cupom.expiraEm || !Number.isFinite(Date.parse(cupom.expiraEm)) ||
+        Date.parse(cupom.expiraEm) <= agora)
+      return { ok:false, erro:'Este cupom exclusivo expirou.' };
+    const produtos = [...new Set(itens.map(i=>String(i.produtoId)))].sort();
+    if (!produtos.length || JSON.stringify(produtos)!==JSON.stringify(cupom.produtosExclusivos||[]))
+      return { ok:false, erro:'Este cupom é exclusivo para a seleção original.' };
+  }
   if (cupom.validoDe && (!Number.isFinite(Date.parse(cupom.validoDe + 'T00:00:00.000Z')) ||
       Date.parse(cupom.validoDe + 'T00:00:00.000Z') > agora)) {
     return { ok: false, erro: 'Cupom ainda não está válido.' };
@@ -210,6 +220,9 @@ export function validarCupom(db, codigo, { subtotalCentavos, clienteId = null, i
     desconto = Math.min(base, Math.round(Number(cupom.valor || 0) * 100));
   } else if (cupom.tipo === 'frete_gratis') {
     freteGratis = true;
+  }
+  if (cupom.recuperacaoVenda && Number.isSafeInteger(cupom.descontoMaximoCentavos)) {
+    desconto = Math.min(desconto, cupom.descontoMaximoCentavos);
   }
   desconto = Math.max(0, Math.min(desconto, base));
   return { ok: true, cupom, desconto, freteGratis };
