@@ -19,11 +19,15 @@ function xlsx(dados){
     sharedStrings.map(s=>'<si><t>'+s+'</t></si>').join('')+'</sst>';
   const cell=(col,row,value,shared=false)=>'<c r="'+col+row+'"'+
     (shared?' t="s"':'')+'><v>'+value+'</v></c>';
-  const head=cell('B',2,0,true)+cell('C',2,1,true)+cell('Y',2,2,true)+
+  // Exportação real do InovaFarma inclui células vazias antes e entre campos:
+  // <c r="A2" s="1" /> precede o cabeçalho Código em B2.
+  const head='<c r="A2" s="1" />'+cell('B',2,0,true)+cell('C',2,1,true)+
+    '<c r="D2" s="1" />'+
     cell('AB',2,3,true)+cell('AH',2,4,true)+cell('AP',2,5,true)+
     cell('AM',2,6,true);
   const rows=dados.map((d,i)=>'<row r="'+(i+3)+'">'+
-    cell('B',i+3,d.code)+cell('C',i+3,d.name,true)+
+    '<c r="A'+(i+3)+'" s="2" />'+cell('B',i+3,d.code)+
+    cell('C',i+3,d.name,true)+'<c r="D'+(i+3)+'" s="2" />'+
     cell('Y',i+3,d.price)+cell('AB',i+3,d.promo)+
     cell('AH',i+3,d.ean)+cell('AP',i+3,1)+cell('AM',i+3,0)+'</row>').join('');
   const sheet='<?xml version="1.0"?><worksheet><sheetData><row r="2">'+
