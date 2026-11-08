@@ -7,6 +7,8 @@ import { randomToken } from './security.js';
 import { nowISO } from './store.js';
 import { getSetting } from './settings.js';
 import { evolutionConfig, numeroWhatsapp } from './evolution-whatsapp.js';
+import { podeVender, estoqueDisponivel, precoVigenteCentavos } from './catalog.js';
+import { config } from '../config.js';
 
 export const CONFIG_RECUPERACAO = Object.freeze({
   ativo: false, primeiroLembreteHoras: 1, enviarCupomAposHoras: 24,
@@ -70,24 +72,32 @@ function carrinhoAbandonado(db, cart, cliente, config, agora, ativadoEm) {
   if (!cart?.clienteId || !cliente || !(cart.itens || []).length || !cart.atualizadoEm) return false;
   const ultimaAtividade = Date.parse(cart.atualizadoEm);
   if (!Number.isFinite(ultimaAtividade) || ultimaAtividade > agora ||
-      ultimaAtividade < ativadoEm) return false; // nunca gerar campanhas retroativas
+      ultimaAtividade < ativadoEm || agora - ultimaAtividade > 30*86_400_000) return false; // nunca gerar campanhas retroativas
   if (db.collection('orders').all().some(o =>
     o.carrinhoId === cart.id && !['recusado','expirado'].includes(o.statusFinanceiro))) return false;
   return (cart.itens || []).every(i => Number.isInteger(Number(i.quantidade)) && Number(i.quantidade) > 0);
 }
+// Lista conservadora: não enviar ofertas de medicamentos, aparelhos, testes
+// ou qualquer item fora de higiene, beleza e fraldas.
+const CATEGORIAS_PERMITIDAS = new Set([
+ 'higiene-pessoal','sabonetes','desodorantes','higiene-bucal',
+ 'papel-higienico','beleza','cabelos','maquiagem','unhas',
+ 'cuidados-com-o-corpo','dermocosmeticos','hidratantes','cuidados-faciais',
+ 'fraldas','fraldas-descartaveis','lencos-umedecidos','chupetas-e-mamadeiras',
+]);
 function itensRecuperaveis(db, cart) {
   const items = [];
   for (const item of cart.itens || []) {
     const p = db.collection('products').get(item.produtoId);
-    if (!p || p.ativo === false || !Number.isSafeInteger(Number(item.quantidade)) || Number(item.quantidade) < 1) return [];
-    if ((Number(p.estoque?.quantidade) || 0) -
-        (Number(p.estoque?.reservado) || 0) -
-        (Number(p.estoque?.quarentena) || 0) < Number(item.quantidade)) return [];
-    // Não incluir medicamentos ou itens sanitários sensíveis no texto promocional.
-    // Nenhum produto bloqueado por regra sanitária recebe campanha.
-    const classificacao = String(p.sanitario?.classificacao || 'nao_aplicavel').toLowerCase();
-    if (!['nao_aplicavel','cosmetico','higiene'].includes(classificacao)) return [];
-    if (p.sanitario?.controlado || p.sanitario?.antimicrobiano) return [];
+    const categoria=db.collection('categories').get(p?.categoriaId);
+    if (!p || !podeVender(p).ok ||
+        !Number.isSafeInteger(Number(item.quantidade)) || Number(item.quantidade)<1 ||
+        estoqueDisponivel(p)<Number(item.quantidade)) return [];
+    if (!CATEGORIAS_PERMITIDAS.has(String(categoria?.slug||''))) return [];
+    const tipo=String(p.sanitario?.classificacao||'nao_aplicavel').toLowerCase();
+    if (!['nao_aplicavel','cosmetico','cosmético','higiene'].includes(tipo) ||
+        p.sanitario?.requerReceita || p.sanitario?.controlado ||
+        p.sanitario?.antimicrobiano) return [];
     items.push(p);
   }
   return items;
@@ -95,17 +105,18 @@ function itensRecuperaveis(db, cart) {
 function descontoFormato(n) { return (n / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function nomeSeguro(v) { return String(v || 'cliente').replace(/[\r\n*~_<>\x60]/g,' ').trim().slice(0,48) || 'cliente'; }
 function textoProduto(v) { return String(v||'').replace(/[\x00-\x1f*~_<>\x60]/g,' ').replace(/\s+/g,' ').trim().slice(0,80); }
-function mensagemLembrete(cliente) {
+function mensagemLembrete(cliente,token) {
   return 'Olá, '+nomeSeguro(cliente.nome)+'! 👋\n'+
     '🛒 Sua seleção continua esperando no carrinho da Farmácia Pague Pouco!\n'+
-    'Quando quiser, continue sua compra pelo site: '+linkCarrinho()+'\n'+
+    'Quando quiser, continue sua compra pelo site: '+linkCarrinho(token)+'\n'+
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
-function linkCarrinho() {
-  // Link direto sem token de cliente. Requer login para recuperar a cesta da conta.
-  return 'https://site.farmaciapaguepouco.app/carrinho';
+function linkCarrinho(token) {
+  // Token aleatório + verificação de sessão impedem acesso cruzado.
+  return String(config.publicBaseUrl||'https://site.farmaciapaguepouco.app').replace(/\/+$/,'')+
+    '/conta/recuperar-carrinho/'+encodeURIComponent(token);
 }
-function mensagemCupom(cliente, itens, cupom, config) {
+function mensagemCupom(cliente, itens, cupom, config, token) {
   const nomes = cliente.consentimentoWhatsappMarketingDetalhes === true
     ? itens.slice(0,3).map((p,i)=>'• '+textoProduto(p.nome)).join('\n') : '';
   const produtos = nomes ? '\n🛍️ *Sua seleção:*\n'+nomes+'\n' :
@@ -118,7 +129,7 @@ function mensagemCupom(cliente, itens, cupom, config) {
     ', em compras a partir de '+descontoFormato(config.compraMinimaCentavos)+').\n'+
     '🎟️ *Cupom individual:* '+cupom.codigo+'\n'+
     '⏰ Válido por *'+config.validadeHoras+' horas após o envio*.\n'+
-    '🛍️ *Finalize aqui:* '+linkCarrinho()+'\n\n'+
+    '🛍️ *Finalize aqui:* '+linkCarrinho(token)+'\n\n'+
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
 function codigoNovo(db) {
@@ -144,7 +155,8 @@ export function proximaRecuperacaoPendente(db, agora=Date.now()) {
 export function temRecuperacaoMonitoravel(db) {
   const cfg=configRecuperacao(db);
   return cfg.ativo && Boolean(cfg.ativadoEm) &&
-    db.collection('carts').all().some(c=>c.clienteId && (c.itens||[]).length);
+    db.collection('carts').all().some(c=>c.clienteId && (c.itens||[]).length &&
+      Date.now()-Date.parse(c.atualizadoEm||'') < 30*86_400_000);
 }
 export function executarRecuperacao(db,{agora=Date.now()}={}) {
   const cfg=configRecuperacao(db), evo=evolutionConfig(db);
@@ -169,11 +181,12 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     const idadeHoras=(agora-Date.parse(cart.atualizadoEm))/3_600_000;
     const lembreteId='recuperacao:lembrete:'+cart.id;
     if (idadeHoras >= cfg.primeiroLembreteHoras && !fila.get(lembreteId)) {
+      const token=randomToken(24);
       fila.insert({id:lembreteId,tipo:'recuperacao_lembrete',carrinhoId:cart.id,
-        clienteId:cliente.id,numero,texto:mensagemLembrete(cliente),status:'fila',
+        clienteId:cliente.id,numero,texto:mensagemLembrete(cliente,token),status:'fila',
         criadoEm:nowISO(),tentativas:0});
       campanhas.insert({id:lembreteId,carrinhoId:cart.id,clienteId:cliente.id,
-        tipo:'lembrete',criadoEm:nowISO(),cupomId:null});
+        tipo:'lembrete',criadoEm:nowISO(),cupomId:null,token});
       resumo.lembretes++;
     }
     if (idadeHoras < cfg.enviarCupomAposHoras) continue;
@@ -181,6 +194,12 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     if (fila.get(cupomId)) continue;
     const ultimo=caminhosUltimosCupons(campanhas,cliente.id);
     if (ultimo && agora-Date.parse(ultimo.criadoEm) < cfg.intervaloDias*86_400_000) continue;
+    const subtotal=cart.itens.reduce((n,i)=>{
+      const p=db.collection('products').get(i.produtoId);
+      return n+precoVigenteCentavos(p)*Number(i.quantidade);
+    },0);
+    if (subtotal < cfg.compraMinimaCentavos) continue;
+    const token=randomToken(24);
     const codigo=codigoNovo(db);
     const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
     const cupom=cupons.insert({codigo,tipo:'percentual',valor:cfg.descontoPercentual,
@@ -190,10 +209,10 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
       criadoEm:nowISO(),validadeHoras:cfg.validadeHoras,
       descricao:'Recuperação de carrinho individual'});
     fila.insert({id:cupomId,tipo:'recuperacao_cupom',carrinhoId:cart.id,
-      clienteId:cliente.id,cupomId:cupom.id,numero,texto:mensagemCupom(cliente,itens,cupom,cfg),
+      clienteId:cliente.id,cupomId:cupom.id,numero,texto:mensagemCupom(cliente,itens,cupom,cfg,token),
       status:'fila',criadoEm:nowISO(),tentativas:0});
     campanhas.insert({id:cupomId,carrinhoId:cart.id,clienteId:cliente.id,
-      tipo:'cupom',cupomId:cupom.id,criadoEm:nowISO()});
+      tipo:'cupom',cupomId:cupom.id,criadoEm:nowISO(),token});
     resumo.cupons++;
   }
   return resumo;
