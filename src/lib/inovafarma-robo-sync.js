@@ -100,6 +100,12 @@ function validarLote(form){
       !nome||nome.length>220||/[<>\x00-\x1f]/.test(nome)||
       !validoInteiro(i.quantidade)||!Number.isSafeInteger(i.precoCentavos)||
       i.precoCentavos<=0||i.precoCentavos>100000000||
+      (Object.hasOwn(i,'precoPromocionalCentavos')&&
+        (!Number.isSafeInteger(i.precoPromocionalCentavos)||
+         i.precoPromocionalCentavos<0||
+         (i.precoPromocionalCentavos>0&&
+          (i.precoPromocionalCentavos>=i.precoCentavos||
+           i.precoPromocionalCentavos<Math.ceil(i.precoCentavos*0.2)))))||
       typeof i.ean!=='string'||i.ean.length>25||
       typeof i.marca!=='string'||i.marca.length>80||
       /[<>\x00-\x1f]/.test(i.marca))return err('Código, preço, saldo ou descrição inválidos no bloco.',422);
@@ -176,7 +182,9 @@ function criarNovoInativo(db,it,agora){
     codigoInterno:it.codigoInterno,sku:'',marca:it.marca,fabricante:'',
     categoriaId:null,subcategoriaId:null,descricao:'',caracteristicas:{},
     imagens:[],videos:[],precoCentavos:it.precoCentavos,
-    precoPromocionalCentavos:0,ativo:false,destaque:false,peso:0,
+    precoPromocionalCentavos:0,
+    precoInternoInovaCentavos:Object.hasOwn(it,'precoPromocionalCentavos')?
+      it.precoPromocionalCentavos:0,ativo:false,destaque:false,peso:0,
     sanitario:{classificacao:'nao_aplicavel',requerReceita:true,
       controlado:false,registroMS:'',aprovadoFarmaceutico:false},
     estoque:{quantidade:it.quantidade,reservado:0,quarentena:0,minimo:5},
@@ -250,14 +258,22 @@ function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteraco
      it.quantidade<comprometido) {
     indicadores.pendentes++;return detalhe(it,'saldo_menor_que_reservas_ou_quarentena');
   }
+  const temPrecoPromo=Object.hasOwn(it,'precoPromocionalCentavos');
+  const promoAnterior=Number(p.precoInternoInovaCentavos||0);
   const alterou=Number(estoque.quantidade||0)!==it.quantidade||
-    Number(p.precoCentavos||0)!==it.precoCentavos;
+    Number(p.precoCentavos||0)!==it.precoCentavos||
+    (temPrecoPromo&&promoAnterior!==it.precoPromocionalCentavos);
   if(!alterou){indicadores.semAlteracao++;return null;}
-  // Não alterar título/imagem/EAN existente/categorias/promoções/ativação.
+  // O preço promocional é uma camada própria: NÃO apaga descontos manuais,
+  // campanhas por período, nome, fotos, EAN, categorias ou ativação.
+  // CSV sem campo promocional deixa o desconto interno anterior como estava.
   const estoqueAntes=Number(estoque.quantidade||0);
   const precoAntesCentavos=Number(p.precoCentavos||0);
   produtos.update(p.id,{estoque:{...estoque,quantidade:it.quantidade},
-    precoCentavos:it.precoCentavos,atualizadoEm:agora});
+    precoCentavos:it.precoCentavos,
+    ...(temPrecoPromo?{precoInternoInovaCentavos:it.precoPromocionalCentavos,
+      precoInternoInovaAtualizadoEm:agora}:{}),
+    atualizadoEm:agora});
   // A fotografia ANTES/DEPOIS pertence ao lote e é persistida na mesma
   // transação da atualização. Uma venda não é inferida a partir do saldo.
   alteracoes.push({
@@ -266,6 +282,8 @@ function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteraco
     ean:String(p.ean||it.ean||''),
     estoqueAntes,estoqueDepois:it.quantidade,
     precoAntesCentavos,precoDepoisCentavos:it.precoCentavos,
+    ...(temPrecoPromo?{promoAnteriorCentavos:promoAnterior,
+      promoDepoisCentavos:it.precoPromocionalCentavos}:{}),
   });
   // Auditoria compacta; nunca registrar preço de custo, CPF ou nomes de clientes.
   db.collection('stockMovements').insert({produtoId:p.id,tipo:'ajuste',

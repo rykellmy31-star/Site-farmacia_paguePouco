@@ -83,7 +83,12 @@ export function registrarRotasRoboInova(app,db) {
         'Preço de venda: <strong>'+
         e(formatBRL(p.precoAntesCentavos/100))+' → '+
         e(formatBRL(p.precoDepoisCentavos/100))+'</strong>':'';
-      const campos=[estoque,preco].filter(Boolean).join(' · ');
+      const promocao=Number.isSafeInteger(p.promoDepoisCentavos)&&
+        p.promoAnteriorCentavos!==p.promoDepoisCentavos?
+        'Preço promocional interno: <strong>'+
+        e(formatBRL((p.promoAnteriorCentavos||0)/100))+' → '+
+        e(formatBRL(p.promoDepoisCentavos/100))+'</strong>':'';
+      const campos=[estoque,preco,promocao].filter(Boolean).join(' · ');
       return '<li><a href="/admin/produtos/'+encodeURIComponent(String(p.produtoId))+
         '"><strong>'+e(p.nome||'Produto sem nome')+'</strong></a>'+
         ' — Código: '+e(String(p.codigoInterno||'não informado'))+
