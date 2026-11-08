@@ -312,6 +312,26 @@ export function registrarRotasConta(app, db) {
     res.redirect('/conta/enderecos');
   });
 
+  /* Carrinho de campanha: o link nunca concede acesso sem login na MESMA conta. */
+  app.get('/conta/recuperar-carrinho/:token',(req,res)=>{
+    if(!exigirLogin(req,res))return;
+    res.set('Cache-Control','no-store');
+    const token=String(req.params.token||'');
+    if(!/^[A-Za-z0-9_-]{30,64}$/.test(token))
+      return void res.status(404).html('Link de carrinho inválido.');
+    const campanha=db.collection('recuperacoesVendas').findOne(c=>
+      c.token===token && c.clienteId===req.user.id &&
+      Number.isFinite(Date.parse(c.criadoEm)) &&
+      Date.now()-Date.parse(c.criadoEm) <= 30*86_400_000);
+    const cart=campanha?db.collection('carts').get(campanha.carrinhoId):null;
+    if(!cart || cart.clienteId!==req.user.id || !(cart.itens||[]).length)
+      return void res.redirect('/carrinho');
+    res.cookie(config.cartCookie,cart.id,{
+      maxAge:60*60*24*180,path:'/',httpOnly:false,sameSite:'Lax',
+    });
+    res.redirect('/carrinho');
+  });
+
   /* ------------------------------ DADOS ---------------------------- */
   app.get('/conta/dados', (req, res) => {
     if (!exigirLogin(req, res)) return;
