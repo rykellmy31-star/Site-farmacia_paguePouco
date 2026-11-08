@@ -89,6 +89,7 @@ export function registrarRotasConta(app, db) {
       senha: String(req.body.senha || ''),
       senha2: String(req.body.senha2 || ''),
       marketing: !!req.body.marketing,
+      consentimentoWhatsappMarketingDetalhes: !!req.body.marketing && req.body.consentimentoWhatsappMarketingDetalhes === '1',
     };
     const erros = validate(dados, {
       nome: [[(val) => v.required(val) && v.minLen(val, 3), 'Informe seu nome completo.'], [(val) => v.maxLen(val, 120), 'Nome muito longo.']],
@@ -107,6 +108,7 @@ export function registrarRotasConta(app, db) {
       nome: dados.nome, email: dados.email, senhaHash: hashPassword(dados.senha),
       cpf: dados.cpf, telefone: dados.telefone, dataNascimento: dados.dataNascimento,
       ativo: true, emailConfirmado: false, marketing: dados.marketing,
+      consentimentoWhatsappMarketingDetalhes: dados.consentimentoWhatsappMarketingDetalhes,
       enderecos: [], favoritos: [], criadoEm: new Date().toISOString(), ultimoAcesso: null,
     });
     const cartAnterior = req.cookies?.[config.cartCookie] || null;
@@ -327,6 +329,7 @@ export function registrarRotasConta(app, db) {
       cpf: onlyDigits(req.body.cpf),
       dataNascimento: String(req.body.dataNascimento || ''),
       marketing: !!req.body.marketing,
+      consentimentoWhatsappMarketingDetalhes: !!req.body.marketing && req.body.consentimentoWhatsappMarketingDetalhes === '1',
     };
     const erros = validate(dados, {
       nome: [[(val) => v.required(val) && v.minLen(val, 3), 'Informe seu nome completo.']],
