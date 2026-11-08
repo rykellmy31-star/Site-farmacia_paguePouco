@@ -54,7 +54,7 @@ import {
 } from '../lib/orders.js';
 import { logAdmin, queryLogs } from '../lib/audit.js';
 import { relatorioVisitas } from '../lib/visitas-site.js';
-import { configRecuperacao, validarConfigRecuperacao, painelRecuperacao, cancelarCupomRecuperacao } from '../lib/recuperacao-vendas.js';
+import { configRecuperacao, validarConfigRecuperacao, configRecuperacaoLocal, validarConfigRecuperacaoLocal, painelRecuperacao, cancelarCupomRecuperacao } from '../lib/recuperacao-vendas.js';
 import { telaRecuperacaoVendas } from '../views/admin/recuperacao-vendas.js';
 import { telaVisitasSite } from '../views/admin/visitas-site.js';
 import { outbox } from '../lib/mailer.js';
@@ -1350,7 +1350,7 @@ export function registrarRotasAdmin(app, db) {
       return void res.status(403).html('Acesso administrativo restrito.');
     res.set('Cache-Control','no-store');
     res.html(telaRecuperacaoVendas(ctxAdmin(req,db),{
-      cfg:configRecuperacao(db),resumo:painelRecuperacao(db),
+      cfg:configRecuperacao(db),cfgLocal:configRecuperacaoLocal(db),resumo:painelRecuperacao(db),
     }));
   });
   app.post('/admin/recuperacao-vendas/configurar',(req,res)=>{
@@ -1362,13 +1362,31 @@ export function registrarRotasAdmin(app, db) {
     const r=validarConfigRecuperacao(req.body,atual);
     if(!r.ok) {
       return void res.html(telaRecuperacaoVendas(ctxAdmin(req,db),{
-        cfg:atual,resumo:painelRecuperacao(db),erro:r.erro,
+        cfg:atual,cfgLocal:configRecuperacaoLocal(db),resumo:painelRecuperacao(db),erro:r.erro,
       }),400);
     }
     patchSetting(db,'recuperacaoVendas',r.config,req.adminUser,req);
     logAdmin(db,req.adminUser,'configurou_recuperacao_vendas','configuracao','recuperacaoVendas',
       {ativo:r.config.ativo,desconto:r.config.descontoPercentual,validade:r.config.validadeHoras},req);
     res.redirect('/admin/recuperacao-vendas?salvo=1');
+  });
+  app.post('/admin/recuperacao-vendas/local/configurar',(req,res)=>{
+    if(!guard(req,res,'promocoes.editar'))return;
+    if(!['admin','super_admin'].includes(req.adminUser?.role) ||
+        !can(req.adminUser,'clientes.ver'))
+      return void res.status(403).html('Acesso administrativo restrito.');
+    const atual=configRecuperacaoLocal(db);
+    const r=validarConfigRecuperacaoLocal(req.body,atual);
+    if(!r.ok) {
+      res.set('Cache-Control','no-store');
+      return void res.html(telaRecuperacaoVendas(ctxAdmin(req,db),{
+        cfg:configRecuperacao(db),cfgLocal:atual,resumo:painelRecuperacao(db),erro:r.erro,
+      }),400);
+    }
+    patchSetting(db,'recuperacaoVendasLocal',r.config,req.adminUser,req);
+    logAdmin(db,req.adminUser,'configurou_recuperacao_vendas_local','configuracao','recuperacaoVendasLocal',
+      {ativo:r.config.ativo,desconto:r.config.descontoPercentual,validade:r.config.validadeHoras},req);
+    res.redirect('/admin/recuperacao-vendas?salvo=local');
   });
   app.post('/admin/recuperacao-vendas/cupons/:id/cancelar',(req,res)=>{
     if(!guard(req,res,'promocoes.editar'))return;

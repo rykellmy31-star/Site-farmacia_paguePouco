@@ -9,6 +9,7 @@ import { getSetting } from './settings.js';
 import { evolutionConfig, numeroWhatsapp } from './evolution-whatsapp.js';
 import { podeVender, estoqueDisponivel, precoVigenteCentavos } from './catalog.js';
 import { config } from '../config.js';
+import { destinoRecuperacao } from './recuperacao-destino.js';
 
 export const CONFIG_RECUPERACAO = Object.freeze({
   ativo: false, primeiroLembreteHoras: 1, enviarCupomAposHoras: 24,
@@ -21,6 +22,26 @@ export const CONFIG_RECUPERACAO = Object.freeze({
 export function configRecuperacao(db) {
   return { ...CONFIG_RECUPERACAO, ...(getSetting(db, 'recuperacaoVendas') || {}) };
 }
+
+export const CONFIG_RECUPERACAO_LOCAL=Object.freeze({
+  ...CONFIG_RECUPERACAO,
+  primeiroLembreteHoras:1,
+  enviarCupomAposHoras:4,
+  descontoPercentual:5,
+  descontoMaximoCentavos:1500,
+  compraMinimaCentavos:6000,
+  validadeHoras:48,
+  intervaloDias:15,
+  ativo:false,
+  ativadoEm:null,
+});
+export function configRecuperacaoLocal(db) {
+  return { ...CONFIG_RECUPERACAO_LOCAL, ...(getSetting(db,'recuperacaoVendasLocal')||{}) };
+}
+export function validarConfigRecuperacaoLocal(body,anterior=CONFIG_RECUPERACAO_LOCAL) {
+  return validarConfigRecuperacao(body,anterior);
+}
+
 
 function inteiro(valor, min, max) {
   const n = Number(valor);
@@ -107,7 +128,12 @@ function itensRecuperaveis(db, cart) {
 function descontoFormato(n) { return (n / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function nomeSeguro(v) { return String(v || 'cliente').replace(/[\r\n*~_<>\x60]/g,' ').trim().slice(0,48) || 'cliente'; }
 function textoProduto(v) { return String(v||'').replace(/[\x00-\x1f*~_<>\x60]/g,' ').replace(/\s+/g,' ').trim().slice(0,80); }
-function mensagemLembrete(cliente,token) {
+function mensagemLembrete(cliente,token,modo='nacional') {
+  if (modo==='local') return 'Olá, '+nomeSeguro(cliente.nome)+'! 👋\n'+
+    '🛒 Sua seleção ainda está esperando na *Farmácia Pague Pouco*!\n'+
+    '🏪 Você pode finalizar o pedido pelo site e pagar na retirada ou no recebimento da entrega local, sem pagamento antecipado.\n'+
+    '🛍️ Retome seu carrinho: '+linkCarrinho(token)+'\n'+
+    '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
   return 'Olá, '+nomeSeguro(cliente.nome)+'! 👋\n'+
     '🛒 Sua seleção continua esperando no carrinho da Farmácia Pague Pouco!\n'+
     'Quando quiser, continue sua compra pelo site: '+linkCarrinho(token)+'\n'+
@@ -118,7 +144,7 @@ function linkCarrinho(token) {
   return String(config.publicBaseUrl||'https://site.farmaciapaguepouco.app').replace(/\/+$/,'')+
     '/conta/recuperar-carrinho/'+encodeURIComponent(token);
 }
-function mensagemCupom(cliente, itens, cupom, config, token) {
+function mensagemCupom(cliente, itens, cupom, config, token, modo='nacional') {
   const nomes = cliente.consentimentoWhatsappMarketingDetalhes === true
     ? itens.slice(0,3).map((p,i)=>'• '+textoProduto(p.nome)).join('\n') : '';
   const produtos = nomes ? '\n🛍️ *Sua seleção:*\n'+nomes+'\n' :
@@ -131,27 +157,30 @@ function mensagemCupom(cliente, itens, cupom, config, token) {
     ', em compras a partir de '+descontoFormato(config.compraMinimaCentavos)+').\n'+
     '🎟️ *Cupom individual:* '+cupom.codigo+'\n'+
     '⏰ Válido por *'+config.validadeHoras+' horas após o envio*.\n'+
+    (modo==='local'?'🏪 Finalize pelo site e pague apenas na retirada ou no recebimento da entrega local.\n':'')+
     '🛍️ *Finalize aqui:* '+linkCarrinho(token)+'\n\n'+
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
-function codigoNovo(db) {
+function codigoNovo(db,modo='nacional') {
   for (let n=0;n<8;n++) {
-    const codigo='PP-'+randomToken(9).replace(/[^a-zA-Z0-9]/g,'').slice(0,11).toUpperCase();
+    const codigo=(modo==='local'?'PP-LOCAL-':'PP-')+randomToken(9).replace(/[^a-zA-Z0-9]/g,'').slice(0,11).toUpperCase();
     if (codigo.length>=10 && !db.collection('coupons').findOne(c=>c.codigo===codigo)) return codigo;
   }
   throw new Error('Não foi possível gerar código individual seguro.');
 }
-export function proximaRecuperacaoPendente(db, agora=Date.now()) {
-  const cfg=configRecuperacao(db);
-  if (!cfg.ativo || !cfg.ativadoEm) return false;
-  const inicio=Date.parse(cfg.ativadoEm);
-  if (!Number.isFinite(inicio)) return false;
-  return db.collection('carts').all().some(cart => {
+export function proximaRecuperacaoPendente(db,agora=Date.now()) {
+  return db.collection('carts').all().some(cart=>{
+    if (!cart.clienteId) return false;
     const cliente=db.collection('customers').get(cart.clienteId);
-    return carrinhoAbandonado(db,cart,cliente,cfg,agora,inicio) &&
+    const modo=destinoRecuperacao(db,cart,cliente);
+    if (modo==='indefinido') return false;
+    const cfg=modo==='local'?configRecuperacaoLocal(db):configRecuperacao(db);
+    const inicio=Date.parse(cfg.ativadoEm||'');
+    return cfg.ativo && Number.isFinite(inicio) &&
+      carrinhoAbandonado(db,cart,cliente,cfg,agora,inicio) &&
       clienteElegivel(db,cliente,cfg,numeroWhatsapp(cliente?.telefone)) &&
-      !!itensRecuperaveis(db,cart).length &&
-      (agora - Date.parse(cart.atualizadoEm)) / 3_600_000 >= cfg.primeiroLembreteHoras;
+      itensRecuperaveis(db,cart).length>0 &&
+      (agora-Date.parse(cart.atualizadoEm))/3_600_000 >= cfg.primeiroLembreteHoras;
   });
 }
 export function temRecuperacaoMonitoravel(db) {
@@ -159,7 +188,8 @@ export function temRecuperacaoMonitoravel(db) {
   const cupomPendente=db.collection('coupons').all().some(c=>
     c.recuperacaoVenda===true&&c.ativo===true&&c.expiraEm&&
     Date.parse(c.expiraEm)>Date.now());
-  return cupomPendente || (cfg.ativo && Boolean(cfg.ativadoEm) &&
+  return cupomPendente || ((cfg.ativo && Boolean(cfg.ativadoEm) ||
+    configRecuperacaoLocal(db).ativo && Boolean(configRecuperacaoLocal(db).ativadoEm)) &&
     db.collection('carts').all().some(c=>c.clienteId && (c.itens||[]).length &&
       Date.now()-Date.parse(c.atualizadoEm||'') < 30*86_400_000));
 }
@@ -179,39 +209,48 @@ export function expirarCuponsRecuperacao(db,{agora=Date.now()}={}) {
 }
 export function executarRecuperacao(db,{agora=Date.now()}={}) {
   expirarCuponsRecuperacao(db,{agora});
-  const cfg=configRecuperacao(db), evo=evolutionConfig(db);
-  const resumo={avaliados:0,lembretes:0,cupons:0};
-  if (!cfg.ativo || !cfg.ativadoEm || !evo.ativo || !evo.instancia) return resumo;
-  const ativadoEm=Date.parse(cfg.ativadoEm);
+  const evo=evolutionConfig(db), nacional=configRecuperacao(db), local=configRecuperacaoLocal(db);
+  const resumo={avaliados:0,lembretes:0,cupons:0,locais:0,nacionais:0};
+  if ((!nacional.ativo && !local.ativo) || !evo.ativo || !evo.instancia) return resumo;
   const fila=db.collection('evolutionWhatsappOutbox');
   const campanhas=db.collection('recuperacoesVendas');
   const cupons=db.collection('coupons');
+  const processados={local:0,nacional:0};
   const carts=db.collection('carts').all()
     .filter(c=>c.clienteId && (c.itens||[]).length)
     .sort((a,b)=>String(a.atualizadoEm).localeCompare(String(b.atualizadoEm)));
   for (const cart of carts) {
-    if (resumo.avaliados >= cfg.maximoPorCiclo) break;
     const cliente=db.collection('customers').get(cart.clienteId);
+    const modo=destinoRecuperacao(db,cart,cliente);
+    if (modo==='indefinido') continue;
+    const cfg=modo==='local'?local:nacional;
+    if (!cfg.ativo || !cfg.ativadoEm || !Number.isFinite(Date.parse(cfg.ativadoEm)) ||
+        processados[modo] >= cfg.maximoPorCiclo) continue;
     const numero=numeroWhatsapp(cliente?.telefone);
     if (!clienteElegivel(db,cliente,cfg,numero) ||
-        !carrinhoAbandonado(db,cart,cliente,cfg,agora,ativadoEm)) continue;
+        !carrinhoAbandonado(db,cart,cliente,cfg,agora,Date.parse(cfg.ativadoEm))) continue;
     const itens=itensRecuperaveis(db,cart);
     if (!itens.length) continue;
+    // Se uma cesta já entrou em outra modalidade, nunca duplicar campanhas.
+    if (campanhas.all().some(c=>c.carrinhoId===cart.id &&
+        (c.modo||'nacional')!==modo)) continue;
+    processados[modo]++;
     resumo.avaliados++;
     const idadeHoras=(agora-Date.parse(cart.atualizadoEm))/3_600_000;
-    const lembreteId='recuperacao:lembrete:'+cart.id;
+    const prefixo=modo==='local'?'recuperacao:local:':'recuperacao:';
+    const lembreteId=prefixo+'lembrete:'+cart.id;
     if (idadeHoras >= cfg.primeiroLembreteHoras &&
         idadeHoras < cfg.enviarCupomAposHoras && !fila.get(lembreteId)) {
       const token=randomToken(24);
-      fila.insert({id:lembreteId,tipo:'recuperacao_lembrete',carrinhoId:cart.id,
-        clienteId:cliente.id,numero,texto:mensagemLembrete(cliente,token),status:'fila',
+      fila.insert({id:lembreteId,tipo:'recuperacao_lembrete',modo,carrinhoId:cart.id,
+        clienteId:cliente.id,numero,texto:mensagemLembrete(cliente,token,modo),status:'fila',
         criadoEm:nowISO(),tentativas:0});
-      campanhas.insert({id:lembreteId,carrinhoId:cart.id,clienteId:cliente.id,
+      campanhas.insert({id:lembreteId,carrinhoId:cart.id,clienteId:cliente.id,modo,
         tipo:'lembrete',criadoEm:nowISO(),cupomId:null,token});
       resumo.lembretes++;
     }
     if (idadeHoras < cfg.enviarCupomAposHoras) continue;
-    const cupomId='recuperacao:cupom:'+cart.id;
+    const cupomId=prefixo+'cupom:'+cart.id;
     if (fila.get(cupomId)) continue;
     const ultimo=caminhosUltimosCupons(campanhas,cliente.id);
     if (ultimo && agora-Date.parse(ultimo.criadoEm) < cfg.intervaloDias*86_400_000) continue;
@@ -221,20 +260,23 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     },0);
     if (subtotal < cfg.compraMinimaCentavos) continue;
     const token=randomToken(24);
-    const codigo=codigoNovo(db);
+    const codigo=codigoNovo(db,modo);
     const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
     const cupom=cupons.insert({codigo,tipo:'percentual',valor:cfg.descontoPercentual,
       valorMinimo:cfg.compraMinimaCentavos,descontoMaximoCentavos:cfg.descontoMaximoCentavos,
       usoMaximo:1,usos:0,ativo:false,primeiroPedido:cfg.apenasPrimeiraCompra,
       clienteExclusivoId:cliente.id,produtosExclusivos,recuperacaoVenda:true,
-      criadoEm:nowISO(),validadeHoras:cfg.validadeHoras,
-      descricao:'Recuperação de carrinho individual'});
-    fila.insert({id:cupomId,tipo:'recuperacao_cupom',carrinhoId:cart.id,
-      clienteId:cliente.id,cupomId:cupom.id,numero,texto:mensagemCupom(cliente,itens,cupom,cfg,token),
+      modoRecuperacao:modo,criadoEm:nowISO(),validadeHoras:cfg.validadeHoras,
+      descricao:modo==='local'?'Recuperação local individual':'Recuperação de carrinho individual'});
+    fila.insert({id:cupomId,tipo:'recuperacao_cupom',modo,carrinhoId:cart.id,
+      clienteId:cliente.id,cupomId:cupom.id,numero,
+      texto:mensagemCupom(cliente,itens,cupom,cfg,token,modo),
       status:'fila',criadoEm:nowISO(),tentativas:0});
-    campanhas.insert({id:cupomId,carrinhoId:cart.id,clienteId:cliente.id,
+    campanhas.insert({id:cupomId,carrinhoId:cart.id,clienteId:cliente.id,modo,
       tipo:'cupom',cupomId:cupom.id,criadoEm:nowISO(),token});
     resumo.cupons++;
+    if (modo==='local') resumo.locais++;
+    else resumo.nacionais++;
   }
   return resumo;
 }
@@ -251,15 +293,24 @@ export function painelRecuperacao(db) {
   const pedidos=db.collection('orders').all();
   const recuperados=pedidos.filter(p=>p.statusFinanceiro==='aprovado'&&
     cupons.get(p.cupom?.cupomId)?.recuperacaoVenda===true);
+  const pedidosLocais=pedidos.filter(p=>
+    cupons.get(p.cupom?.cupomId)?.modoRecuperacao==='local');
+  const locaisPagos=pedidosLocais.filter(p=>p.statusFinanceiro==='aprovado');
   return {
     carrinhosElegiveis:db.collection('carts').all().filter(c=>c.clienteId&&(c.itens||[]).length).length,
     lembretes:campanhas.filter(c=>c.tipo==='lembrete').length,
     cuponsGerados:campanhas.filter(c=>c.tipo==='cupom').length,
     enviados:campanhas.filter(c=>outbox.get(c.id)?.status==='enviado').length,
     recuperados:recuperados.length,
+    pedidosLocaisGerados:pedidosLocais.length,
+    pedidosLocaisPagos:locaisPagos.length,
+    receitaLocalCentavos:locaisPagos.reduce((n,p)=>n+Number(p.totalCentavos||0),0),
+    cuponsLocais:campanhas.filter(c=>c.modo==='local'&&c.tipo==='cupom').length,
+    cuponsNacionais:campanhas.filter(c=>(c.modo||'nacional')==='nacional'&&c.tipo==='cupom').length,
     receitaRecuperadaCentavos:recuperados.reduce((n,p)=>n+Number(p.totalCentavos||0),0),
     linhas:campanhas.slice(0,100).map(c=>({
-      ...c, nome:db.collection('customers').get(c.clienteId)?.nome||'Cliente',
+      ...c, modo:c.modo||'nacional',
+      nome:db.collection('customers').get(c.clienteId)?.nome||'Cliente',
       codigo:cupons.get(c.cupomId)?.codigo||'—',
       desconto:cupons.get(c.cupomId)?.valor||0,
       expiraEm:cupons.get(c.cupomId)?.expiraEm||null,
