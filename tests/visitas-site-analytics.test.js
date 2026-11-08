@@ -117,3 +117,93 @@ test('rota privada usa permissão de relatório e exige admin; script só dispar
   const layout=readFileSync(new URL('../src/views/layout.js',import.meta.url),'utf8');
   assert.match(layout,/visitas-site\.js/);
 });
+
+
+test('cada dia na Bahia gera linha nova para o mesmo navegador, sem repetir o dia anterior',()=>{
+  const db=banco(),{req,res,cookies}=navegador();
+  const antesMeiaNoite=Date.parse('2026-11-08T02:55:00Z'); // 23h55 de 07/11 na Bahia
+  const depoisMeiaNoite=Date.parse('2026-11-08T03:05:00Z'); // 00h05 de 08/11 na Bahia
+  registrarVisita(db,req,res,'pagina',{agora:antesMeiaNoite});
+  registrarVisita(db,req,res,'checkout',{agora:antesMeiaNoite});
+  registrarVisita(db,req,res,'pedido',{agora:antesMeiaNoite,pedidoId:'pedido-ontem'});
+  const idOriginal=cookies.pp_visitante;
+  registrarVisita(db,req,res,'pagina',{agora:depoisMeiaNoite});
+  registrarVisita(db,req,res,'pagina',{agora:depoisMeiaNoite+1000});
+  assert.equal(cookies.pp_visitante,idOriginal);
+  assert.equal(db.collection('visitasSitePorDia').all().length,2);
+  const codigos = db.collection('visitasSitePorDia').all().map(v=>v.codigoDia);
+  assert.ok(codigos.every(Boolean));
+  assert.notEqual(codigos[0],codigos[1],'cada dia tem um código de exibição diferente');
+  const hoje=relatorioVisitas(db,{agora:depoisMeiaNoite});
+  const ontem=relatorioVisitas(db,{agora:depoisMeiaNoite,periodo:'ontem'});
+  assert.equal(hoje.registros,1);
+  assert.equal(hoje.visitas,1);
+  assert.equal(hoje.paginas,2);
+  assert.equal(hoje.pedidosCriados,0);
+  assert.equal(hoje.iniciosCheckout,0);
+  assert.equal(hoje.linhas[0].data,'2026-11-08');
+  assert.equal(ontem.registros,1);
+  assert.equal(ontem.visitas,1);
+  assert.equal(ontem.paginas,1);
+  assert.equal(ontem.pedidosCriados,1);
+  assert.equal(ontem.linhas[0].data,'2026-11-07');
+  const seteDias=relatorioVisitas(db,{agora:depoisMeiaNoite,periodo:'7'});
+  assert.equal(seteDias.registros,1,'navegador único mesmo que apareça em dois dias');
+  assert.equal(seteDias.totalLinhas,2,'histórico exibe duas linhas com datas diferentes');
+  assert.equal(seteDias.visitas,2,'total multi-dia soma sessões de cada dia');
+});
+
+test('filtro permite dia específico, bloqueia datas fora de 90 dias e preserva ontem',()=>{
+  const db=banco(),{req,res}=navegador(),agora=Date.parse('2026-11-08T15:00:00Z');
+  registrarVisita(db,req,res,'pagina',{agora:Date.parse('2026-11-07T12:00:00Z')});
+  registrarVisita(db,req,res,'pagina',{agora});
+  const dia=relatorioVisitas(db,{agora,periodo:'dia',data:'2026-11-07'});
+  assert.equal(dia.periodo,'dia');
+  assert.equal(dia.paginas,1);
+  assert.equal(dia.linhas[0].data,'2026-11-07');
+  for(const invalida of ['2026-11-09','2026-02-30','1900-01-01','../../etc/passwd']){
+    const relatorio=relatorioVisitas(db,{agora,periodo:'dia',data:invalida});
+    assert.equal(relatorio.periodo,'hoje');
+    assert.equal(relatorio.paginas,1);
+  }
+  assert.equal(relatorioVisitas(db,{agora,periodo:'30'}).paginas,2);
+});
+
+test('revogação apaga todas as linhas diárias do navegador sem apagar outros navegadores',()=>{
+  const db=banco(),primeiro=navegador(),segundo=navegador();
+  const ontem=Date.parse('2026-11-07T12:00:00Z'),hoje=Date.parse('2026-11-08T12:00:00Z');
+  registrarVisita(db,primeiro.req,primeiro.res,'pagina',{agora:ontem});
+  registrarVisita(db,primeiro.req,primeiro.res,'pagina',{agora:hoje});
+  registrarVisita(db,segundo.req,segundo.res,'pagina',{agora:hoje});
+  assert.equal(db.collection('visitasSitePorDia').all().length,3);
+  revogarVisitas(db,primeiro.req,primeiro.res);
+  const restantes=db.collection('visitasSitePorDia').all();
+  assert.equal(restantes.length,1);
+  assert.equal(restantes[0].navegadorId,segundo.cookies.pp_visitante);
+});
+
+test('retenção remove dias mais antigos que os últimos 90 dias civis',()=>{
+  const db=banco(),antigo=navegador(),recente=navegador();
+  const hoje=Date.parse('2026-11-08T12:00:00Z');
+  registrarVisita(db,antigo.req,antigo.res,'pagina',{agora:Date.parse('2026-08-01T12:00:00Z')});
+  registrarVisita(db,recente.req,recente.res,'pagina',{agora:hoje});
+  const relatorio=relatorioVisitas(db,{agora:hoje,periodo:'90'});
+  assert.equal(relatorio.registros,1);
+  assert.equal(db.collection('visitasSitePorDia').all().length,1);
+  assert.equal(relatorio.linhas[0].data,'2026-11-08');
+});
+
+test('painel exibe filtros práticos, data de cada navegador e período diário',()=>{
+  const db=banco(),{req,res}=navegador();
+  registrarVisita(db,req,res,'pagina');
+  const relatorio=relatorioVisitas(db);
+  const ctx={db,settings:DEFAULT_SETTINGS(),adminUser:{id:'a1',nome:'Admin',role:'super_admin'},
+    csrf:'csrf',req:{query:new URLSearchParams()}};
+  const html=telaVisitasSite(ctx,{relatorio,db});
+  assert.match(html,/Escolher dia/);
+  assert.match(html,/periodo=ontem/);
+  assert.match(html,/periodo=90/);
+  assert.match(html,/Atualizar agora/);
+  assert.match(html,/<th>Dia<\/th>/);
+  assert.match(html,/Registros por navegador e dia/);
+});
