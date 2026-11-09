@@ -117,10 +117,17 @@ test('medicamento liberado para venda online não é bloqueado pela categoria',(
   assert.equal(db.collection('evolutionWhatsappOutbox').count(),1);
   assert.doesNotMatch(db.collection('evolutionWhatsappOutbox').all()[0].texto,/Fralda Desc/);
 });
-test('o nome do produto só aparece se houver autorização explícita adicional',()=>{
+test('mensagem com cupom é curta e não expõe itens mesmo com detalhes autorizados',()=>{
   const {db,agora}=fixture({detalhes:true});
   assert.equal(executarRecuperacao(db,{agora}).cupons,1);
-  assert.match(db.collection('evolutionWhatsappOutbox').all()[0].texto,/Fralda Desc 50 unidades/);
+  const msg=db.collection('evolutionWhatsappOutbox').all()[0].texto;
+  assert.doesNotMatch(msg,/Fralda Desc|esquecendo alguma coisa|TEMOS UM PRESENTE/i);
+  assert.match(msg,/5% de desconto/);
+  assert.match(msg,/🎟️ \*Cupom:\*/);
+  assert.match(msg,/mínimo.*R\$/);
+  assert.match(msg,/Validade.*48h/);
+  assert.match(msg,/recuperar-carrinho/);
+  assert(msg.length<420,'cupom global não deve ficar comprido');
 });
 test('limites dos cupons e controle de ativação não aceitam valores arbitrários',()=>{
   const ok=validarConfigRecuperacao({
@@ -215,8 +222,12 @@ test('local gera cupom exclusivo com desconto e prazo próprios, mesmo com nacio
  const outbox=db.collection('evolutionWhatsappOutbox').all();
  assert.equal(outbox.length,1);
  assert.equal(outbox[0].modo,'local');
- assert.match(outbox[0].texto,/pague apenas na retirada ou no recebimento/);
+ assert.match(outbox[0].texto,/Pague na retirada ou na entrega local/);
  assert.match(outbox[0].texto,/❤️ \*Farmácia Pague Pouco, cuidando da sua saúde\.\*/);
+ assert.match(outbox[0].texto,/7% de desconto/);
+ assert.match(outbox[0].texto,/\b2h após o envio/);
+ assert(outbox[0].texto.length<430,'cupom local não deve ficar longo');
+ assert.doesNotMatch(outbox[0].texto,/produtinhos|TEMOS UM PRESENTE|Sua seleção/i);
  const cupom=db.collection('coupons').get(outbox[0].cupomId);
  assert.match(cupom.codigo,/^PP-LOCAL-/);
  assert.equal(cupom.valor,7);
@@ -376,6 +387,10 @@ test('Pix encerrado por provedor cria cupom próprio sem reativar carrinho aband
  const item=db.collection('evolutionWhatsappOutbox').all()[0];
  assert.equal(item.tipo,'recuperacao_pedido_cupom');
  assert.match(item.texto,/novo pagamento/i);
+ assert.match(item.texto,/7% de desconto/);
+ assert.match(item.texto,/\b24h após o envio/);
+ assert.match(item.texto,/anterior não foi concluído/i);
+ assert(item.texto.length<430,'cupom de pagamento não concluído não deve ficar longo');
  const cupom=db.collection('coupons').get(item.cupomId);
  assert.match(cupom.codigo,/^PP-PAGO-/);
  assert.equal(cupom.valor,7);

@@ -167,15 +167,8 @@ function podeOferecerCupomPrimeiraCompra(db,cliente,cfg) {
   return !cfg.apenasPrimeiraCompra || !db.collection('orders').all().some(o=>
     o.clienteId===cliente.id && o.statusFinanceiro==='aprovado');
 }
-// Nunca revelar medicamentos pelo nome numa campanha; o carrinho e
-// seus detalhes permanecem visíveis apenas na sessão autenticada.
-function podeDetalharProdutoMarketing(p) {
-  return ['nao_aplicavel','cosmetico','cosmético','higiene'].includes(
-    String(p?.sanitario?.classificacao||'nao_aplicavel').toLowerCase());
-}
 function descontoFormato(n) { return (n / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function nomeSeguro(v) { return String(v || 'cliente').replace(/[\r\n*~_<>\x60]/g,' ').trim().slice(0,48) || 'cliente'; }
-function textoProduto(v) { return String(v||'').replace(/[\x00-\x1f*~_<>\x60]/g,' ').replace(/\s+/g,' ').trim().slice(0,80); }
 function mensagemLembrete(cliente,token,modo='nacional') {
   if (modo==='local') return 'Olá, '+nomeSeguro(cliente.nome)+'! 👋\n'+
     '🛒 Sua seleção ainda está esperando na *Farmácia Pague Pouco*!\n'+
@@ -192,22 +185,24 @@ function linkCarrinho(token) {
   return String(config.publicBaseUrl||'https://site.farmaciapaguepouco.app').replace(/\/+$/,'')+
     '/conta/recuperar-carrinho/'+encodeURIComponent(token);
 }
+function primeiroNomeCupom(cliente) {
+  return nomeSeguro(cliente?.nome).split(/\s+/)[0] || 'cliente';
+}
+function ofertaCompacta(cupom,cfg) {
+  const percentual=String(cfg.descontoPercentual).replace('.',',');
+  return '🎁 *'+percentual+'% de desconto* (até '+
+    descontoFormato(cfg.descontoMaximoCentavos)+
+    '; mínimo '+descontoFormato(cfg.compraMinimaCentavos)+').\n'+
+    '🎟️ *Cupom:* '+cupom.codigo+'\n'+
+    '⏰ *Validade:* '+cfg.validadeHoras+'h após o envio.\n';
+}
 function mensagemCupom(cliente, itens, cupom, config, token, modo='nacional') {
-  const nomes = cliente.consentimentoWhatsappMarketingDetalhes === true &&
-    itens.every(podeDetalharProdutoMarketing)
-    ? itens.slice(0,3).map(p=>'• '+textoProduto(p.nome)).join('\n') : '';
-  const produtos = nomes ? '\n🛍️ *Sua seleção:*\n'+nomes+'\n' :
-    '\n🛍️ *Os produtos que você selecionou estão esperando!*\n';
-  return '🛒 *'+nomeSeguro(cliente.nome)+', esquecendo alguma coisa?* 👀\n\n'+
-    'Olá! ❤️\n\nPercebemos que você deixou alguns produtinhos no carrinho da *Farmácia Pague Pouco*!'+
-    produtos+'\n🎁 *TEMOS UM PRESENTE PARA VOCÊ!*\n'+
-    'Seu desconto exclusivo: *'+String(config.descontoPercentual).replace('.',',')+'%*'+
-    ' (até '+descontoFormato(config.descontoMaximoCentavos)+
-    ', em compras a partir de '+descontoFormato(config.compraMinimaCentavos)+').\n'+
-    '🎟️ *Cupom individual:* '+cupom.codigo+'\n'+
-    '⏰ Válido por *'+config.validadeHoras+' horas após o envio*.\n'+
-    (modo==='local'?'🏪 Finalize pelo site e pague apenas na retirada ou no recebimento da entrega local.\n':'')+
-    '🛍️ *Finalize aqui:* '+linkCarrinho(token)+'\n\n'+
+  // Mensagem curta em qualquer categoria, sem divulgar medicamentos e
+  // sem descrições dos produtos escolhidos pelo cliente.
+  return '🛒 Olá, '+primeiroNomeCupom(cliente)+'! Seu carrinho está esperando.\n'+
+    ofertaCompacta(cupom,config)+
+    (modo==='local'?'🏪 Pague na retirada ou na entrega local.\n':'')+
+    '🛍️ *Concluir compra:* '+linkCarrinho(token)+'\n'+
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
 function codigoNovo(db,modo='nacional') {
@@ -420,15 +415,9 @@ function mensagemPagamentoPendente(cliente,pedido,token,terminado) {
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
 function mensagemCupomPagamento(cliente,pedido,cupom,cfg,token) {
-  return 'Olá, '+nomeSeguro(cliente.nome)+'! ❤️\n'+
-    '🎁 Temos um desconto especial para você retomar sua compra na *Farmácia Pague Pouco*!\n'+
-    'O pagamento anterior do pedido #'+String(pedido.codigo).replace(/[^a-zA-Z0-9-]/g,'').slice(0,32)+
-    ' foi encerrado sem aprovação.\n'+
-    '🎟️ *Cupom:* '+cupom.codigo+' — *'+String(cfg.descontoPercentual).replace('.',',')+'%*'+
-    ' (até '+descontoFormato(cfg.descontoMaximoCentavos)+', compras a partir de '+
-    descontoFormato(cfg.compraMinimaCentavos)+').\n'+
-    '⏰ Válido por '+cfg.validadeHoras+' horas após o envio.\n'+
-    '🛍️ Retome sua seleção e gere um *novo pagamento* pelo site: '+linkCarrinho(token)+'\n'+
+  return '💳 Olá, '+primeiroNomeCupom(cliente)+'! Seu pagamento anterior não foi concluído.\n'+
+    ofertaCompacta(cupom,cfg)+
+    '🛍️ *Gerar novo pagamento:* '+linkCarrinho(token)+'\n'+
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
 export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}={}) {
