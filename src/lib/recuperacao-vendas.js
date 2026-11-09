@@ -154,6 +154,15 @@ export function subtotalRecuperavel(db,cart) {
   }
   return total;
 }
+/**
+ * Mínimo do site, NÃO o mínimo promocional do cupom.
+ * A loja normalmente configura R$ 10 em valorMinimoPedido (centavos).
+ * O fallback de R$ 10 preserva essa regra enquanto não existir setting.
+ */
+export function minimoLembreteRecuperacao(db) {
+  const valor=Number(getSetting(db,'loja')?.valorMinimoPedido);
+  return Number.isSafeInteger(valor)&&valor>0?valor:1000;
+}
 function podeOferecerCupomPrimeiraCompra(db,cliente,cfg) {
   return !cfg.apenasPrimeiraCompra || !db.collection('orders').all().some(o=>
     o.clienteId===cliente.id && o.statusFinanceiro==='aprovado');
@@ -219,7 +228,7 @@ export function proximaRecuperacaoPendente(db,agora=Date.now()) {
     return cfg.ativo && Number.isFinite(inicio) &&
       carrinhoAbandonado(db,cart,cliente,cfg,agora,inicio) &&
       clienteElegivel(db,cliente,cfg,numeroWhatsapp(cliente?.telefone)) &&
-      (subtotalRecuperavel(db,cart)??-1)>=cfg.compraMinimaCentavos &&
+      (subtotalRecuperavel(db,cart)??-1)>=minimoLembreteRecuperacao(db) &&
       (agora-Date.parse(cart.atualizadoEm))/3_600_000 >= cfg.primeiroLembreteHoras;
   });
 }
@@ -277,7 +286,7 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     const itens=itensRecuperaveis(db,cart);
     if (!itens.length) continue;
     const subtotal=subtotalRecuperavel(db,cart);
-    if(subtotal==null || subtotal<cfg.compraMinimaCentavos) continue;
+    if(subtotal==null || subtotal<minimoLembreteRecuperacao(db)) continue;
     // Se uma cesta já entrou em outra modalidade, nunca duplicar campanhas.
     if (campanhas.all().some(c=>c.carrinhoId===cart.id &&
         (c.modo||'nacional')!==modo)) continue;
@@ -301,7 +310,8 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     if (fila.get(cupomId)) continue;
     const ultimo=caminhosUltimosCupons(campanhas,cliente.id);
     if (ultimo && agora-Date.parse(ultimo.criadoEm) < cfg.intervaloDias*86_400_000) continue;
-    if (!podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
+    if (subtotal<cfg.compraMinimaCentavos ||
+        !podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
     const token=randomToken(24);
     const codigo=codigoNovo(db,modo);
     const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
@@ -417,7 +427,7 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
       const p=db.collection('products').get(i.produtoId);
       return n+precoVigenteCentavos(p)*Number(i.quantidade);
     },0);
-    if(!Number.isSafeInteger(subtotalPedido)||subtotalPedido<cfg.compraMinimaCentavos) continue;
+    if(!Number.isSafeInteger(subtotalPedido)||subtotalPedido<minimoLembreteRecuperacao(db)) continue;
     avaliados++;
     const idadeHoras=(agora-horaPedido)/3_600_000;
     const lembreteId='recuperacao:pedido:lembrete:'+pedido.id;
@@ -443,7 +453,8 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
       .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
     if (ultimo && agora-Date.parse(ultimo.criadoEm)<cfg.intervaloDias*86_400_000) continue;
     const itens=itensRecuperaveis(db,cart);
-    if (!itens.length || !podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
+    if (!itens.length || subtotalPedido<cfg.compraMinimaCentavos ||
+        !podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
     const token=randomToken(24);
     const codigo=codigoNovo(db,'pedido');
     const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
@@ -522,13 +533,16 @@ export function diagnosticoCarrinhosRecuperacao(db,{agora=Date.now(),limite=20}=
         situacao='Pagamento posterior à cesta ainda pendente';
       else if(!itensRecuperaveis(db,cart).length)
         situacao='Cesta possui itens inativos, indisponíveis ou bloqueados para venda online';
-      else if((subtotalRecuperavel(db,cart)??-1)<cfg.compraMinimaCentavos)
-        situacao='Cesta abaixo da compra mínima configurada';
+      else if((subtotalRecuperavel(db,cart)??-1)<minimoLembreteRecuperacao(db))
+        situacao='Cesta abaixo do valor mínimo da loja para recuperação';
       else if(campanhas.all().some(c=>c.carrinhoId===cart.id &&
         (c.modo||'nacional')!==modo))
         situacao='Cesta teve campanha de outra modalidade';
       else if(agora-ultima < cfg.primeiroLembreteHoras*3_600_000)
         situacao='Aguardando completar prazo de inatividade';
+      else if(agora-ultima >= cfg.enviarCupomAposHoras*3_600_000 &&
+        (subtotalRecuperavel(db,cart)??-1)<cfg.compraMinimaCentavos)
+        situacao='Lembrete permitido; cupom exige valor mínimo promocional maior';
       else situacao='Prazo atingido; aguardando próximo ciclo automático (até 5 minutos)';
       return {
         cliente:cliente?.nome||'Cliente',modo,
