@@ -73,8 +73,11 @@ export function enabledMethods(db) {
   const info = getProviderInfo(db);
   return {
     pix: info.configurado && list.pix !== false,
-    // Cartão real permanece bloqueado até a tokenização no navegador ser homologada.
-    credit_card: info.configurado && info.efetivo === 'internal' && list.credit_card !== false,
+    // Cartão real só é disponibilizado via Checkout Pro seguro quando ativado
+    // explicitamente pelo proprietário após validação das credenciais.
+    credit_card: info.configurado && list.credit_card !== false &&
+      (info.efetivo==='internal' ||
+        info.efetivo==='mercadopago' && settings.checkoutProCartaoHabilitado===true),
     debit_card: info.configurado && info.efetivo === 'internal' && list.debit_card === true,
     provider: info.efetivo,
     real: info.efetivo === 'mercadopago' && info.configurado,
@@ -153,7 +156,9 @@ export async function createPayment(db, { order, method, payer, installments = 1
   if (!info.configurado) return { ok: false, erro: info.motivo || 'Provedor não configurado.' };
   if (!enabledMethods(db)[method]) return { ok: false, erro: 'Meio de pagamento indisponível ou não homologado.' };
   const provider = resolve(db);
-  return provider.createPayment({ db, order, method, payer, installments, cardToken, issuerId, paymentMethodId, returnUrls, config: mpConfigEfetiva(db) });
+  return provider.createPayment({ db, order, method, payer, installments, cardToken, issuerId, paymentMethodId,
+    returnUrls: {...returnUrls,checkoutProCartao:info.efetivo==='mercadopago' && method==='credit_card'},
+    config: mpConfigEfetiva(db) });
 }
 
 /** Consulta o status de uma cobrança no provedor. */
