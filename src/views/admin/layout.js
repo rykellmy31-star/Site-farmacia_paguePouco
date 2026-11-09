@@ -16,6 +16,7 @@ const MENU = [
   { id: 'vendedores', rotulo: 'Vendedores', href: '/admin/vendedores', perm: 'vendedores.ver', icone: '🏷️' },
   { id: 'clientes', rotulo: 'Clientes', href: '/admin/clientes', perm: 'clientes.ver', icone: '👥' },
   { id: 'recuperacao_vendas', rotulo: 'Recuperação Inteligente de Vendas', href: '/admin/recuperacao-vendas', perm: 'promocoes.ver', somenteAdmin: true, icone: '🛒' },
+  { id: 'inteligencia_vendas', rotulo: 'Inteligência de Vendas', href: '/admin/inteligencia-vendas', perm: 'relatorios.ver', somenteAdmin: true, icone: '✨' },
   { id: 'visitas_site', rotulo: 'Visitas e conversões', href: '/admin/visitas', perm: 'relatorios.ver', somenteAdmin: true, icone: '👁️' },
   { id: 'promocoes', rotulo: 'Cupons e promoções', href: '/admin/promocoes', perm: 'promocoes.ver', icone: '🏷️' },
   { id: 'pagamentos', rotulo: 'Pagamentos', href: '/admin/pagamentos', perm: 'pagamentos.ver', icone: '💳' },
@@ -57,7 +58,7 @@ export function paginaAdmin(ctx, { titulo, conteudo, ativo = '', headExtra = '',
 <title>${e(titulo)} — Painel | ${e(empresa.nomeFantasia || 'Pague Pouco')}</title>
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#8b0000">
-<link rel="stylesheet" href="/styles.css?v=senha-olhinho-20261107">
+<link rel="stylesheet" href="/styles.css?v=inteligencia-vendas-20261109">
 <link rel="icon" type="image/svg+xml" href="/img/favicon.svg?v=20261021-vermelho">
 <style>
 :root{--marca-texto:${e(ctx.settings.tema?.corTexto || '#8b0000')};--primaria:${e(ctx.settings.tema?.corPrimaria || '#8b0000')};--primaria-escura:${e(ctx.settings.tema?.corPrimariaEscura || '#6b0000')};--secundaria:${e(ctx.settings.tema?.corSecundaria || '#8b0000')};}
