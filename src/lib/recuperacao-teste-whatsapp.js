@@ -28,32 +28,32 @@ function textoTeste(db,tipo) {
   const cfg=modo==='local'?configRecuperacaoLocal(db):
     modo==='pedido'?configRecuperacaoPedido(db):configRecuperacao(db);
   const desconto=String(cfg.descontoPercentual).replace('.',',');
-  const cupom='🎟️ Exemplo de cupom: *TESTE-SEM-VALIDADE* ('+desconto+
-    '% até '+brl(cfg.descontoMaximoCentavos)+
-    ', compra mínima '+brl(cfg.compraMinimaCentavos)+
-    ', validade configurada: '+cfg.validadeHoras+' horas).\n';
+  const cupom='🎁 *'+desconto+'% de desconto* (até '+brl(cfg.descontoMaximoCentavos)+
+    '; mínimo '+brl(cfg.compraMinimaCentavos)+').\n'+
+    '🎟️ *Cupom:* TESTE-SEM-VALIDADE\n'+
+    '⏰ *Validade:* '+cfg.validadeHoras+'h após o envio.\n';
   let mensagem='';
   switch(tipo){
     case 'carrinho_global_lembrete':
       mensagem='🛒 Sua seleção ainda está esperando no carrinho!\nRetome sua compra pelo site: '+sitio;
       break;
     case 'carrinho_global_cupom':
-      mensagem='🛒 Você deixou produtos no carrinho.\n'+cupom+'Retome sua compra: '+sitio;
+      mensagem='🛒 Olá! Seu carrinho está esperando.\n'+cupom+'🛍️ *Concluir compra:* '+sitio;
       break;
     case 'pagamento_pendente_lembrete':
       mensagem='💳 O pagamento do pedido de exemplo *#TESTE-123* ainda não foi confirmado.\n'+
         'Confira o pedido no site, sem gerar uma cobrança duplicada: '+sitio;
       break;
     case 'pagamento_encerrado_cupom':
-      mensagem='💳 A cobrança de exemplo foi encerrada sem aprovação.\n'+
-        cupom+'Você pode retomar a compra e gerar um novo pagamento pelo site: '+sitio;
+      mensagem='💳 Seu pagamento anterior não foi concluído.\n'+
+        cupom+'🛍️ *Gerar novo pagamento:* '+sitio;
       break;
     case 'carrinho_local_lembrete':
       mensagem='🛒 Sua seleção está esperando!\n🏪 Finalize pelo site e pague na retirada ou no recebimento da entrega local: '+sitio;
       break;
     case 'carrinho_local_cupom':
-      mensagem='🏪 Seu carrinho local está esperando.\n'+cupom+
-        'Finalize no site e pague na retirada ou no recebimento: '+sitio;
+      mensagem='🛒 Olá! Seu carrinho está esperando.\n'+cupom+
+        '🏪 Pague na retirada ou na entrega local.\n🛍️ *Concluir compra:* '+sitio;
       break;
     default:
       return '';
