@@ -14,7 +14,7 @@ import { pedidoOcultoDoCliente } from '../lib/order-visibility.js';
 import { reconciliarPixAoConsultarPedido } from '../lib/payments/reconciliation.js';
 import { sendMail } from '../lib/mailer.js';
 import { vincularCarrinhoAoCliente, aplicarCupom, calcularTotais, normalizeCart, novoCarrinhoId } from '../lib/cart.js';
-import { pedidoOnlineRecuperavel } from '../lib/recuperacao-vendas.js';
+import { pedidoOnlineRecuperavel, enfileirarRecuperacaoCancelamentoCliente } from '../lib/recuperacao-vendas.js';
 import { revogarSessoes, invalidarRecuperacoesSenha } from '../lib/session-revocation.js';
 import { adicionarEndereco, editarEndereco, excluirEndereco } from '../lib/customer-addresses.js';
 import { logCustomer } from '../lib/audit.js';
@@ -257,6 +257,12 @@ export function registrarRotasConta(app, db) {
       ctx.aviso = escapeHtml(r.erro || 'Não foi possível cancelar este pedido.');
       return void res.html(telaPedidoDetalhe(ctx, { pedido: db.collection('orders').get(pedido.id) }), 409);
     }
+    // Somente cancelamento voluntário pelo cliente abre a recuperação
+    // imediata; cancelamentos financeiros automáticos não disparam esta oferta.
+    db.collection('orders').update(pedido.id,{
+      canceladoPeloClienteEm:new Date().toISOString(),
+    });
+    enfileirarRecuperacaoCancelamentoCliente(db,pedido.id);
     logCustomer(db, req.user.id, 'cancelou_pedido', 'pedido', pedido.id, { motivo: cleanText(req.body.motivo, 300) }, req);
     res.redirect(`/conta/pedidos/${pedido.codigo}`);
   });
@@ -324,6 +330,51 @@ export function registrarRotasConta(app, db) {
       c.token===token && c.clienteId===req.user.id &&
       Number.isFinite(Date.parse(c.criadoEm)) &&
       Date.now()-Date.parse(c.criadoEm) <= 30*86_400_000);
+    // Cancelamento voluntário: restaura SOMENTE os itens em cesta nova.
+    // Nunca reutiliza o pedido recusado, o frete antigo ou a preferência MP.
+    if(campanha?.modo==='cancelamento' &&
+        campanha.tipo==='pedido_cancelado_lembrete') {
+      const pedido=db.collection('orders').get(campanha.pedidoId);
+      const origem=pedido?db.collection('carts').get(pedido.carrinhoId):null;
+      if (!pedido || pedido.clienteId!==req.user.id ||
+          pedido.carrinhoId!==campanha.carrinhoId ||
+          !pedido.canceladoPeloClienteEm ||
+          pedido.statusFinanceiro!=='recusado' ||
+          pedido.statusOperacional!=='cancelado' ||
+          pedido.pendenciaPagamento==='conciliacao_necessaria' ||
+          !origem || origem.clienteId!==req.user.id) {
+        return void res.redirect('/conta/pedidos');
+      }
+      const pagamento=pedido.pagamentoId
+        ? db.collection('payments').get(pedido.pagamentoId):null;
+      if (pagamento && ['approved','authorized','in_process','in_mediation',
+        'refund_pending','refunded'].includes(String(pagamento.status||'').toLowerCase()))
+        return void res.redirect('/conta/pedidos');
+      const novoPedido=db.collection('orders').all().some(o=>
+        o.id!==pedido.id && o.clienteId===req.user.id &&
+        Date.parse(o.criadoEm||'')>=Date.parse(pedido.canceladoPeloClienteEm));
+      if(novoPedido)return void res.redirect('/conta/pedidos');
+      let nova=campanha.carrinhoRestauradoId
+        ? db.collection('carts').get(campanha.carrinhoRestauradoId):null;
+      if(nova && nova.clienteId!==req.user.id)return void res.redirect('/conta/pedidos');
+      if(!nova){
+        nova=db.collection('carts').insert({
+          id:novoCarrinhoId(),clienteId:req.user.id,
+          itens:(origem.itens||[]).map(i=>({...i})),
+          cupom:null,frete:null,
+          criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString(),
+        });
+        db.collection('recuperacoesVendas').update(campanha.id,{
+          carrinhoRestauradoId:nova.id,
+        });
+      }
+      const validada=normalizeCart(db,nova).cart;
+      if(!(validada.itens||[]).length)return void res.redirect('/carrinho');
+      res.cookie(config.cartCookie,validada.id,{
+        maxAge:60*60*24*180,path:'/',httpOnly:false,sameSite:'Lax',
+      });
+      return void res.redirect('/carrinho');
+    }
     // Pedido online encerrado é diferente de um carrinho abandonado:
     // somente após expiração/recusa confirmada criar cesta NOVA. Nunca
     // reaproveitar o ID vinculado à cobrança anterior nem gerar Pix automático.
