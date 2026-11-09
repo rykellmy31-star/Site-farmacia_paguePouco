@@ -296,7 +296,8 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     const prefixo=modo==='local'?'recuperacao:local:':'recuperacao:';
     const lembreteId=prefixo+'lembrete:'+cart.id;
     if (idadeHoras >= cfg.primeiroLembreteHoras &&
-        idadeHoras < cfg.enviarCupomAposHoras && !fila.get(lembreteId)) {
+        (idadeHoras < cfg.enviarCupomAposHoras || subtotal < cfg.compraMinimaCentavos) &&
+        !fila.get(lembreteId)) {
       const token=randomToken(24);
       fila.insert({id:lembreteId,tipo:'recuperacao_lembrete',modo,carrinhoId:cart.id,
         clienteId:cliente.id,numero,texto:mensagemLembrete(cliente,token,modo),status:'fila',
