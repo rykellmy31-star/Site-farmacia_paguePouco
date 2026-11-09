@@ -19,6 +19,11 @@ function responderCarrinho(req, res, db, { avisos = [] } = {}) {
   const normalizado = normalizeCart(db, cart);
   const totais = calcularTotais(db, normalizado.cart, { freteValor: normalizado.cart.frete?.valor || 0 });
   if (req.setCartCookie || normalizado.cart.id !== req.cookies?.pp_cart) attachCartCookie(res, normalizado.cart.id);
+  const sugestoes = recomendarParaCarrinho(db,normalizado.cart,{limite:4});
+  const htmlSugestoesCarrinho = secaoRecomendacoes(sugestoes,{id:'recomendacoesCarrinhoCards'});
+  const htmlSugestoesGaveta = secaoRecomendacoes(sugestoes,{
+    titulo:'✨ Você também pode precisar',id:'recomendacoesGavetaCards',
+  });
   return {
     ok: true,
     carrinhoId: normalizado.cart.id,
@@ -30,12 +35,12 @@ function responderCarrinho(req, res, db, { avisos = [] } = {}) {
     itens: normalizado.cart.itens,
     avisos: [...avisos, ...normalizado.avisos.map((a) => a.mensagem)],
     html: {
-      corpo: htmlGavetaCarrinho(normalizado.cart, totais),
+      corpo: htmlGavetaCarrinho(normalizado.cart, totais, htmlSugestoesGaveta),
       rodape: htmlRodapeCarrinho(normalizado.cart, totais, db),
       resumo: htmlResumoCarrinho(normalizado.cart, totais, { db, exibirParcelamento: true }),
       resumoSemFrete: htmlResumoCarrinho(normalizado.cart, totais, { mostrarFrete: false, db, exibirParcelamento: true }),
       itens: htmlItensCarrinho(normalizado.cart),
-      recomendacoes: secaoRecomendacoes(recomendarParaCarrinho(db,normalizado.cart),{id:'recomendacoesCarrinhoCards'}),
+      recomendacoes: htmlSugestoesCarrinho,
     },
   };
 }
