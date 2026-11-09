@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel } from '../src/lib/recuperacao-vendas.js';
+import { executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, diagnosticoCarrinhosRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel } from '../src/lib/recuperacao-vendas.js';
 import { processarFilaEvolution } from '../src/lib/evolution-whatsapp.js';
-import { validarCupom } from '../src/lib/cart.js';
+import { validarCupom, normalizeCart, addItem } from '../src/lib/cart.js';
 import { destinoRecuperacao } from '../src/lib/recuperacao-destino.js';
 
 function dbFake() {
@@ -502,4 +502,61 @@ test('painel e testador não exibem modalidade limitada a Pix',()=>{
  assert.doesNotMatch(testador,/Pedido global Pix pendente/);
  assert.match(worker,/reconciliarPagamentoOnline/);
  assert.match(worker,/temPagamentoOnlinePendente/);
+});
+
+
+test('consulta e reabertura da cesta não reiniciam o relógio da recuperação',()=>{
+ const {db,agora}=fixture({idade:1.2});
+ const antes=db.collection('carts').get('c-1');
+ assert.equal(normalizeCart(db,antes).cart.atualizadoEm,antes.atualizadoEm);
+ assert.equal(normalizeCart(db,db.collection('carts').get('c-1')).cart.atualizadoEm,
+   antes.atualizadoEm,'segunda visita não altera o horário');
+ const r=executarRecuperacao(db,{agora});
+ assert.equal(r.lembretes,1,'cesta inativa por mais de uma hora recebe lembrete');
+ const diag=diagnosticoCarrinhosRecuperacao(db,{agora});
+ assert.equal(diag[0].situacao,'Na fila do WhatsApp');
+});
+test('alteração real de quantidade da cesta reinicia o prazo',()=>{
+ const {db,agora}=fixture({idade:1.2});
+ const carrinho=db.collection('carts').get('c-1');
+ const r=addItem(db,carrinho,'p1',1);
+ assert.equal(r.ok,true);
+ const depois=db.collection('carts').get('c-1');
+ assert(Date.parse(depois.atualizadoEm)>Date.parse(carrinho.atualizadoEm));
+ const normalizado=normalizeCart(db,depois);
+ assert.equal(normalizado.cart.atualizadoEm,depois.atualizadoEm);
+ assert.equal(executarRecuperacao(db,{agora:Date.now()}).lembretes,0);
+});
+test('pedido antigo pendente de outra cesta não bloqueia carrinho novo',()=>{
+ const {db,agora,iso}=fixture({idade:2});
+ db.collection('orders').insert({id:'pedido-antigo',clienteId:'cliente-1',
+   carrinhoId:'outra-cesta',statusFinanceiro:'pendente',
+   metodoPagamento:'pix',criadoEm:iso(8)});
+ const r=executarRecuperacao(db,{agora});
+ assert.equal(r.lembretes,1);
+ assert.match(diagnosticoCarrinhosRecuperacao(db,{agora})[0].situacao,/Na fila do WhatsApp/);
+});
+test('pedido pendente novo e mesma cesta impedem duplicação de recuperação',()=>{
+ const {db,agora,iso}=fixture({idade:2});
+ db.collection('orders').insert({id:'pedido-novo',clienteId:'cliente-1',
+   carrinhoId:'outro-carrinho',statusFinanceiro:'pendente',
+   metodoPagamento:'pix',criadoEm:iso(1)});
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,0);
+ assert.match(diagnosticoCarrinhosRecuperacao(db,{agora})[0].situacao,
+   /Pagamento posterior à cesta/);
+});
+test('diagnóstico explica ausência de consentimento sem divulgar itens e números',()=>{
+ const {db,agora}=fixture({idade:2,marketing:false});
+ const d=diagnosticoCarrinhosRecuperacao(db,{agora});
+ assert.equal(d[0].situacao,'Cliente não autorizou mensagens promocionais');
+ assert(!JSON.stringify(d).includes('73999998888'));
+ assert(!JSON.stringify(d).includes('Fralda Desc'));
+ const view=readFileSync(new URL('../src/views/admin/recuperacao-vendas.js',import.meta.url),'utf8');
+ assert.match(view,/Diagnóstico de envio e prazo dos carrinhos/);
+});
+test('cesta com produto fora das categorias permitidas registra causa da ausência de envio',()=>{
+ const {db,agora}=fixture({idade:2,categoria:'medicamentos'});
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,0);
+ assert.match(diagnosticoCarrinhosRecuperacao(db,{agora})[0].situacao,
+   /itens fora das categorias permitidas/);
 });
