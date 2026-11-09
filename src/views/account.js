@@ -238,10 +238,16 @@ export function telaPedidoDetalhe(ctx, { pedido }) {
               <strong>${money(pedido.pagamentoPresencial.trocoParaCentavos)}</strong> —
               troco estimado: ${money(pedido.pagamentoPresencial.trocoCentavos)}</p>` : ''}
           </div>` : ''}
-          ${pagamento?.provedor === 'mercadopago' && pedido.statusFinanceiro === 'pendente' ? `<p class="consulta-pix-info" role="status" data-pix-status-auto="true">
+          ${pagamento?.provedor === 'mercadopago' && !pagamento.checkoutProCartao && pedido.statusFinanceiro === 'pendente' ? `<p class="consulta-pix-info" role="status" data-pix-status-auto="true">
             Se você já pagou, <a class="botao pequeno secundario" href="/conta/pedidos/${e(pedido.codigo)}">Atualizar situação do Pix</a>
             <span class="texto-pequeno texto-suave">O banco é consultado de forma segura, no máximo uma vez por minuto. Não gera outra cobrança.</span>
           </p>` : ''}
+          ${pagamento?.checkoutProCartao && pedido.statusFinanceiro==='pendente' ? `<div class="alerta info mt-2">
+            <strong>💳 Cartão de crédito — pagamento ainda não confirmado</strong>
+            <p>O cartão é processado com segurança no Mercado Pago. A farmácia não recebe o número do seu cartão.</p>
+            ${pagamento.checkoutUrl ? `<a class="botao destaque" rel="noopener noreferrer" href="${e(pagamento.checkoutUrl)}">Continuar no Mercado Pago</a>`:''}
+            <p><a href="/conta/pedidos/${e(pedido.codigo)}">Verificar situação</a> — nenhuma cobrança adicional será criada.</p>
+          </div>`:''}
           ${pagamento?.pixCodigo && pedido.statusFinanceiro === 'pendente' ? `
           <div class="pix-caixa mt-2">
             <strong>Pix para pagamento</strong>
