@@ -153,8 +153,12 @@ export function registrarAdicaoRecomendada(db,{carrinhoId,origemId,produtoId,qua
 export function relatorioInteligenciaVendas(db,{de,ate}={}){
   const hoje=dataDaLoja(new Date());
   const inicio=de||hoje,fim=ate||hoje;
+  const dataPedido=p=>{
+    const data=new Date(p.criadoEm||'');
+    return Number.isFinite(data.getTime())?dataDaLoja(data):'';
+  };
   const pedidos=db.collection('orders').all().filter(p=>{
-    const dia=String(p.criadoEm||'').slice(0,10);
+    const dia=dataPedido(p);
     return dia>=inicio&&dia<=fim;
   });
   const pagos=pedidos.filter(p=>p.statusFinanceiro==='aprovado');
@@ -173,17 +177,20 @@ export function relatorioInteligenciaVendas(db,{de,ate}={}){
   const registro=new Map();
   for(const x of db.collection('recomendacoesAdicoes').all()){
     const key=String(x.carrinhoId||'');
-    if(!registro.has(key))registro.set(key,new Set());
-    registro.get(key).add(String(x.produtoId));
+    if(!registro.has(key))registro.set(key,new Map());
+    registro.get(key).set(String(x.produtoId),Date.parse(x.adicionadoEm||''));
   }
   let pedidosComRecomendacao=0,itensRecomendadosVendidos=0,
     valorBrutoItensRecomendadosCentavos=0;
   const ranking=new Map();
   for(const p of pagos){
-    const recomendados=registro.get(String(p.carrinhoId||''))||new Set();
+    const recomendados=registro.get(String(p.carrinhoId||''))||new Map();
     let pedidoRecomendado=false;
     for(const item of p.itens||[]){
-      if(!recomendados.has(String(item.produtoId)))continue;
+      const momento=Number(recomendados.get(String(item.produtoId)));
+      if(!recomendados.has(String(item.produtoId)) ||
+          !Number.isFinite(momento) ||
+          momento>Date.parse(p.criadoEm||''))continue;
       const qtd=Number(item.quantidade)||0;
       const valor=Number(item.subtotalCentavos)||0;
       if(qtd<=0||valor<0)continue;
@@ -198,13 +205,21 @@ export function relatorioInteligenciaVendas(db,{de,ate}={}){
     }
     if(pedidoRecomendado)pedidosComRecomendacao++;
   }
-  const campanhas=db.collection('recuperacoesVendas').all();
-  const cartsRecuperados=new Set(campanhas.flatMap(c=>
-    [c.carrinhoId,c.carrinhoRestauradoId].filter(Boolean).map(String)));
-  const vendasRecuperadas=pagos.filter(p=>cartsRecuperados.has(String(p.carrinhoId)));
+  // Somente mensagens EFETIVAMENTE aceitas pela Evolution podem ser
+  // associadas a compras posteriores. Enfileirar uma campanha não é recuperar venda.
+  const campanhas=db.collection('recuperacoesVendas').all().flatMap(c=>{
+    const envio=db.collection('evolutionWhatsappOutbox').get(c.id);
+    const enviadoEm=Date.parse(envio?.enviadoEm||'');
+    return envio?.status==='enviado' && Number.isFinite(enviadoEm)
+      ? [c.carrinhoId,c.carrinhoRestauradoId].filter(Boolean)
+          .map(id=>({carrinhoId:String(id),enviadoEm})) : [];
+  });
+  const vendasRecuperadas=pagos.filter(p=>
+    campanhas.some(c=>c.carrinhoId===String(p.carrinhoId) &&
+      Date.parse(p.criadoEm||'')>=c.enviadoEm));
   const dias=new Map();
   for(const p of pagos){
-    const dia=String(p.criadoEm).slice(0,10);
+    const dia=dataPedido(p);
     dias.set(dia,(dias.get(dia)||0)+Number(p.totalCentavos||0));
   }
   return {
