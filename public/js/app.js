@@ -99,9 +99,15 @@
     try {
       const dados = await api('/api/carrinho/adicionar', { method: 'POST',
         body: { produtoId, quantidade, ...(origemRecomendacao ? { origemRecomendacao } : {}) } });
+      // Na etapa Entrega, incluir um item exige recotar frete e recalcular
+      // totais antes de habilitar a passagem ao pagamento. Nunca deixar
+      // endereço/frete antigos ativos após mudar a cesta.
+      if (window.location.pathname === '/checkout/endereco') {
+        window.location.reload();
+        return;
+      }
       aplicarHtmlCarrinho(dados);
       notificar(dados.mensagem || 'Produto adicionado à cesta.');
-      gaveta && gaveta.classList.contains('aberta') ? null : null;
     } catch (err) {
       notificar(err.message, 'erro');
     }

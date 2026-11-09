@@ -142,6 +142,7 @@ export function telaEndereco(ctx, { totais, enderecos = [], erros = {}, calculo 
                     : 'Valor conforme a tabela de fretes fixos configurada pela farmácia.'}</p>` : ''}
             </div>
 
+            <div id="recomendacoesAntesPagamento" class="recomendacoes-antes-pagamento">${secaoRecomendacoes(recomendarParaCarrinho(ctx.db,ctx.cart,{limite:4}),{titulo:'✨ Esqueceu de alguma coisa?',id:'recomendacoesEtapaEntrega'})}</div>
             <button class="botao destaque bloquinho mt-2" type="submit" id="botaoIrPagamento" ${calculo?.opcoes?.length ? '' : 'disabled'}>Ir para o pagamento</button>
             ${!calculo ? '<p class="texto-pequeno texto-suave mb-0" id="avisoFreteAutomatico">Informe ou selecione um CEP para ver a entrega automaticamente.</p>' : ''}
           </form>
