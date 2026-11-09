@@ -66,8 +66,9 @@ export function htmlResumoCarrinho(cart, totais, { mostrarFrete = true, db = nul
   ${exibirParcelamento ? htmlParcelamentoCesta(db, totais) : ''}`;
 }
 
-export function htmlGavetaCarrinho(cart, totais) {
+export function htmlGavetaCarrinho(cart, totais, recomendacoesHtml = '') {
   return `${htmlItensCarrinho(cart)}
+  ${cart.itens?.length ? recomendacoesHtml : ''}
   ${cart.cupom ? `<div class="alerta sucesso mt-2 mb-0">Cupom <strong>${e(cart.cupom.codigo)}</strong> aplicado.
     <button class="botao pequeno secundario" type="button" data-remover-cupom>Remover</button></div>` : ''}`;
 }
