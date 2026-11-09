@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, diagnosticoCarrinhosRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel } from '../src/lib/recuperacao-vendas.js';
+import { minimoLembreteRecuperacao, executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, diagnosticoCarrinhosRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel } from '../src/lib/recuperacao-vendas.js';
 import { processarFilaEvolution } from '../src/lib/evolution-whatsapp.js';
 import { validarCupom, normalizeCart, addItem } from '../src/lib/cart.js';
 import { destinoRecuperacao } from '../src/lib/recuperacao-destino.js';
@@ -567,19 +567,24 @@ test('cesta de categoria não listada gera lembrete após uma hora quando vende 
 });
 
 
-test('qualquer categoria vendável participa e o mínimo bloqueia lembrete e cupom antes de R$ 60',()=>{
+test('R$ 10 da loja libera lembrete mesmo com cupom configurado para R$ 60',async()=>{
  const x=fixture({idade:2,categoria:'suplementos'});
- x.db.collection('products').update('p1',{precoCentavos:5500});
- const a=executarRecuperacao(x.db,{agora:x.agora});
- assert.equal(a.lembretes,0);
- assert.equal(a.cupons,0);
- assert.match(diagnosticoCarrinhosRecuperacao(x.db,{agora:x.agora})[0].situacao,/abaixo da compra mínima/);
- x.db.collection('products').update('p1',{precoCentavos:6000});
- const b=executarRecuperacao(x.db,{agora:x.agora});
- assert.equal(b.lembretes,1,'valor igual ao mínimo deve disparar');
+ x.db.collection('settings').insert({id:'loja',valorMinimoPedido:1000});
+ assert.equal(minimoLembreteRecuperacao(x.db),1000);
+ x.db.collection('products').update('p1',{precoCentavos:999});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,0);
+ assert.match(diagnosticoCarrinhosRecuperacao(x.db,{agora:x.agora})[0].situacao,/abaixo do valor mínimo da loja/);
+ x.db.collection('products').update('p1',{precoCentavos:1500});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+ const mensagem=x.db.collection('evolutionWhatsappOutbox').all()[0];
+ assert.equal(mensagem.tipo,'recuperacao_lembrete');
+ assert.equal((await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>({ok:true,status:200}),
+ })).enviados,1,'WhatsApp deve enviar lembrete de R$ 15 apesar do mínimo R$ 60 do cupom');
  const y=fixture({idade:26,categoria:'suplementos'});
- y.db.collection('products').update('p1',{precoCentavos:5999});
- assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,0);
+ y.db.collection('products').update('p1',{precoCentavos:1500});
+ assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,0,'cupom ainda exige R$ 60');
  y.db.collection('products').update('p1',{precoCentavos:6000});
  assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,1);
 });
@@ -599,9 +604,9 @@ test('três produtos de categorias diferentes contam juntos sem exigir categoria
    {produtoId:'p2',quantidade:1,precoUnitarioCentavos:2000},
    {produtoId:'p3',quantidade:1,precoUnitarioCentavos:2000},
  ]});
- assert.equal(executarRecuperacao(db,{agora}).lembretes,0,'R$ 59,00 é menor que R$ 60');
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,1,'R$ 59,00 supera R$ 10 da loja; os três itens contam');
  db.collection('products').update('p3',{precoCentavos:2200});
- assert.equal(executarRecuperacao(db,{agora}).lembretes,1,'R$ 61,00 inclui os três produtos');
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,0,'não duplica lembrete de cesta já processada');
  const msg=await processarFilaEvolution(db,{apiKey:'teste',baseUrl:'https://evolution.example.com',
    enviar:async()=>({ok:true,status:200})});
  assert.equal(msg.enviados,1);
@@ -622,4 +627,40 @@ test('carrinho com medicamento sujeito a receita e bloqueado para venda permanec
  assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,0);
  assert.match(diagnosticoCarrinhosRecuperacao(x.db,{agora:x.agora})[0].situacao,
    /bloqueados para venda online/);
+});
+
+
+test('valor mínimo do checkout pode ser alterado e não segue desconto do cupom',()=>{
+ const x=fixture({idade:2});
+ x.db.collection('settings').insert({id:'loja',valorMinimoPedido:2000});
+ x.db.collection('products').update('p1',{precoCentavos:1500});
+ assert.equal(minimoLembreteRecuperacao(x.db),2000);
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,0);
+ x.db.collection('products').update('p1',{precoCentavos:2100});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+});
+test('recuperação local usa R$ 10 para lembrete e R$ 60 para cupom',()=>{
+ const x=fixture({idade:2,cepDestino:'45970000',localAtivo:true});
+ x.db.collection('settings').insert({id:'loja',valorMinimoPedido:1000});
+ x.db.collection('products').update('p1',{precoCentavos:1200});
+ const result=executarRecuperacao(x.db,{agora:x.agora});
+ assert.equal(result.lembretes,1);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').all()[0].modo,'local');
+ const y=fixture({idade:26,cepDestino:'45970000',localAtivo:true});
+ y.db.collection('products').update('p1',{precoCentavos:1200});
+ assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,0);
+});
+test('pagamento pendente R$ 15 gera lembrete, cupom somente acima do mínimo promocional',()=>{
+ const x=pixOnlineFixture({idade:2});
+ x.db.collection('products').update('p1',{precoCentavos:1500});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).pedidosLembretes,1);
+ const y=pixOnlineFixture({idade:6,estado:'expirado'});
+ y.db.collection('products').update('p1',{precoCentavos:1500});
+ assert.equal(executarRecuperacao(y.db,{agora:y.agora}).pedidosCupons,0);
+});
+test('painel descreve mínimo da loja separadamente do valor de liberar cupom',()=>{
+ const view=readFileSync(new URL('../src/views/admin/recuperacao-vendas.js',import.meta.url),'utf8');
+ assert.match(view,/Compra mínima para liberar cupom/);
+ assert.match(view,/mínimo de compra da loja/);
+ assert.doesNotMatch(view,/Valor mínimo da cesta para lembrete e cupom/);
 });
