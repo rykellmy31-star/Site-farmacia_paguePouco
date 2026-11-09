@@ -159,9 +159,13 @@ export function telaAdminEntregadores(ctx,{entregadores,rotas,disponiveis,erro='
     '> Acesso ativo</label><button class="botao pequeno" type="submit">Salvar entregador</button></form></div>'
   ).join(''):'<p>Cadastre o primeiro entregador para começar.</p>'})+
  painel({titulo:'Últimas rotas',semPadding:true,corpo:tabelaAdmin({
-  colunas:['Entregador','Iniciada','Progresso','Situação'],
+  colunas:['Entregador','Iniciada','Pedidos / situação','Progresso','Situação'],
   linhas:rotas.map(r=>'<tr><td>'+txt(r.nomeEntregador)+'</td><td>'+txt(formatDateTime(r.iniciadaEm))+
-   '</td><td>'+r.itens.filter(i=>i.status==='entregue').length+'/'+r.itens.length+
+   '</td><td>'+r.itens.map(item=>{
+     const p=ctx.db.collection('orders').get(item.pedidoId);
+     return '<div class="texto-pequeno">#'+txt(item.numero)+' · '+txt(p?.codigo||'Pedido')+
+       ' — '+txt(item.status.replace(/_/g,' '))+'</div>';
+   }).join('')+'</td><td>'+r.itens.filter(i=>i.status==='entregue').length+'/'+r.itens.length+
    ' entregas concluídas</td><td>'+txt(r.status)+
    (r.itens.some(x=>x.status==='nao_entregue')?' · Com pendências':'')+'</td></tr>'),
   vazio:'Nenhuma rota iniciada.',
