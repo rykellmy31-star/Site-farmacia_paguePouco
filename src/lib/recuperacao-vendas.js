@@ -141,7 +141,7 @@ function itensRecuperaveis(db,cart,{verificarEstoque=true}={}) {
   }
   return items;
 }
-function subtotalRecuperavel(db,cart) {
+export function subtotalRecuperavel(db,cart) {
   if(!itensRecuperaveis(db,cart).length) return null;
   let total=0;
   for(const item of cart.itens||[]) {
