@@ -453,7 +453,7 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
   }
   // Reentrega de evento igual ainda pode completar o pedido que ficou
   // pendente na tentativa anterior, mas não cria outro evento da cobrança.
-  if (pagamento.status !== status) {
+  if (pagamento.status !== status || pagamento.checkoutProCartao && !pagamento.transacaoId) {
     db.collection('payments').update(pagamento.id, {
       status, statusDetalhe: remoto.status_detail || null,
       ...(pagamento.checkoutProCartao?{transacaoId:dataId,
@@ -469,7 +469,10 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
 
 export async function refund({ db, payment, amountCents, config }) {
   if (payment.status !== 'approved') return { ok: false, erro: 'Somente cobranças aprovadas podem ser estornadas.' };
-  const mpId = String(payment.id || '').replace(/^mp_/, '');
+  const mpId = payment.checkoutProCartao ? String(payment.transacaoId||'') :
+    String(payment.id || '').replace(/^mp_/, '');
+  if(!/^\d{1,30}$/.test(mpId)) return {ok:false,
+    erro:'Não foi possível identificar a transação do cartão para estorno.'};
   const res = await mpFetch(`/v1/payments/${mpId}/refunds`, {
     method: 'POST', body: undefined, idempotencyKey: `refund-${payment.id}`, config,
   });
