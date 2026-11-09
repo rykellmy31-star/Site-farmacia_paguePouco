@@ -255,20 +255,22 @@ export function telaPagamento(ctx, { totais, parcelas, formasPagamento, erros = 
               <input type="radio" name="metodoPagamento" value="credit_card">
               <span>
                 <strong>Cartão de crédito</strong><br>
-                <span class="texto-pequeno texto-suave">Parcelamento conforme as opções abaixo.</span>
+                <span class="texto-pequeno texto-suave">${infoPag.real
+                  ? 'Pagamento protegido no Mercado Pago. Até '+String(parcelas?.at(-1)?.numero||1)+'x, conforme condições do provedor.'
+                  : 'Parcelamento conforme as opções abaixo.'}</span>
               </span>
             </label>
             <div class="forma-pagamento-detalhe" id="detalheCredito">
-              ${campoForm({
-                nome: 'parcelas', rotulo: 'Parcelas',
-                opcoes: parcelas.map((p) => ({ valor: p.numero, texto: p.texto })),
-              })}
               ${infoPag.real
-                ? `<div id="containerCartaoMP" class="mt-2"></div>
-                   <p class="texto-pequeno texto-suave">Os dados do cartão são processados pelo Mercado Pago. Não armazenamos o número do seu cartão.</p>`
-                : `<div class="simulado-aviso"><strong>Ambiente de testes:</strong> o pagamento com cartão será registrado como
-                   "Aguardando pagamento" e poderá ser confirmado pela equipe da farmácia (simulação) enquanto o Mercado Pago não é configurado.
-                   <strong>Nenhuma cobrança real é gerada.</strong></div>`}
+                ? `<p class="texto-pequeno texto-suave">Ao confirmar, você será direcionado para o Mercado Pago para informar o cartão com segurança.
+                   As parcelas e eventuais juros serão apresentados lá antes de pagar. Seus dados do cartão não passam pelo nosso site.</p>`
+                : `${campoForm({
+                    nome: 'parcelas', rotulo: 'Parcelas',
+                    opcoes: parcelas.map((p) => ({ valor: p.numero, texto: p.texto })),
+                  })}
+                  <div class="simulado-aviso"><strong>Ambiente de testes:</strong> o pagamento com cartão será registrado como
+                  "Aguardando pagamento" e poderá ser confirmado pela equipe da farmácia (simulação).
+                  <strong>Nenhuma cobrança real é gerada.</strong></div>`}
             </div>` : ''}
 
             ${formasPagamento.debit_card ? `<label class="opcao-pagamento">
@@ -400,6 +402,12 @@ export function telaConfirmacao(ctx, { pedido, pagamento }) {
           Já pagou? <a class="botao pequeno secundario" href="/checkout/confirmacao/${e(pedido.codigo)}">Atualizar situação do Pix</a>
           <span class="texto-pequeno texto-suave">Consulta segura ao Mercado Pago, no máximo uma vez por minuto. Não gera nova cobrança.</span>
         </p>` : ''}
+      </div>` : pagamento?.checkoutProCartao && pedido.statusFinanceiro==='pendente' ? `
+      <div class="cartao mt-2">
+        <h3>Pagamento com cartão pendente</h3>
+        <p>O pagamento é processado pelo Mercado Pago. A aprovação depende de confirmação do provedor.</p>
+        ${pagamento.checkoutUrl ? `<a class="botao destaque" rel="noopener noreferrer" href="${e(pagamento.checkoutUrl)}">Continuar pagamento seguro no Mercado Pago</a>` : ''}
+        <p class="texto-pequeno texto-suave mt-2"><a href="/checkout/confirmacao/${e(pedido.codigo)}">Verificar situação do pagamento</a>. Nenhum pagamento é confirmado apenas pelo retorno do navegador.</p>
       </div>` : `
       <div class="cartao mt-2">
         <h3>${pagamento?.metodo === 'pix' ? 'Pagamento Pix' : 'Pagamento com cartão'}</h3>

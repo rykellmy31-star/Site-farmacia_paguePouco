@@ -305,7 +305,10 @@ export function registrarRotasCheckout(app, db) {
         encodeURIComponent('Informe um CPF válido para gerar o Pix com o Mercado Pago.'));
     }
 
-    const parcelas = local ? 1 : Math.max(1, Number(req.body.parcelas) || 1);
+    // No Checkout Pro o Mercado Pago apresenta as parcelas em seu ambiente.
+    // Nunca confiar em parcelas enviadas pelo navegador para modificar o pedido.
+    const parcelas = local || (metodo==='credit_card' && formas.real) ? 1
+      : Math.max(1, Number(req.body.parcelas) || 1);
     // Botao explicito (sem checkbox) ou autorizacao anterior valida para o numero atual.
     const escolhaWhatsapp = String(req.body.acaoWhatsappPedido || req.body.preferenciaWhatsappPedido || '');
     const { autorizouAgora, avisarCliente:avisosWhatsapp } = decidirAvisosWhatsappPedido(
@@ -392,7 +395,12 @@ export function registrarRotasCheckout(app, db) {
       cardToken: req.body.cardToken || null,
       paymentMethodId: req.body.paymentMethodId || null,
       issuerId: req.body.issuerId || null,
-      returnUrls: { notificationUrl: `${config.publicBaseUrl}/webhooks/mercadopago` },
+      returnUrls: {
+        notificationUrl:`${config.publicBaseUrl}/webhooks/mercadopago`,
+        success:`${config.publicBaseUrl}/checkout/confirmacao/${encodeURIComponent(pedido.codigo)}`,
+        pending:`${config.publicBaseUrl}/checkout/confirmacao/${encodeURIComponent(pedido.codigo)}`,
+        failure:`${config.publicBaseUrl}/checkout/confirmacao/${encodeURIComponent(pedido.codigo)}`,
+      },
     }); } catch (err) {
       erroIndeterminado = true;
       cobranca = { ok: false, erro: 'Não foi possível determinar se o provedor registrou a cobrança.' };
@@ -470,6 +478,11 @@ export function registrarRotasCheckout(app, db) {
     // impedir uma compra legítima em seguida.
     renovarCestaAposPedido(db, res, req.user?.id || null);
 
+    if(metodo==='credit_card' && cobranca?.pagamento?.checkoutProCartao){
+      // O link veio exclusivamente do domínio HTTPS do Mercado Pago, validado
+      // no provedor. Jamais redirecionar para URL fornecida pelo navegador.
+      return void res.redirect(cobranca.checkoutUrl);
+    }
     res.redirect(`/checkout/confirmacao/${pedido.codigo}`);
   });
 

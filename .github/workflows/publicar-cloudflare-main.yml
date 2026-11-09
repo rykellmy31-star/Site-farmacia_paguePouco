@@ -61,6 +61,8 @@ jobs:
         run: node --test tests/excluir-usuarios-inativos.test.js
       - name: Validar botão compacto do WhatsApp no rodapé
         run: node --test tests/whatsapp-rodape-compacto.test.js
+      - name: Testar cartão de crédito Mercado Pago Checkout Pro e conciliação segura
+        run: node --test tests/mercadopago-checkout-pro-cartao.test.js
       - name: Validar recuperação inteligente de carrinhos com cupons e Evolution
         run: node --test tests/recuperacao-vendas.test.js tests/recuperacao-teste-whatsapp.test.js
       - name: Validar pulsação dos selos de desconto

@@ -72,7 +72,87 @@ export function mapStatus(status) {
   return STATUS_LABELS[String(status || '').toLowerCase()] || status;
 }
 
+/**
+ * Checkout Pro: cobrança por cartão no ambiente Mercado Pago, sem cartão/token
+ * no nosso servidor. Cobramos exatamente o TOTAL do pedido (frete e descontos
+ * inclusos) num item genérico, sem transmitir nomes de medicamentos.
+ */
+export function urlCheckoutMercadoPago(url) {
+  try {
+    const u=new URL(String(url||''));
+    return u.protocol==='https:' && (
+      u.hostname==='mercadopago.com.br' ||
+      u.hostname.endsWith('.mercadopago.com.br') ||
+      u.hostname==='mercadopago.com' ||
+      u.hostname.endsWith('.mercadopago.com')
+    ) ? u.href : null;
+  } catch { return null; }
+}
+function pagamentoCheckoutProSeguro(db,remoto,preferencia) {
+  const pedido=db.collection('orders').get(preferencia?.pedidoId);
+  if (!pedido || !preferencia?.checkoutProCartao ||
+      pedido.pagamentoId!==preferencia.id ||
+      pedido.metodoPagamento!=='credit_card' ||
+      pedido.pagamentoPresencial ||
+      String(remoto?.id||'')==='' ||
+      String(remoto?.external_reference||'')!==String(pedido.codigo) ||
+      remoto?.currency_id!=='BRL' ||
+      Math.round(Number(remoto?.transaction_amount)*100)!==Number(pedido.totalCentavos) ||
+      Number(preferencia.valorCentavos)!==Number(pedido.totalCentavos) ||
+      (remoto?.preference_id && String(remoto.preference_id)!==String(preferencia.preferenciaId)) ||
+      (remoto?.metadata?.pedido_id && String(remoto.metadata.pedido_id)!==String(pedido.id)) ||
+      (!remoto?.preference_id && !remoto?.metadata?.pedido_id) ||
+      !['credit_card','account_money'].includes(String(remoto?.payment_type_id||''))) return null;
+  return pedido;
+}
+async function criarPreferenciaCartao({db,order,payer,returnUrls,config}) {
+  const maxParcelas=Math.max(1,Math.min(6,Math.floor(Number(order.totalCentavos)/2500)));
+  const principal=returnUrls.success||'';
+  if (!/^https:\/\//.test(principal) || !/^https:\/\//.test(returnUrls.notificationUrl||''))
+    return {ok:false,erro:'URLs seguras de retorno e webhook não configuradas.'};
+  const res=await mpFetch('/checkout/preferences',{
+    method:'POST',
+    body:{
+      items:[{
+        id:String(order.codigo),title:'Pedido '+String(order.codigo)+' — Farmácia Pague Pouco',
+        quantity:1,unit_price:Number((order.totalCentavos/100).toFixed(2)),currency_id:'BRL',
+      }],
+      external_reference:String(order.codigo),
+      notification_url:returnUrls.notificationUrl,
+      back_urls:{success:returnUrls.success,failure:returnUrls.failure,pending:returnUrls.pending},
+      auto_return:'approved',
+      payer:{email:payer?.email||''},
+      metadata:{pedido_id:order.id},
+      payment_methods:{
+        excluded_payment_types:[
+          {id:'ticket'},{id:'bank_transfer'},{id:'debit_card'},{id:'prepaid_card'},{id:'atm'},
+        ],
+        installments:maxParcelas,
+      },
+    },
+    config,idempotencyKey:'preferencia-cartao-'+order.id,
+  });
+  if(!res.ok) {
+    return {ok:false,indeterminado:[408,429].includes(res.status)||res.status>=500,
+      erro:'O Mercado Pago não conseguiu abrir o pagamento seguro. Consulte o pedido antes de tentar novamente.'};
+  }
+  const preferencia=res.data||{};
+  const checkoutUrl=urlCheckoutMercadoPago(preferencia.init_point || preferencia.sandbox_init_point);
+  if(!preferencia.id || !checkoutUrl) return {ok:false,indeterminado:true,
+    erro:'O Mercado Pago não retornou link seguro de pagamento. Conferência necessária.'};
+  const pagamento=db.collection('payments').insert({
+    id:'mp_pref_'+String(preferencia.id),preferenciaId:String(preferencia.id),
+    pedidoId:order.id,pedidoCodigo:order.codigo,checkoutProCartao:true,
+    provedor:'mercadopago',metodo:'credit_card',status:'pending',
+    valorCentavos:order.totalCentavos,parcelas:1,maxParcelas,checkoutUrl,
+    simulado:false,criadoEm:nowISO(),atualizadoEm:nowISO(),
+    eventos:[{status:'pending',em:nowISO(),origem:'preferencia-cartao'}],
+  });
+  return {ok:true,pagamento,checkoutUrl,simulado:false};
+}
 export async function createPayment({ db, order, method, payer, installments = 1, cardToken = null, issuerId = null, paymentMethodId = null, returnUrls = {}, config }) {
+  if(method==='credit_card' && returnUrls.checkoutProCartao===true)
+    return criarPreferenciaCartao({db,order,payer,returnUrls,config});
   const payments = db.collection('payments');
   const idempotencyKey = crypto.randomUUID();
   const notificationUrl = returnUrls.notificationUrl || '';
@@ -234,6 +314,39 @@ export async function createPayment({ db, order, method, payer, installments = 1
 
 export async function getStatus({ db, payment, config }) {
   const mpId = String(payment.id || '').replace(/^mp_/, '').replace(/^mp_pref_/, '');
+  if (payment.checkoutProCartao===true) {
+    let id=payment.transacaoId||null;
+    if(!id) {
+      // Preferência não é prova de pagamento. Consultar pagamentos reais com
+      // esta referência e validar TODOS os vínculos antes de mudar o pedido.
+      const busca=await mpFetch('/v1/payments/search?external_reference='+
+        encodeURIComponent(payment.pedidoCodigo)+'&limit=30',{config});
+      if(!busca.ok)return {ok:false,erro:'Falha ao consultar pagamentos do Checkout Pro.'};
+      const encontrados=(busca.data?.results||[]).filter(p=>
+        pagamentoCheckoutProSeguro(db,p,payment));
+      const aprovados=encontrados.filter(p=>String(p.status).toLowerCase()==='approved');
+      // Vários cartões recusados podem existir numa mesma preferência.
+      // Se houve exatamente UMA aprovação confirmada, ela é a cobrança
+      // válida. Múltiplas aprovações ficam para conciliação manual.
+      if(aprovados.length>1 || !aprovados.length && encontrados.length!==1)
+        return {ok:true,status:'pending',pagamento:payment};
+      id=String((aprovados[0]||encontrados[0]).id);
+    }
+    if(!/^\d{1,30}$/.test(String(id)))
+      return {ok:false,erro:'Identificador de cartão inválido.'};
+    const confirmado=await mpFetch('/v1/payments/'+id,{config});
+    if(!confirmado.ok)return {ok:false,erro:'Falha ao confirmar pagamento de cartão.'};
+    if(!pagamentoCheckoutProSeguro(db,confirmado.data,payment))
+      return {ok:false,erro:'Pagamento de cartão não corresponde ao pedido.'};
+    const atual=db.collection('payments').update(payment.id,{
+      transacaoId:id,status:String(confirmado.data.status||'pending').toLowerCase(),
+      bandeira:confirmado.data.payment_method_id||null,
+      ultimosDigitos:confirmado.data.card?.last_four_digits||null,
+      parcelas:Number(confirmado.data.installments)||1,
+      atualizadoEm:nowISO(),
+    });
+    return {ok:true,status:atual.status,pagamento:atual};
+  }
   if (payment.metodo === 'checkout_pro') return { ok: true, status: payment.status, pagamento: payment };
   const res = await mpFetch(`/v1/payments/${mpId}`, { config });
   if (!res.ok) return { ok: false, erro: `Falha ao consultar pagamento: ${res.status}` };
@@ -308,8 +421,16 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
   const res = await mpFetch(`/v1/payments/${dataId}`, { config });
   if (!res.ok) return { ok: false, erro: 'Falha ao consultar cobrança no provedor.' };
   const remoto = res.data || {};
-  const pagamento = db.collection('payments').get(`mp_${dataId}`);
-  if (!pagamento || pagamento.provedor !== 'mercadopago' || String(pagamento.transacaoId) !== dataId) {
+  const pixOriginal=db.collection('payments').get('mp_'+dataId);
+  const pro=db.collection('payments').findOne(p=>p.checkoutProCartao===true &&
+    p.pedidoCodigo===remoto.external_reference &&
+    (!p.transacaoId || String(p.transacaoId)===dataId) &&
+    pagamentoCheckoutProSeguro(db,remoto,p));
+  const pagamento=pixOriginal||pro;
+
+  if (!pagamento || pagamento.provedor !== 'mercadopago' ||
+      !pagamento.checkoutProCartao && String(pagamento.transacaoId)!==dataId ||
+      pagamento.checkoutProCartao && !pagamentoCheckoutProSeguro(db,remoto,pagamento)) {
     return { ok: false, erro: 'Cobrança desconhecida; aguardando conciliação.' };
   }
   const pedido = db.collection('orders').get(pagamento.pedidoId);
@@ -337,9 +458,13 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
   }
   // Reentrega de evento igual ainda pode completar o pedido que ficou
   // pendente na tentativa anterior, mas não cria outro evento da cobrança.
-  if (pagamento.status !== status) {
+  if (pagamento.status !== status || pagamento.checkoutProCartao && !pagamento.transacaoId) {
     db.collection('payments').update(pagamento.id, {
       status, statusDetalhe: remoto.status_detail || null,
+      ...(pagamento.checkoutProCartao?{transacaoId:dataId,
+        bandeira:remoto.payment_method_id||null,
+        parcelas:Number(remoto.installments)||1,
+        ultimosDigitos:remoto.card?.last_four_digits||null}:{}),
       atualizadoEm: nowISO(), raw: remoto,
       eventos: [...(pagamento.eventos || []), { status, em: nowISO(), origem: 'webhook' }],
     });
@@ -349,7 +474,10 @@ export async function handleWebhook({ db, headers, body, dataId: queryDataId = n
 
 export async function refund({ db, payment, amountCents, config }) {
   if (payment.status !== 'approved') return { ok: false, erro: 'Somente cobranças aprovadas podem ser estornadas.' };
-  const mpId = String(payment.id || '').replace(/^mp_/, '');
+  const mpId = payment.checkoutProCartao ? String(payment.transacaoId||'') :
+    String(payment.id || '').replace(/^mp_/, '');
+  if(!/^\d{1,30}$/.test(mpId)) return {ok:false,
+    erro:'Não foi possível identificar a transação do cartão para estorno.'};
   const res = await mpFetch(`/v1/payments/${mpId}/refunds`, {
     method: 'POST', body: undefined, idempotencyKey: `refund-${payment.id}`, config,
   });

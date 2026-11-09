@@ -534,7 +534,7 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
           <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
           <button type="submit" class="botao secundario">Remover credenciais guardadas no painel</button>
         </form>` : ''}
-        <div class="alerta info mt-2 mb-0"><strong>Importante:</strong> o Pix real só é gerado após autenticação do Mercado Pago. Cartões reais continuam desativados até homologação da tokenização; o Pix não exige a Public Key no navegador.</div>`,
+        <div class="alerta info mt-2 mb-0"><strong>Importante:</strong> o Pix real só é gerado após autenticação do Mercado Pago. O cartão de crédito utiliza Checkout Pro do Mercado Pago (sem capturar dados do cartão na farmácia). É necessário ativar explicitamente a opção abaixo após confirmar credenciais e webhooks de produção. O Pix não exige a Public Key no navegador.</div>`,
     }) : ''}
 
     ${painel({
@@ -553,6 +553,19 @@ export function telaPagamentosAdmin(ctx, { pagamentos, metricas, provedor, confi
           ${campoAdmin({ nome: 'meios_pix', rotulo: 'Pix', tipo: 'checkbox', valor: configPag.meios?.pix !== false })}
           ${campoAdmin({ nome: 'meios_credit_card', rotulo: 'Cartão de crédito', tipo: 'checkbox', valor: configPag.meios?.credit_card !== false })}
           ${campoAdmin({ nome: 'meios_debit_card', rotulo: 'Cartão de débito', tipo: 'checkbox', valor: !!configPag.meios?.debit_card })}
+        </div>
+        <div class="alerta info mt-2"><strong>💳 Checkout Pro — Cartão de crédito online</strong>
+          <p>O cliente de outro CEP escolhe cartão no site e informa os dados exclusivamente no Mercado Pago.
+          O valor do pedido inclui frete e descontos; a aprovação só ocorre após confirmação do provedor.</p>
+          <label class="check"><input type="checkbox" name="checkoutProCartaoHabilitado" value="1"
+            ${configPag.checkoutProCartaoHabilitado===true?'checked':''}>
+            Ativar pagamento real por cartão de crédito via Checkout Pro (após homologação).
+          </label>
+          <p class="texto-pequeno mb-0">Requer Mercado Pago configurado, cartão de crédito marcado e confirmação de produção.
+          Parcelamento respeita o limite de 6x e o mínimo de R$ 25 por parcela; condições e juros efetivos serão mostrados pelo Mercado Pago.
+          Pix e pagamento presencial permanecem inalterados. A opção inicia desativada por segurança.</p>
+        </div>
+        <div class="campo-linha">
         </div>
         <div class="campo-linha">
           <div class="campo"><label>Parcelamento máximo</label><p><strong>6x (limite fixo da farmácia)</strong></p></div>

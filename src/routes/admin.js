@@ -2935,6 +2935,9 @@ function registrarApi(app, db) {
       taxaJurosMes: Number(req.body.taxaJurosMes) || 0,
       valorMinimoParcela: 2500,
       descontoPixPercentual: Number(req.body.descontoPixPercentual) || 0,
+      checkoutProCartaoHabilitado:req.body.checkoutProCartaoHabilitado==='1' &&
+        req.body.provedor==='mercadopago' && req.body.meios_credit_card==='1' &&
+        (req.body.ambienteTestes==='1' || req.body.habilitarProducao==='1'),
       mensagemCheckout: cleanText(req.body.mensagemCheckout, 500),
     }, req.adminUser, req);
     logAdmin(db, req.adminUser, 'alterou_config_pagamentos', 'configuracao', 'pagamentos', {}, req);
