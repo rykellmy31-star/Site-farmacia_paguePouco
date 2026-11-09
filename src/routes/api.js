@@ -8,6 +8,8 @@ import { lookupCep, ufFromCep, isValidCep } from '../lib/cep.js';
 import { calcularFreteIntegrado } from '../lib/melhor-envio.js';
 import { searchProducts } from '../lib/catalog.js';
 import { htmlGavetaCarrinho, htmlRodapeCarrinho, htmlItensCarrinho, htmlResumoCarrinho } from '../views/cart.js';
+import { recomendarParaCarrinho, registrarAdicaoRecomendada } from '../lib/inteligencia-vendas.js';
+import { secaoRecomendacoes } from '../views/recomendacoes.js';
 import { rateLimitMiddleware } from '../lib/security.js';
 import { logSystem } from '../lib/audit.js';
 import { registrarVisita, revogarVisitas, autorizouVisitas } from '../lib/visitas-site.js';
@@ -33,6 +35,7 @@ function responderCarrinho(req, res, db, { avisos = [] } = {}) {
       resumo: htmlResumoCarrinho(normalizado.cart, totais, { db, exibirParcelamento: true }),
       resumoSemFrete: htmlResumoCarrinho(normalizado.cart, totais, { mostrarFrete: false, db, exibirParcelamento: true }),
       itens: htmlItensCarrinho(normalizado.cart),
+      recomendacoes: secaoRecomendacoes(recomendarParaCarrinho(db,normalizado.cart),{id:'recomendacoesCarrinhoCards'}),
     },
   };
 }
@@ -51,8 +54,16 @@ export function registrarRotasApi(app, db) {
     const cart = getCart(db, req);
     const produtoId = String(req.body.produtoId || '');
     const quantidade = req.body.quantidade ?? 1;
+    const antes=Array.isArray(cart.itens)&&cart.itens.some(i=>String(i.produtoId)===produtoId);
     const r = addItem(db, cart, produtoId, quantidade);
     if (!r.ok) return void res.json({ ok: false, erro: r.erro, codigo: r.codigo }, 400);
+    // Apenas adicionar um NOVO item por card válido conta como recomendação,
+    // nunca um clique falsificado ou uma mudança de quantidade posterior.
+    if(!antes && req.body.origemRecomendacao)
+      registrarAdicaoRecomendada(db,{
+        carrinhoId:cart.id,origemId:String(req.body.origemRecomendacao),
+        produtoId,quantidade:Number(quantidade),
+      });
     registrarVisita(db, req, res, 'carrinho');
     const resposta = responderCarrinho(req, res, db);
     resposta.mensagem = 'Produto adicionado à cesta.';
