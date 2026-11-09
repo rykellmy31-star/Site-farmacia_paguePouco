@@ -12,6 +12,7 @@ const MENU = [
   { id: 'midia', rotulo: 'Fotos e vídeos', href: '/admin/midia', perm: 'midia.ver', icone: '🖼️' },
   { separador: 'Vendas' },
   { id: 'pedidos', rotulo: 'Pedidos', href: '/admin/pedidos', perm: 'pedidos.ver', icone: '🧾' },
+  { id: 'entregadores', rotulo: 'Entregadores e rotas', href: '/admin/entregadores', perm: 'pedidos.ver', somenteAdmin: true, icone: '🛵' },
   { id: 'relatorio_vendas_operacional', rotulo: 'Relatório de vendas', href: '/admin/relatorio-vendas', perm: 'pedidos.ver', icone: '📋' },
   { id: 'vendedores', rotulo: 'Vendedores', href: '/admin/vendedores', perm: 'vendedores.ver', icone: '🏷️' },
   { id: 'clientes', rotulo: 'Clientes', href: '/admin/clientes', perm: 'clientes.ver', icone: '👥' },

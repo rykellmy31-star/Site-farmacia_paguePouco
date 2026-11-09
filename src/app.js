@@ -21,6 +21,7 @@ import { registrarRotasWebhook } from './routes/webhooks.js';
 import { registrarRotasInovafarma } from './routes/inovafarma.js';
 import { registrarRotasRoboInova } from './routes/inovafarma-robo.js';
 import { registrarRotasAdmin } from './routes/admin.js';
+import { registrarRotasEntregador } from './routes/entregador.js';
 
 export function createApplication(db) {
 ensureSettings(db);
@@ -46,6 +47,14 @@ app.use(async (req, res) => {
     const c = db.collection('customers').get(req.session.userId);
     req.user = c && c.ativo !== false ? c : null;
     if (!req.user) req.session = null;
+  }
+  const did = req.cookies['pp_entregador_sess'];
+  req.entregadorSession = did ? readSession(db, did) : null;
+  req.entregador = null;
+  if (req.entregadorSession?.type === 'driver') {
+    const e = db.collection('entregadores').get(req.entregadorSession.userId);
+    req.entregador = e?.ativo === true ? e : null;
+    if (!req.entregador) req.entregadorSession = null;
   }
   const aid = req.cookies['pp_admin_sess'];
   req.adminSession = aid ? readSession(db, aid) : null;
@@ -152,7 +161,8 @@ app.use(async (req, res) => {
   // cadastro e checkout, mesmo sem tentar autenticar ou finalizar.
   if (req.method === 'POST' &&
     (p === '/conta/login' || p === '/conta/cadastro' ||
-      p === '/conta/esqueci-senha' || p === '/admin/login')) {
+      p === '/conta/esqueci-senha' || p === '/admin/login' ||
+      p === '/entregador/login')) {
     return limiteLogin(req, res);
   }
   if (req.method === 'POST' && (p.startsWith('/checkout') || p === '/api/frete')) {
@@ -185,6 +195,7 @@ registrarRotasApi(app, db);
 registrarRotasConta(app, db);
 registrarRotasCheckout(app, db);
 registrarRotasAdmin(app, db);
+registrarRotasEntregador(app, db);
 registrarRotasWebhook(app, db);
 registrarRotasInovafarma(app, db);
 registrarRotasRoboInova(app, db);

@@ -323,6 +323,37 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
         continue;
       }
     }
+    if(String(item.tipo||'').startsWith('entrega_rota_')){
+      // Notificações só para clientes que autorizaram avisos de pedidos.
+      // Uma mensagem atrasada não pode avisar "estou indo" após a entrega.
+      const rota=db.collection('rotasEntregadores').get(item.rotaId);
+      const entrega=rota?.itens?.find(x=>x.pedidoId===item.pedidoId);
+      const pedido=db.collection('orders').get(item.pedidoId);
+      const cliente=db.collection('customers').get(item.clienteId);
+      const etapa=String(item.tipo).slice('entrega_rota_'.length);
+      const autorizado=cfg.avisarCliente && cliente?.ativo!==false &&
+        pedido?.receberWhatsappPedido===true &&
+        autorizouWhatsappPedidos(cliente) &&
+        numeroWhatsapp(cliente?.telefone)===item.numero &&
+        numeroWhatsapp(pedido?.cliente?.telefone)===item.numero;
+      const andamentoValido=etapa==='entregue'
+        ? entrega?.status==='entregue' && pedido?.statusFinanceiro==='aprovado'
+        : etapa==='chegou'
+          ? entrega?.status==='chegou'
+          : etapa==='indo'
+            ? entrega?.status==='indo'||entrega?.status==='chegou'
+            : etapa==='rota'
+              ? ['aguardando','indo','chegou'].includes(entrega?.status)
+              : false;
+      if(!rota || !entrega || !pedido ||
+          pedido.rotaEntregaId!==rota.id ||
+          !['saiu_para_entrega','entregue'].includes(pedido.statusOperacional) ||
+          !autorizado || !andamentoValido) {
+        col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
+        await persistir();
+        continue;
+      }
+    }
     col.update(item.id,{status:'enviando',tentativas:1,tentadoEm:nowISO()});
     await persistir(); // escrita durável ANTES do envio externo
     try{

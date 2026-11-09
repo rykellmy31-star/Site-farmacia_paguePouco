@@ -89,7 +89,8 @@ export class LojaDurableObject extends DurableObject {
         if(possuiFilaEvolution(this.db))
           await processarFilaEvolution(this.db,{
             apiKey:this.bindings.EVOLUTION_API_KEY,
-            baseUrl:this.bindings.EVOLUTION_API_URL||this.bindings.EVOLUTION_BASE_URL, max:2,
+            baseUrl:this.bindings.EVOLUTION_API_URL||this.bindings.EVOLUTION_BASE_URL,
+            max:url.pathname==='/entregador/rotas/iniciar'?5:2,
             persistir:()=>this.db.flush()
           });
       }catch{console.warn('[evolution] fila pendente para conferência');}
@@ -108,7 +109,12 @@ export class LojaDurableObject extends DurableObject {
         !temCheckoutInterrompido(this.db) && !config.inova?.enabled &&
         !possuiFilaEvolution(this.db) && !temRecuperacaoMonitoravel(this.db)) return;
     const atual = await this.ctx.storage.getAlarm();
-    if (atual == null) await this.ctx.storage.setAlarm(Date.now() + 5 * 60_000);
+    // Notificações de rotas não podem aguardar cinco minutos para começar.
+    // Entregas usam a fila já existente, com avanço gradual e seguro.
+    const pendentes=possuiFilaEvolution(this.db);
+    const intervalo=pendentes?30_000:5*60_000;
+    if(atual==null || pendentes && atual>Date.now()+45_000)
+      await this.ctx.storage.setAlarm(Date.now()+intervalo);
   }
 
   async alarm() {
