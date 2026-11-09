@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { minimoLembreteRecuperacao, executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, diagnosticoCarrinhosRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel } from '../src/lib/recuperacao-vendas.js';
+import { minimoLembreteRecuperacao, executarRecuperacao, expirarCuponsRecuperacao, configRecuperacao, configRecuperacaoLocal, validarConfigRecuperacao, validarConfigRecuperacaoLocal, painelRecuperacao, diagnosticoCarrinhosRecuperacao, configRecuperacaoPedido, validarConfigRecuperacaoPedido, pedidoOnlineRecuperavel, enfileirarRecuperacaoCancelamentoCliente } from '../src/lib/recuperacao-vendas.js';
 import { processarFilaEvolution } from '../src/lib/evolution-whatsapp.js';
 import { validarCupom, normalizeCart, addItem } from '../src/lib/cart.js';
 import { destinoRecuperacao } from '../src/lib/recuperacao-destino.js';
@@ -853,4 +853,121 @@ test('pedido já criado impede reagendamento mesmo se o carrinho for alterado',(
  const novoHorario=new Date(x.agora+10_000).toISOString();
  x.db.collection('carts').update('c-1',{atualizadoEm:novoHorario});
  assert.equal(executarRecuperacao(x.db,{agora:Date.parse(novoHorario)+3_600_000}).lembretes,0);
+});
+
+
+function prepararCancelamentoCliente({
+  marketing=true, local=false, ativa=true, ultimoStatus='pending',
+}={}) {
+ const x=fixture({idade:0.05,marketing,localAtivo:local,
+   cepDestino:local?'45970000':'29885000'});
+ x.db.collection('settings').insert({id:'recuperacaoPedidoOnline',
+   ativo:ativa,primeiroLembreteHoras:1});
+ if(local) x.db.collection('settings').update('recuperacaoVendasLocal',{ativo:ativa});
+ const agora=new Date().toISOString();
+ x.db.collection('orders').insert({id:'pedido-cancelado',codigo:'PP-CANCELADO',
+   clienteId:'cliente-1',carrinhoId:'c-1',
+   metodoPagamento:local?'cash':'credit_card',
+   statusFinanceiro:'recusado',statusOperacional:'cancelado',
+   pagamentoId:local?null:'mp_pref_123',
+   pagamentoPresencial:local?{metodo:'cash'}:null,
+   criadoEm:agora,canceladoPeloClienteEm:agora,
+   itens:[{produtoId:'p1',quantidade:1}],totalCentavos:15000});
+ if(!local)x.db.collection('payments').insert({id:'mp_pref_123',
+   pedidoId:'pedido-cancelado',metodo:'credit_card',provedor:'mercadopago',
+   valorCentavos:15000,status:ultimoStatus});
+ return x;
+}
+test('cancelamento voluntário do cartão enfileira WhatsApp imediatamente, sem aguardar uma hora',async()=>{
+ const {db}=prepararCancelamentoCliente();
+ const r=enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado');
+ assert.equal(r.ok,true);
+ assert.equal(r.enfileirado,true);
+ assert.equal(db.collection('evolutionWhatsappOutbox').count(),1);
+ const item=db.collection('evolutionWhatsappOutbox').all()[0];
+ assert.equal(item.tipo,'recuperacao_cancelamento_cliente');
+ assert.match(item.texto,/Refazer minha compra/);
+ assert.match(item.texto,/recuperar-carrinho/);
+ assert.match(item.texto,/Não utilize o link de pagamento anterior/);
+ assert.doesNotMatch(item.texto,/Fralda Desc|cupom|desconto/i);
+ assert(item.texto.length<400);
+ assert.equal(db.collection('coupons').count(),0,'não cria cupom no cancelamento');
+ assert.equal(enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado').duplicado,true);
+ const requests=[];
+ const response=await processarFilaEvolution(db,{
+   baseUrl:'https://evolution.example.com',apiKey:'teste',
+   enviar:async(url,options)=>{
+     requests.push(JSON.parse(options.body));
+     return {ok:true,status:200};
+   },
+ });
+ assert.equal(response.enviados,1);
+ assert.equal(requests.length,1);
+ assert.equal(db.collection('evolutionWhatsappOutbox').all()[0].status,'enviado');
+});
+test('cancelamento local também envia aviso imediato, sem cupom e sem cobrança nova',async()=>{
+ const {db}=prepararCancelamentoCliente({local:true});
+ assert.equal(enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado').ok,true);
+ const x=await processarFilaEvolution(db,{
+   baseUrl:'https://evolution.example.com',apiKey:'teste',
+   enviar:async()=>({ok:true,status:200}),
+ });
+ assert.equal(x.enviados,1);
+ assert.equal(db.collection('payments').count(),0);
+ assert.equal(db.collection('coupons').count(),0);
+});
+test('sem autorização de marketing não envia tentativa de recuperação de venda cancelada',()=>{
+ const {db}=prepararCancelamentoCliente({marketing:false});
+ const x=enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado');
+ assert.equal(x.ok,false);
+ assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
+});
+test('campanha desligada ou cancelamento automático não geram WhatsApp de recuperação',()=>{
+ const x=prepararCancelamentoCliente({ativa:false});
+ assert.equal(enfileirarRecuperacaoCancelamentoCliente(x.db,'pedido-cancelado').ok,false);
+ const y=prepararCancelamentoCliente();
+ y.db.collection('orders').update('pedido-cancelado',{canceladoPeloClienteEm:null});
+ assert.equal(enfileirarRecuperacaoCancelamentoCliente(y.db,'pedido-cancelado').ok,false);
+});
+test('pagamento em análise ou aprovado não autoriza oferta imediata após cancelar',()=>{
+ for(const ultimoStatus of ['approved','authorized','in_process','refunded']){
+   const {db}=prepararCancelamentoCliente({ultimoStatus});
+   assert.equal(enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado').ok,false);
+   assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
+ }
+});
+test('cliente que fizer outro pedido antes do envio não recebe tentativa de recuperação',async()=>{
+ const {db}=prepararCancelamentoCliente();
+ assert.equal(enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado').ok,true);
+ const cancelado=db.collection('orders').get('pedido-cancelado');
+ db.collection('orders').insert({id:'pedido-seguinte',clienteId:'cliente-1',
+   criadoEm:new Date(Date.parse(cancelado.canceladoPeloClienteEm)+1000).toISOString(),
+   statusFinanceiro:'pendente'});
+ const response=await processarFilaEvolution(db,{
+   baseUrl:'https://evolution.example.com',apiKey:'teste',
+   enviar:async()=>{throw Error('não deve enviar')},
+ });
+ assert.equal(response.enviados,0);
+ assert.equal(db.collection('evolutionWhatsappOutbox').all()[0].status,'cancelado');
+});
+test('cliente que desativa marketing na fila não recebe mensagem de cancelamento',async()=>{
+ const {db}=prepararCancelamentoCliente();
+ assert.equal(enfileirarRecuperacaoCancelamentoCliente(db,'pedido-cancelado').ok,true);
+ db.collection('customers').update('cliente-1',{marketing:false});
+ const r=await processarFilaEvolution(db,{
+   baseUrl:'https://evolution.example.com',apiKey:'teste',
+   enviar:async()=>{throw Error('não deve enviar')},
+ });
+ assert.equal(r.enviados,0);
+ assert.equal(db.collection('evolutionWhatsappOutbox').all()[0].status,'cancelado');
+});
+test('link de cancelamento restaura cesta nova autenticada e só uma vez',()=>{
+ const account=readFileSync(new URL('../src/routes/account.js',import.meta.url),'utf8');
+ assert.match(account,/canceladoPeloClienteEm:new Date\(\)\.toISOString\(\)/);
+ assert.match(account,/enfileirarRecuperacaoCancelamentoCliente\(db,pedido\.id\)/);
+ assert.match(account,/campanha\?\.modo==='cancelamento'/);
+ assert.match(account,/carrinhoRestauradoId/);
+ assert.match(account,/id:novoCarrinhoId\(\),clienteId:req\.user\.id/);
+ assert.match(account,/cupom:null,frete:null/);
+ assert.doesNotMatch(account,/cobranca\.checkoutUrl.*recuperar-carrinho/);
 });

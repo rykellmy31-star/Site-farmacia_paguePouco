@@ -290,6 +290,39 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
         continue;
       }
     }
+    if (item.tipo==='recuperacao_cancelamento_cliente') {
+      // Validar novamente JUSTO antes do envio. Pode ter havido outra compra,
+      // retirada de consentimento ou confirmação tardia do pagamento.
+      const pedido=db.collection('orders').get(item.pedidoId);
+      const cliente=db.collection('customers').get(item.clienteId);
+      const cart=db.collection('carts').get(item.carrinhoId);
+      const cfg=pedido?.pagamentoPresencial
+        ? getSetting(db,'recuperacaoVendasLocal')
+        : getSetting(db,'recuperacaoPedidoOnline');
+      const pagamento=pedido?.pagamentoId
+        ? db.collection('payments').get(pedido.pagamentoId):null;
+      const novoPedido=pedido && db.collection('orders').all().some(o=>
+        o.id!==pedido.id && o.clienteId===pedido.clienteId &&
+        Number.isFinite(Date.parse(o.criadoEm||'')) &&
+        Date.parse(o.criadoEm)>=Date.parse(pedido.canceladoPeloClienteEm||''));
+      if (cfg?.ativo!==true || !pedido?.canceladoPeloClienteEm ||
+          pedido.clienteId!==item.clienteId ||
+          pedido.carrinhoId!==item.carrinhoId ||
+          pedido.statusFinanceiro!=='recusado' ||
+          pedido.statusOperacional!=='cancelado' ||
+          pedido.pendenciaPagamento==='conciliacao_necessaria' ||
+          !cliente || cliente.ativo===false || cliente.marketing!==true ||
+          numeroWhatsapp(cliente.telefone)!==item.numero ||
+          !cart || cart.clienteId!==item.clienteId ||
+          (subtotalRecuperavel(db,cart)??-1)<minimoLembreteRecuperacao(db) ||
+          novoPedido || pagamento && ['approved','authorized','in_process',
+            'in_mediation','refund_pending','refunded'].includes(
+              String(pagamento.status||'').toLowerCase())) {
+        col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
+        await persistir();
+        continue;
+      }
+    }
     col.update(item.id,{status:'enviando',tentativas:1,tentadoEm:nowISO()});
     await persistir(); // escrita durável ANTES do envio externo
     try{
