@@ -103,8 +103,9 @@ export function validarConfigRecuperacao(body, anterior = CONFIG_RECUPERACAO) {
 // Telefone e autorização para OFERTAS, independentemente do opt-in transacional.
 function clienteElegivel(db, cliente, config, numero) {
   if (!cliente || cliente.ativo === false || cliente.marketing !== true || !numero) return false;
-  if (db.collection('orders').all().some(o=>o.clienteId===cliente.id &&
-      o.statusFinanceiro==='pendente')) return false;
+  // Um pedido ANTIGO pendente, de outra cesta, não deve impedir o cliente
+  // de recuperar uma nova cesta. O conflito de campanhas é tratado pela
+  // idade do pedido em relação à atividade da cesta, abaixo.
   if (config.apenasPrimeiraCompra && db.collection('orders').all().some(o =>
     o.clienteId === cliente.id && o.statusFinanceiro === 'aprovado')) return false;
   return true;
@@ -117,6 +118,12 @@ function carrinhoAbandonado(db, cart, cliente, config, agora, ativadoEm) {
   // Depois de gerar pedido, o carrinho original pertence àquele pedido,
   // mesmo quando a cobrança expira. O fluxo de pagamento cuida da retomada.
   if (db.collection('orders').all().some(o => o.carrinhoId === cart.id)) return false;
+  // Evita duas cobranças/campanhas para o mesmo cliente quando ele acabou
+  // de iniciar um pagamento após mexer na cesta; pedido antigo não bloqueia.
+  if (db.collection('orders').all().some(o=>o.clienteId===cart.clienteId &&
+      o.statusFinanceiro==='pendente' && !o.pagamentoPresencial &&
+      Number.isFinite(Date.parse(o.criadoEm||'')) &&
+      Date.parse(o.criadoEm)>=ultimaAtividade)) return false;
   return (cart.itens || []).every(i => Number.isInteger(Number(i.quantidade)) && Number(i.quantidade) > 0);
 }
 // Lista conservadora: não enviar ofertas de medicamentos, aparelhos, testes
