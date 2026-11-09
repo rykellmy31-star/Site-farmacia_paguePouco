@@ -130,8 +130,10 @@ export function iniciarRota(db,entregadorId,lista){
    });
    if(!atualizado.ok)throw Error('Rota inconsistente: status operacional recusado');
    avisoRota(db,rota,p.id,'rota');
+   // Primeiro destino recebe o aviso individual antes do envio em massa
+   // aos demais clientes, sem esperar o processamento de toda a fila.
+   if(p.id===ids[0])avisoRota(db,rota,p.id,'indo');
  }
- avisoRota(db,rota,ids[0],'indo');
  return {ok:true,rota};
 }
 export function atualizarEntrega(db,{entregadorId,rotaId,pedidoId,acao,recebimento={}}){
