@@ -101,12 +101,13 @@ export function randomToken(bytes = 32) {
 /* ------------------------------------------------------------------ */
 /* Sessões                                                             */
 /* ------------------------------------------------------------------ */
-export const SESSION_TYPES = { CUSTOMER: 'customer', ADMIN: 'admin' };
+export const SESSION_TYPES = { CUSTOMER: 'customer', ADMIN: 'admin', DRIVER: 'driver' };
 
 export function createSession(db, type, userId, meta = {}) {
   const sessions = db.collection('sessions');
   const id = randomToken(36);
-  const ttlHours = type === SESSION_TYPES.ADMIN ? config.adminSessionTTLHours : config.sessionTTLHours;
+  const ttlHours = type === SESSION_TYPES.DRIVER ? 12 :
+    type === SESSION_TYPES.ADMIN ? config.adminSessionTTLHours : config.sessionTTLHours;
   sessions.insert({
     id,
     type,
@@ -150,9 +151,13 @@ export function rotateSessionCsrf(db, id) {
 function isAdminPath(req) {
   return req.path === '/admin' || req.path?.startsWith('/admin/');
 }
+function isDriverPath(req) {
+  return req.path === '/entregador' || req.path?.startsWith('/entregador/');
+}
 
 export function csrfToken(req) {
   if (isAdminPath(req)) return req.adminSession?.csrf || req.cookies?.pp_csrf || '';
+  if (isDriverPath(req)) return req.entregadorSession?.csrf || req.cookies?.pp_csrf || '';
   return req.session?.csrf || req.cookies?.pp_csrf || '';
 }
 
@@ -175,7 +180,9 @@ export function csrfOk(req) {
   // administrativa pode autorizar alterações. Cookie de visitante não basta.
   const esperados = isAdminPath(req)
     ? [req.adminSession?.csrf || req.cookies?.pp_csrf]
-    : [req.session?.csrf, req.cookies?.pp_csrf];
+    : isDriverPath(req)
+      ? [req.entregadorSession?.csrf || req.cookies?.pp_csrf]
+      : [req.session?.csrf, req.cookies?.pp_csrf];
   const validos = esperados.filter(Boolean);
   for (const esperado of validos) {
     const a = Buffer.from(String(esperado));
