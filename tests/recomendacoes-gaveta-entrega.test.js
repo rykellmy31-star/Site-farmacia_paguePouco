@@ -104,7 +104,7 @@ test('cesta lateral usa cards horizontais baixos com botão visível em celular'
   assert.match(parte,/\.gaveta \.recomendacao-adicionar,[\s\S]*?min-height:\s*34px/);
   assert.match(parte,/\.gaveta \.recomendacoes-trilha\s*\{[^}]*overflow-x:\s*auto/);
   assert.match(parte,/\.gaveta \.corpo\s*\{[^}]*overflow|\.gaveta \.corpo\s*\{[^}]*min-height:\s*0/);
-  assert.match(layout,/styles\.css\?v=inteligencia-vendas-20261109-gaveta-compacta-20261109/);
+  assert.match(layout,/styles\.css\?v=inteligencia-vendas-20261109-gaveta-20261109-compacta/);
 });
 test('rodapé da gaveta é compacto e cupom, total e finalizar permanecem disponíveis',()=>{
   const css=readFileSync(new URL('../public/styles.css',import.meta.url),'utf8');
