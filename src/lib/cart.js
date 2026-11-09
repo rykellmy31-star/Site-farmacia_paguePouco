@@ -98,7 +98,14 @@ export function normalizeCart(db, cart) {
       estoqueDisponivel: disponivel,
     });
   }
-  const atualizado = db.collection('carts').update(cart.id, { itens, atualizadoEm: nowISO() });
+  // Abrir a cesta, calcular preços ou enriquecer nomes NÃO é atividade do cliente.
+  // Só reinicia o relógio de abandono se a seleção ou quantidade realmente mudou.
+  const selecaoAnterior=(cart.itens||[]).map(i=>[String(i.produtoId),Number(i.quantidade)]);
+  const selecaoAtual=itens.map(i=>[String(i.produtoId),Number(i.quantidade)]);
+  const mudouSelecao=JSON.stringify(selecaoAnterior)!==JSON.stringify(selecaoAtual);
+  const atualizado = db.collection('carts').update(cart.id, {
+    itens, ...(mudouSelecao?{atualizadoEm:nowISO()}:{})
+  });
   return { cart: atualizado || cart, avisos };
 }
 
