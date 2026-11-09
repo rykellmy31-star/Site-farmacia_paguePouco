@@ -227,9 +227,12 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
       const cliente=db.collection('customers').get(item.clienteId);
       const carrinho=db.collection('carts').get(item.carrinhoId);
       const cupom=item.cupomId?db.collection('coupons').get(item.cupomId):null;
+      const ultimaAtividade=Date.parse(carrinho?.atualizadoEm||'');
       const pedido=db.collection('orders').all().some(o=>
         o.carrinhoId===item.carrinhoId ||
-        (o.clienteId===item.clienteId && o.statusFinanceiro==='pendente'));
+        (o.clienteId===item.clienteId && o.statusFinanceiro==='pendente' &&
+          !o.pagamentoPresencial && Number.isFinite(Date.parse(o.criadoEm||'')) &&
+          Number.isFinite(ultimaAtividade) && Date.parse(o.criadoEm)>=ultimaAtividade));
       const compra=db.collection('orders').all().some(o=>
         o.clienteId===item.clienteId && o.statusFinanceiro==='aprovado');
       const foiAtualizado=Date.parse(carrinho?.atualizadoEm||'')>
