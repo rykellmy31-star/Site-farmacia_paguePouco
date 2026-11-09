@@ -94,6 +94,9 @@ test('inteligência separa receita paga, ticket médio, cancelados e itens recom
  const {db}=setup();
  const hoje=dataDaLoja(new Date());
  registrarAdicaoRecomendada(db,{carrinhoId:'cart-1',origemId:'fralda',produtoId:'lenco'});
+ db.collection('recomendacoesAdicoes').update('sug_cart-1_lenco',{
+   adicionadoEm:hoje+'T09:00:00Z',
+ });
  db.collection('orders').insert({id:'pago1',codigo:'P1',criadoEm:hoje+'T10:00:00Z',
    statusFinanceiro:'aprovado',clienteId:'cliente-1',carrinhoId:'cart-1',
    totalCentavos:7000,metodoPagamento:'pix',itens:[
@@ -120,6 +123,36 @@ test('inteligência separa receita paga, ticket médio, cancelados e itens recom
  assert.equal(r.taxaConversaoRecomendacoes,50);
  assert.equal(r.clientesRecorrentes,1);
  assert.equal(r.pagamentos.length,2);
+});
+test('compra não é atribuída a clique posterior; campanha apenas criada não vira venda recuperada',()=>{
+ const {db}=setup();
+ const hoje=dataDaLoja(new Date());
+ registrarAdicaoRecomendada(db,{carrinhoId:'cart-1',origemId:'fralda',produtoId:'lenco'});
+ db.collection('orders').insert({
+   id:'pedido1',clienteId:'cliente-1',carrinhoId:'cart-1',
+   criadoEm:hoje+'T08:00:00Z',statusFinanceiro:'aprovado',
+   totalCentavos:2500,itens:[{produtoId:'lenco',nome:'Lenço',quantidade:1,
+     subtotalCentavos:2500}],
+ });
+ db.collection('recuperacoesVendas').insert({
+   id:'campanha-1',clienteId:'cliente-1',carrinhoId:'cart-1',
+ });
+ db.collection('evolutionWhatsappOutbox').insert({
+   id:'campanha-1',status:'fila',criadoEm:hoje+'T06:00:00Z',
+ });
+ let r=relatorioInteligenciaVendas(db,{de:hoje,ate:hoje});
+ assert.equal(r.pedidosComRecomendacao,0);
+ assert.equal(r.vendasRecuperadas,0);
+ db.collection('evolutionWhatsappOutbox').update('campanha-1',{
+   status:'enviado',enviadoEm:hoje+'T09:00:00Z',
+ });
+ r=relatorioInteligenciaVendas(db,{de:hoje,ate:hoje});
+ assert.equal(r.vendasRecuperadas,0,'envio posterior ao pedido não recupera venda');
+ db.collection('evolutionWhatsappOutbox').update('campanha-1',{
+   enviadoEm:hoje+'T07:00:00Z',
+ });
+ r=relatorioInteligenciaVendas(db,{de:hoje,ate:hoje});
+ assert.equal(r.vendasRecuperadas,1);
 });
 test('cards compactos possuem preço e botão real de adicionar, sem pop-up',()=>{
  const {db,fralda}=setup();
