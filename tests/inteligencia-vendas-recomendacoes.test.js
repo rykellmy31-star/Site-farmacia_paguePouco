@@ -128,7 +128,7 @@ test('cards compactos possuem preço e botão real de adicionar, sem pop-up',()=
  assert.match(html,/data-adicionar-carrinho="lenco"/);
  assert.match(html,/data-recomendacao-origem="fralda"/);
  assert.match(html,/Adicionar à cesta/);
- assert.match(html,/R\$ 25,00/);
+ assert.match(html,/R\$\s25,00/);
  assert.doesNotMatch(html,/onclick=|modal|pop-up/i);
 });
 test('integração é nova e não altera checkout nem APIs antigas',()=>{
