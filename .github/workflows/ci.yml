@@ -70,6 +70,8 @@ jobs:
         run: node --test tests/whatsapp-rodape-compacto.test.js
       - name: Testar cartão de crédito Mercado Pago Checkout Pro e conciliação segura
         run: node --test tests/mercadopago-checkout-pro-cartao.test.js
+      - name: Validar recomendações na gaveta e antes do pagamento
+        run: node --test tests/recomendacoes-gaveta-entrega.test.js
       - name: Validar inteligência de vendas e recomendações complementares
         run: node --test tests/inteligencia-vendas-recomendacoes.test.js
       - name: Validar recuperação inteligente de carrinhos com cupons e Evolution
