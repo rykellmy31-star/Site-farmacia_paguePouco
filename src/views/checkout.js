@@ -3,6 +3,8 @@ import { escapeHtml as e } from '../lib/security.js';
 import { paginaPublica, money, ICONES } from './layout.js';
 import { campoForm, listaErros, alertaHtml, migalhas } from './partials.js';
 import { htmlItensCarrinho, htmlResumoCarrinho } from './cart.js';
+import { recomendarParaCarrinho } from '../lib/inteligencia-vendas.js';
+import { secaoRecomendacoes } from './recomendacoes.js';
 import { formatCep, formatDateTime } from '../lib/format.js';
 import { productUrl } from '../lib/catalog.js';
 import { autorizouWhatsappPedidos, autorizouWhatsappProdutos } from '../lib/evolution-whatsapp.js';
@@ -60,6 +62,7 @@ export function telaCarrinho(ctx, { totais, avisos = [], erro = '' }) {
           </div>
         </aside>
       </div>
+      <div id="recomendacoesCarrinho">${secaoRecomendacoes(recomendarParaCarrinho(ctx.db,cart),{id:'recomendacoesCarrinhoCards'})}</div>
     </div>`,
   });
 }

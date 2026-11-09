@@ -81,6 +81,8 @@
       itensEl.innerHTML = dados.html.itens;
       if (!dados.quantidade) itensEl.innerHTML = '<div class="carrinho-vazio"><p>Sua cesta está vazia.</p><a class="botao" href="/ofertas">Ver ofertas</a></div>';
     }
+    const recomEl = $('#recomendacoesCarrinho');
+    if (recomEl && dados.html) recomEl.innerHTML = dados.html.recomendacoes || '';
     (dados.avisos || []).forEach((a) => notificar(a, 'aviso'));
   }
 
@@ -93,9 +95,10 @@
     }
   }
 
-  async function adicionarAoCarrinho(produtoId, quantidade) {
+  async function adicionarAoCarrinho(produtoId, quantidade, origemRecomendacao = '') {
     try {
-      const dados = await api('/api/carrinho/adicionar', { method: 'POST', body: { produtoId, quantidade } });
+      const dados = await api('/api/carrinho/adicionar', { method: 'POST',
+        body: { produtoId, quantidade, ...(origemRecomendacao ? { origemRecomendacao } : {}) } });
       aplicarHtmlCarrinho(dados);
       notificar(dados.mensagem || 'Produto adicionado à cesta.');
       gaveta && gaveta.classList.contains('aberta') ? null : null;
@@ -118,7 +121,8 @@
       add.disabled = true;
       const rotulo = add.innerHTML;
       add.innerHTML = 'Adicionando...';
-      adicionarAoCarrinho(id, qtd).finally(() => { add.disabled = false; add.innerHTML = rotulo; });
+      adicionarAoCarrinho(id, qtd, add.getAttribute('data-recomendacao-origem') || '')
+        .finally(() => { if (add.isConnected) { add.disabled = false; add.innerHTML = rotulo; } });
       return;
     }
 

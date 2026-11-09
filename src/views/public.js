@@ -7,6 +7,7 @@ import {
   podeVender, estoqueDisponivel, avisoMedicamento, categoryUrl,
 } from '../lib/catalog.js';
 import { paginaPublica, money, ICONES } from './layout.js';
+import { secaoRecomendacoes } from './recomendacoes.js';
 import {
   vitrina, secaoVitrina, migalhas, paginacao, cartaoProduto, precoHtml, avisoImagemProduto, enderecoHtml, creditoFotoOpenverse, creditoFotoDailus,
 } from './partials.js';
@@ -262,7 +263,7 @@ function cartaoProdutoContainer(ctx, cat) {
 /* ------------------------------------------------------------------ */
 /* CATEGORIA / BUSCA                                                   */
 /* ------------------------------------------------------------------ */
-export function categoriaPage(ctx, { categoria, produtos, total, pagina, porPagina, ordenar, filtros }) {
+export function categoriaPage(ctx, { categoria, produtos, total, pagina, porPagina, ordenar, filtros, recomendacoes=[] }) {
   const todas = ctx.db.collection('categories').all().filter(c => c.ativa !== false);
   const porId = new Map(todas.map(c => [String(c.id), c]));
   const ordenarCategorias = (a,b) => (a.ordem ?? 999) - (b.ordem ?? 999) ||
@@ -301,6 +302,7 @@ export function categoriaPage(ctx, { categoria, produtos, total, pagina, porPagi
           ${filhas.map((f) => `<a class="botao pequeno secundario" href="${e(categoryUrl(f))}">${e(f.nome)}</a>`).join('')}
         </div>
       </div>` : ''}
+      ${secaoRecomendacoes(recomendacoes,{titulo:'✨ Combina com esta categoria',id:'recomendacoesCategoria'})}
       ${barraOrdenacao(ordenar, total, filtros)}
       ${vitrina(produtos, { db: ctx.db, vazia: 'Nenhum produto nesta categoria no momento.' })}
       ${paginacao({ pagina, total, porPagina, baseUrl: `/categoria/${categoria.slug}`, query: { ordenar } })}
@@ -353,7 +355,7 @@ function barraOrdenacao(ordenar, total, filtros = {}) {
 /* ------------------------------------------------------------------ */
 /* PRODUTO                                                             */
 /* ------------------------------------------------------------------ */
-export function produtoPage(ctx, { produto, categoria, relacionados, configLoja }) {
+export function produtoPage(ctx, { produto, categoria, relacionados, recomendacoes=[], configLoja }) {
   const venda = podeVender(produto);
   const imagens = produto.imagens || [];
   const imagemPrecoMelhor=imagens.some(img=>String(img.legenda||'').includes('PreçoMelhor'));
@@ -501,6 +503,7 @@ export function produtoPage(ctx, { produto, categoria, relacionados, configLoja 
           </div>
         </div>
       </div>
+      ${secaoRecomendacoes(recomendacoes,{titulo:'✨ Combine com este produto',id:'recomendacoesProduto'})}
       ${relacionados.length ? `
       <section class="secao">
         <div class="cabecalho-secao"><h2>Quem viu este produto também comprou</h2></div>

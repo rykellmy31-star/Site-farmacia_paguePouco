@@ -58,6 +58,8 @@ import { configRecuperacao, validarConfigRecuperacao, configRecuperacaoLocal, va
 import { telaRecuperacaoVendas } from '../views/admin/recuperacao-vendas.js';
 import { enviarTesteRecuperacao } from '../lib/recuperacao-teste-whatsapp.js';
 import { telaVisitasSite } from '../views/admin/visitas-site.js';
+import { relatorioInteligenciaVendas } from '../lib/inteligencia-vendas.js';
+import { telaInteligenciaVendas } from '../views/admin/inteligencia-vendas.js';
 import { outbox } from '../lib/mailer.js';
 import { getSetting, setSetting, patchSetting, getAllSettings } from '../lib/settings.js';
 import { intensidadeSeloDesconto } from '../lib/efeito-selo-desconto.js';
@@ -1190,6 +1192,24 @@ export function registrarRotasAdmin(app, db) {
       cliente,
       pedidos: db.collection('orders').find((o) => o.clienteId === cliente.id).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))),
       enderecos: cliente.enderecos || [],
+    }));
+  });
+
+  /* ===================== INTELIGÊNCIA DE VENDAS ===================== */
+  app.get('/admin/inteligencia-vendas',(req,res)=>{
+    if(!guard(req,res,'relatorios.ver'))return;
+    if(!['super_admin','admin'].includes(req.adminUser?.role))
+      return void res.status(403).html('Acesso administrativo restrito.');
+    const hoje=dataDaLoja(new Date());
+    const padrao=new Date(Date.parse(hoje+'T12:00:00Z')-29*86400000)
+      .toISOString().slice(0,10);
+    const de=String(req.query.get('de')||padrao);
+    const ate=String(req.query.get('ate')||hoje);
+    if(!periodoValido(de,ate))
+      return void res.status(400).html('Período inválido: selecione até 366 dias.');
+    res.set('Cache-Control','no-store');
+    res.html(telaInteligenciaVendas(ctxAdmin(req,db),{
+      relatorio:relatorioInteligenciaVendas(db,{de,ate}),
     }));
   });
 
