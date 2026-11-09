@@ -373,6 +373,7 @@ export function pedidoOnlineRecuperavel(db,pedido,{agora=Date.now(),cupom=false}
   if (!pedido?.clienteId || pedido.pagamentoPresencial ||
       !['pix','credit_card','debit_card'].includes(pedido.metodoPagamento) ||
       !pedido.pagamentoId ||
+      pedido.canceladoPeloClienteEm ||
       pedido.statusOperacional==='cancelado' && pedido.statusFinanceiro==='pendente' ||
       !['pendente','expirado','recusado'].includes(pedido.statusFinanceiro) ||
       pedido.pendenciaPagamento==='conciliacao_necessaria') return false;
@@ -419,6 +420,60 @@ function mensagemCupomPagamento(cliente,pedido,cupom,cfg,token) {
     ofertaCompacta(cupom,cfg)+
     '🛍️ *Gerar novo pagamento:* '+linkCarrinho(token)+'\n'+
     '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
+}
+/**
+ * Mensagem pontual logo após o CLIENTE cancelar um pedido não pago.
+ * Não espera a rotina horária, não oferece cupom e NÃO reaproveita a
+ * preferência/cobrança antiga do Mercado Pago.
+ * Um único evento por pedido evita spam após POST repetido.
+ */
+export function enfileirarRecuperacaoCancelamentoCliente(db,pedidoId) {
+  const pedido=db.collection('orders').get(pedidoId);
+  if (!pedido?.id || !pedido.canceladoPeloClienteEm ||
+      pedido.statusOperacional!=='cancelado' ||
+      pedido.statusFinanceiro!=='recusado' ||
+      pedido.pendenciaPagamento==='conciliacao_necessaria') {
+    return {ok:false,motivo:'pedido_nao_cancelado_pelo_cliente'};
+  }
+  const cfg=pedido.pagamentoPresencial?configRecuperacaoLocal(db):configRecuperacaoPedido(db);
+  const evo=evolutionConfig(db);
+  if (!cfg.ativo || !evo.ativo || !evo.instancia)
+    return {ok:false,motivo:'recuperacao_ou_evolution_desativada'};
+  const cliente=db.collection('customers').get(pedido.clienteId);
+  const numero=numeroWhatsapp(cliente?.telefone);
+  if (!cliente || cliente.ativo===false || cliente.marketing!==true || !numero)
+    return {ok:false,motivo:'cliente_sem_autorizacao_para_ofertas'};
+  const pagamento=pedido.pagamentoId
+    ? db.collection('payments').get(pedido.pagamentoId):null;
+  if (pagamento && ['approved','authorized','in_process','in_mediation',
+    'refund_pending','refunded'].includes(String(pagamento.status||'').toLowerCase()))
+    return {ok:false,motivo:'pagamento_requer_conciliacao'};
+  const existeNovaCompra=db.collection('orders').all().some(o=>
+    o.id!==pedido.id && o.clienteId===cliente.id &&
+    Number.isFinite(Date.parse(o.criadoEm||'')) &&
+    Date.parse(o.criadoEm)>=Date.parse(pedido.canceladoPeloClienteEm));
+  if (existeNovaCompra)return {ok:false,motivo:'cliente_ja_gerou_novo_pedido'};
+  const origem=db.collection('carts').get(pedido.carrinhoId);
+  if (!origem || origem.clienteId!==cliente.id ||
+      !itensRecuperaveis(db,origem).length ||
+      (subtotalRecuperavel(db,origem)??-1)<minimoLembreteRecuperacao(db))
+    return {ok:false,motivo:'cesta_nao_recuperavel'};
+  const id='recuperacao:pedido:cancelamento:'+pedido.id;
+  const fila=db.collection('evolutionWhatsappOutbox');
+  if(fila.get(id))return {ok:true,duplicado:true};
+  const token=randomToken(24);
+  const mensagem='🛒 Olá, '+primeiroNomeCupom(cliente)+'! Seu pedido foi cancelado.\n'+
+    'Errou a forma de pagamento ou mudou de ideia? Você pode refazer a compra.\n'+
+    '🛍️ *Refazer minha compra:* '+linkCarrinho(token)+'\n'+
+    '⚠️ Não utilize o link de pagamento anterior.\n'+
+    '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
+  fila.insert({id,tipo:'recuperacao_cancelamento_cliente',modo:'cancelamento',
+    pedidoId:pedido.id,carrinhoId:origem.id,clienteId:cliente.id,numero,
+    texto:mensagem,status:'fila',criadoEm:nowISO(),tentativas:0});
+  db.collection('recuperacoesVendas').insert({id,modo:'cancelamento',
+    pedidoId:pedido.id,carrinhoId:origem.id,clienteId:cliente.id,
+    tipo:'pedido_cancelado_lembrete',token,cupomId:null,criadoEm:nowISO()});
+  return {ok:true,enfileirado:true};
 }
 export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}={}) {
   const cfg=configRecuperacaoPedido(db);
