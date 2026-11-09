@@ -1601,3 +1601,185 @@ body .rodape .rodape-inferior p { margin: 0 0 3px; }
   .recomendacoes-antes-pagamento .recomendacao-card { flex-basis: min(48%, 180px); }
   .gaveta .recomendacao-card { flex-basis: min(49%, 170px); }
 }
+
+
+/* ==========================================================================
+   CESTA LATERAL COMPACTA — iPhone/Android e desktop
+   Área das recomendações continua rolável, mas nenhum botão se esconde sob
+   o cupom/total. Afeta apenas a gaveta (não o checkout nem outros cards).
+   ========================================================================== */
+.gaveta {
+  min-height: 0;
+}
+.gaveta header {
+  flex: 0 0 auto;
+  padding: 11px 14px;
+}
+.gaveta .corpo {
+  min-height: 0;
+  padding: 9px 13px 12px;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.gaveta .item-carrinho {
+  padding: 8px 0 10px;
+}
+.gaveta .item-carrinho .nome { font-size: .82rem; }
+.gaveta .item-carrinho .controles { margin-top: 4px; }
+.gaveta .secao-recomendacoes {
+  padding: 9px 0 2px;
+  margin: 7px 0 0;
+}
+.gaveta .secao-recomendacoes .cabecalho-secao h2 {
+  font-size: .85rem;
+  line-height: 1.25;
+  margin: 0 0 7px;
+}
+.gaveta .recomendacoes-trilha {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 1px 1px 7px;
+  scroll-snap-type: x proximity;
+}
+.gaveta .recomendacao-card {
+  display: grid;
+  grid-template-columns: 68px minmax(0,1fr);
+  grid-template-rows: 1fr auto;
+  align-items: start;
+  gap: 3px 8px;
+  flex: 0 0 min(82%, 276px);
+  min-width: 0;
+  padding: 8px;
+  scroll-snap-align: start;
+  border-radius: 10px;
+}
+.gaveta .recomendacao-imagem {
+  grid-column: 1;
+  grid-row: 1;
+  width: 68px;
+  height: 69px;
+  aspect-ratio: auto;
+}
+.gaveta .recomendacao-imagem img {
+  width: 100%;
+  height: 100%;
+  max-height: 69px;
+  object-fit: contain;
+}
+.gaveta .recomendacao-corpo {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.gaveta .recomendacao-nome {
+  font-size: .73rem;
+  line-height: 1.2;
+  min-height: 0;
+  -webkit-line-clamp: 2;
+}
+.gaveta .recomendacao-preco {
+  font-size: .82rem;
+  line-height: 1.15;
+}
+.gaveta .recomendacao-adicionar,
+.gaveta .botao.recomendacao-adicionar {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 3px;
+  padding: 5px 6px;
+  font-size: .73rem;
+  line-height: 1.15;
+  white-space: normal;
+}
+.gaveta .recomendacao-aviso {
+  grid-column: 1;
+  grid-row: 2;
+  text-align: center;
+  font-size: .52rem;
+  line-height: 1.1;
+  margin: 0;
+}
+.gaveta footer {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: min(48dvh, 258px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 13px max(10px, env(safe-area-inset-bottom));
+  box-shadow: 0 -4px 14px rgba(60,0,0,.04);
+}
+.gaveta footer [data-form-cupom] {
+  margin-bottom: 7px !important;
+}
+.gaveta footer [data-form-cupom] .linha {
+  display: flex;
+  align-items: stretch;
+  gap: 6px !important;
+  min-width: 0;
+}
+.gaveta footer [data-form-cupom] .entrada {
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 auto;
+  height: 40px;
+  min-height: 40px;
+  padding: 7px 10px;
+  font-size: .85rem;
+}
+.gaveta footer [data-form-cupom] .botao {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: .8rem;
+}
+.gaveta footer .resumo-linha {
+  padding: 2px 0;
+  font-size: .8rem;
+  line-height: 1.3;
+  gap: 8px;
+}
+.gaveta footer .resumo-linha strong,
+.gaveta footer .resumo-linha > span:last-child {
+  white-space: nowrap;
+}
+.gaveta footer .resumo-linha.total {
+  font-size: 1rem;
+  padding: 6px 0 2px;
+  margin-top: 5px;
+  line-height: 1.2;
+}
+.gaveta footer .parcelamento-cesta {
+  margin: 4px 0;
+  font-size: .7rem;
+  line-height: 1.25;
+}
+.gaveta footer .botao.bloquinho {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: .84rem;
+  line-height: 1.2;
+}
+.gaveta footer .botao.bloquinho.mt-2 { margin-top: 8px !important; }
+.gaveta footer .botao.bloquinho.mt-1 { margin-top: 6px !important; }
+@media (max-width: 359px) {
+  .gaveta .recomendacao-card {
+    grid-template-columns: 58px minmax(0,1fr);
+    flex-basis: min(88%,250px);
+    gap: 3px 6px;
+  }
+  .gaveta .recomendacao-imagem { width: 58px; height: 64px; }
+  .gaveta .recomendacao-imagem img { max-height: 64px; }
+  .gaveta footer { padding-inline: 10px; }
+}
+@media (max-height: 680px) {
+  .gaveta footer {
+    max-height: 43dvh;
+    padding-top: 7px;
+  }
+  .gaveta footer .botao.bloquinho { min-height: 37px; }
+}
