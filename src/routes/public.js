@@ -11,6 +11,7 @@ import {
 import {
   categoriaPorSlug, searchProducts, produtosRelacionados, vitrineProdutos, montarArvore, marcasDisponiveis,
 } from '../lib/catalog.js';
+import { recomendarParaProduto, recomendarNaCategoria } from '../lib/inteligencia-vendas.js';
 import { UFS, lookupCep } from '../lib/cep.js';
 import { calcularFrete } from '../lib/freight.js';
 import { deadlineText } from '../lib/freight.js';
@@ -40,7 +41,9 @@ export function registrarRotasPublicas(app, db) {
     const resultado = searchProducts(db, {
       categoriaSlug: cat.slug, pagina, porPagina: POR_PAGINA, ordenar,
     });
-    res.html(categoriaPage(ctx, { categoria: cat, ...resultado, pagina, porPagina: POR_PAGINA, ordenar, filtros: {} }));
+    res.html(categoriaPage(ctx, { categoria: cat, ...resultado,
+      recomendacoes: pagina===1?recomendarNaCategoria(db,cat,{limite:4}):[],
+      pagina, porPagina: POR_PAGINA, ordenar, filtros: {} }));
   });
 
   /* ----------------------------- PRODUTO ------------------------------ */
@@ -53,6 +56,7 @@ export function registrarRotasPublicas(app, db) {
       produto,
       categoria,
       relacionados: produtosRelacionados(db, produto, 8),
+      recomendacoes: recomendarParaProduto(db,produto,{limite:4}),
       configLoja: ctx.settings.loja,
     }));
   });
