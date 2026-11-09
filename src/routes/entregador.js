@@ -27,7 +27,6 @@ export function registrarRotasEntregador(app,db){
   app.get('/admin/entregadores',(req,res)=>{
     if(!somenteAdministrador(req,res))return;
     res.set('Cache-Control','no-store');
-    const {getAllSettings}=app?.settings||{};
     // Mesmo contexto do painel, sem conceder perfil administrativo ao entregador.
     const ctx={req,db,adminUser:req.adminUser,
       settings:{
