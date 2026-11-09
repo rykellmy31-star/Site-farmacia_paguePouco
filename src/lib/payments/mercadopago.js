@@ -324,8 +324,13 @@ export async function getStatus({ db, payment, config }) {
       if(!busca.ok)return {ok:false,erro:'Falha ao consultar pagamentos do Checkout Pro.'};
       const encontrados=(busca.data?.results||[]).filter(p=>
         pagamentoCheckoutProSeguro(db,p,payment));
-      if(encontrados.length!==1)return {ok:true,status:'pending',pagamento:payment};
-      id=String(encontrados[0].id);
+      const aprovados=encontrados.filter(p=>String(p.status).toLowerCase()==='approved');
+      // Vários cartões recusados podem existir numa mesma preferência.
+      // Se houve exatamente UMA aprovação confirmada, ela é a cobrança
+      // válida. Múltiplas aprovações ficam para conciliação manual.
+      if(aprovados.length>1 || !aprovados.length && encontrados.length!==1)
+        return {ok:true,status:'pending',pagamento:payment};
+      id=String((aprovados[0]||encontrados[0]).id);
     }
     if(!/^\d{1,30}$/.test(String(id)))
       return {ok:false,erro:'Identificador de cartão inválido.'};
