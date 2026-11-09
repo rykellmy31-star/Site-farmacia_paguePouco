@@ -1561,3 +1561,43 @@ body .rodape .rodape-inferior p { margin: 0 0 3px; }
 @media(max-width:360px) {
   .recomendacao-card { flex-basis: 49%; }
 }
+
+
+/* Recomendações de última hora na cesta lateral e antes do pagamento. */
+.gaveta .secao-recomendacoes {
+  padding: 12px 0 6px;
+  margin: 10px 0 2px;
+  border-top: 1px solid var(--borda);
+}
+.gaveta .secao-recomendacoes .cabecalho-secao h2 {
+  font-size: .94rem;
+  margin: 0 0 8px;
+}
+.gaveta .recomendacoes-trilha {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: 2px 2px 8px;
+}
+.gaveta .recomendacao-card {
+  flex: 0 0 min(50%, 170px);
+  scroll-snap-align: start;
+  padding: 7px;
+}
+.gaveta .recomendacao-imagem img { max-height: 88px; }
+.gaveta .recomendacao-nome { font-size: .75rem; }
+.gaveta .recomendacao-adicionar { min-height: 38px; font-size: .72rem; }
+.recomendacoes-antes-pagamento { margin-top: 16px; }
+.recomendacoes-antes-pagamento .secao-recomendacoes {
+  padding: 12px;
+  border: 1px solid var(--borda);
+  background: var(--branco);
+  border-radius: var(--raio);
+}
+.recomendacoes-antes-pagamento .cabecalho-secao h2 { margin: 0 0 10px; font-size: 1rem; }
+@media (max-width: 767px) {
+  .recomendacoes-antes-pagamento .recomendacao-card { flex-basis: min(48%, 180px); }
+  .gaveta .recomendacao-card { flex-basis: min(49%, 170px); }
+}
