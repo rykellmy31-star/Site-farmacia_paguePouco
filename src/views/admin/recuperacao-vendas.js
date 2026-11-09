@@ -142,6 +142,22 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
   const historico='<div class="tabela-rolagem"><table class="tabela">'+
     '<thead><tr><th>Criado em</th><th>Cliente</th><th>Modalidade</th><th>Tipo</th><th>Código</th><th>WhatsApp</th><th>Expiração</th><th>Ação</th></tr></thead>'+
     '<tbody>'+(linhas||'<tr><td colspan="8">Nenhuma campanha criada.</td></tr>')+'</tbody></table></div>';
+  const diagnosticos=(resumo.diagnosticos||[]).map(x=>
+    '<tr><td>'+e(x.cliente)+'</td>'+
+    '<td>'+e(x.modo==='local'?'🏪 Local':x.modo==='nacional'?'🌎 Global':'Não identificado')+'</td>'+
+    '<td>'+e(String(x.quantidadeItens))+'</td>'+
+    '<td>'+e(data(x.atualizadoEm))+'</td>'+
+    '<td>'+e(data(x.previstaEm))+'</td>'+
+    '<td>'+e(x.situacao)+'</td></tr>'
+  ).join('');
+  const painelDiagnostico='<p class="texto-pequeno">Confira por que um carrinho não recebeu mensagem. '+
+    'Lista das 20 cestas mais recentes vinculadas a clientes, sem mostrar telefone, CEP ou itens. '+
+    'Recarregue a página para atualizar; esta consulta não envia mensagens.</p>'+
+    '<div class="tabela-rolagem"><table class="tabela"><thead>'+
+    '<tr><th>Cliente</th><th>Modalidade</th><th>Itens</th><th>Última atividade</th>'+
+    '<th>Lembrete previsto</th><th>Situação / motivo</th></tr></thead><tbody>'+
+    (diagnosticos||'<tr><td colspan="6">Nenhuma cesta de cliente identificada.</td></tr>')+
+    '</tbody></table></div>';
   const indicadores='<div style="display:flex;flex-wrap:wrap;gap:10px">'+
     linhaResumo('Carrinhos com cliente',resumo.carrinhosElegiveis)+
     linhaResumo('Lembretes criados',resumo.lembretes)+
@@ -168,6 +184,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
         'Quando um pedido é gerado, o carrinho para de enviar mensagens. Pedidos online não pagos seguem suas regras próprias; após pagamento aprovado, a recuperação é interrompida. '+
         'O cliente pode cancelar ofertas em Minha conta → Meus dados.</p>'+
       indicadores+
+      painel({titulo:'🔎 Diagnóstico de envio e prazo dos carrinhos',corpo:painelDiagnostico,semPadding:true})+
       painel({titulo:'📲 Testar envio de recuperação pelo WhatsApp',corpo:painelTeste})+
       painel({titulo:'🌎 Carrinho global abandonado — configurações e cupons',corpo:form})+
       painel({titulo:'💳 Pagamento global pendente — configurações e cupons',corpo:formPedido})+

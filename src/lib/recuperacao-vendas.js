@@ -103,8 +103,9 @@ export function validarConfigRecuperacao(body, anterior = CONFIG_RECUPERACAO) {
 // Telefone e autorização para OFERTAS, independentemente do opt-in transacional.
 function clienteElegivel(db, cliente, config, numero) {
   if (!cliente || cliente.ativo === false || cliente.marketing !== true || !numero) return false;
-  if (db.collection('orders').all().some(o=>o.clienteId===cliente.id &&
-      o.statusFinanceiro==='pendente')) return false;
+  // Um pedido ANTIGO pendente, de outra cesta, não deve impedir o cliente
+  // de recuperar uma nova cesta. O conflito de campanhas é tratado pela
+  // idade do pedido em relação à atividade da cesta, abaixo.
   if (config.apenasPrimeiraCompra && db.collection('orders').all().some(o =>
     o.clienteId === cliente.id && o.statusFinanceiro === 'aprovado')) return false;
   return true;
@@ -117,6 +118,12 @@ function carrinhoAbandonado(db, cart, cliente, config, agora, ativadoEm) {
   // Depois de gerar pedido, o carrinho original pertence àquele pedido,
   // mesmo quando a cobrança expira. O fluxo de pagamento cuida da retomada.
   if (db.collection('orders').all().some(o => o.carrinhoId === cart.id)) return false;
+  // Evita duas cobranças/campanhas para o mesmo cliente quando ele acabou
+  // de iniciar um pagamento após mexer na cesta; pedido antigo não bloqueia.
+  if (db.collection('orders').all().some(o=>o.clienteId===cart.clienteId &&
+      o.statusFinanceiro==='pendente' && !o.pagamentoPresencial &&
+      Number.isFinite(Date.parse(o.criadoEm||'')) &&
+      Date.parse(o.criadoEm)>=ultimaAtividade)) return false;
   return (cart.itens || []).every(i => Number.isInteger(Number(i.quantidade)) && Number(i.quantidade) > 0);
 }
 // Lista conservadora: não enviar ofertas de medicamentos, aparelhos, testes
@@ -451,6 +458,76 @@ function caminhosUltimosCupons(campanhas,clienteId) {
   return campanhas.all().filter(c=>c.clienteId===clienteId&&c.tipo==='cupom')
     .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
 }
+
+/**
+ * Diagnóstico somente-leitura para o administrador: nenhuma mensagem é
+ * criada/disparada. Explica bloqueios sem expor telefone, CEP, nem itens
+ * sensíveis de saúde. Contém apenas cestas vinculadas a contas.
+ */
+export function diagnosticoCarrinhosRecuperacao(db,{agora=Date.now(),limite=20}={}) {
+  const evo=evolutionConfig(db);
+  const campanhas=db.collection('recuperacoesVendas');
+  const fila=db.collection('evolutionWhatsappOutbox');
+  return db.collection('carts').all()
+    .filter(c=>c.clienteId && (c.itens||[]).length)
+    .sort((a,b)=>String(b.atualizadoEm).localeCompare(String(a.atualizadoEm)))
+    .slice(0,Math.max(1,Math.min(30,limite)))
+    .map(cart=>{
+      const cliente=db.collection('customers').get(cart.clienteId);
+      const modo=destinoRecuperacao(db,cart,cliente);
+      const cfg=modo==='local'?configRecuperacaoLocal(db):configRecuperacao(db);
+      const ultima=Date.parse(cart.atualizadoEm||'');
+      const inicio=Date.parse(cfg.ativadoEm||'');
+      const previstaEm=Number.isFinite(ultima) && Number.isFinite(cfg.primeiroLembreteHoras)
+        ? new Date(ultima+cfg.primeiroLembreteHoras*3_600_000).toISOString() : null;
+      const prefixo=modo==='local'?'recuperacao:local:':'recuperacao:';
+      const aviso=modo==='indefinido'?null:fila.get(prefixo+'lembrete:'+cart.id);
+      const cupom=modo==='indefinido'?null:fila.get(prefixo+'cupom:'+cart.id);
+      let situacao='';
+      if(aviso) {
+        const rotulos={fila:'Na fila do WhatsApp',enviado:'Lembrete aceito pela Evolution',
+          verificar:'Verificar entrega pela Evolution',falha:'Falha de envio pela Evolution',
+          cancelado:'Lembrete cancelado após mudança da cesta/pedido',enviando:'Enviando'};
+        situacao=rotulos[aviso.status]||'Lembrete processado';
+      }else if(cupom) {
+        situacao=cupom.status==='enviado'?'Cupom aceito pela Evolution':
+          cupom.status==='fila'?'Cupom aguardando envio':'Cupom: '+String(cupom.status);
+      }else if(!cliente) situacao='Conta do cliente não encontrada';
+      else if(!cfg.ativo) situacao='Recuperação desta modalidade desativada';
+      else if(!evo.ativo || !evo.instancia) situacao='WhatsApp Evolution desativado ou sem instância';
+      else if(!cliente.marketing) situacao='Cliente não autorizou mensagens promocionais';
+      else if(!numeroWhatsapp(cliente.telefone)) situacao='WhatsApp do cliente inválido ou ausente';
+      else if(modo==='indefinido') situacao='CEP de destino não identificado ou entrega local indisponível';
+      else if(!Number.isFinite(ultima)) situacao='Horário da cesta inválido';
+      else if(!Number.isFinite(inicio) || ultima<inicio) situacao='Cesta sem alteração posterior à ativação';
+      else if(ultima>agora) situacao='Horário da cesta está no futuro';
+      else if(agora-ultima>30*86_400_000) situacao='Cesta antiga fora da janela de recuperação';
+      else if(db.collection('orders').all().some(o=>o.carrinhoId===cart.id))
+        situacao='Esta cesta já gerou pedido; acompanhar pagamento conforme a modalidade';
+      else if(db.collection('orders').all().some(o=>o.clienteId===cart.clienteId &&
+        o.statusFinanceiro==='pendente' && !o.pagamentoPresencial &&
+        Date.parse(o.criadoEm||'')>=ultima))
+        situacao='Pagamento posterior à cesta ainda pendente';
+      else if(cfg.apenasPrimeiraCompra && db.collection('orders').all().some(o=>
+        o.clienteId===cliente.id && o.statusFinanceiro==='aprovado'))
+        situacao='Campanha configurada somente para primeira compra';
+      else if(!itensRecuperaveis(db,cart).length)
+        situacao='Cesta possui itens fora das categorias permitidas ou sem estoque';
+      else if(campanhas.all().some(c=>c.carrinhoId===cart.id &&
+        (c.modo||'nacional')!==modo))
+        situacao='Cesta teve campanha de outra modalidade';
+      else if(agora-ultima < cfg.primeiroLembreteHoras*3_600_000)
+        situacao='Aguardando completar prazo de inatividade';
+      else situacao='Prazo atingido; aguardando próximo ciclo automático (até 5 minutos)';
+      return {
+        cliente:cliente?.nome||'Cliente',modo,
+        atualizadoEm:cart.atualizadoEm,
+        previstaEm,
+        quantidadeItens:(cart.itens||[]).length,
+        situacao,
+      };
+    });
+}
 export function painelRecuperacao(db) {
   expirarCuponsRecuperacao(db);
   const campanhas=db.collection('recuperacoesVendas').all()
@@ -480,6 +557,7 @@ export function painelRecuperacao(db) {
       ['pix','credit_card','debit_card'].includes(p.metodoPagamento) &&
       p.statusFinanceiro==='pendente').length,
     receitaRecuperadaCentavos:recuperados.reduce((n,p)=>n+Number(p.totalCentavos||0),0),
+    diagnosticos:diagnosticoCarrinhosRecuperacao(db),
     linhas:campanhas.slice(0,100).map(c=>({
       ...c, modo:c.modo||'nacional',
       nome:db.collection('customers').get(c.clienteId)?.nome||'Cliente',
