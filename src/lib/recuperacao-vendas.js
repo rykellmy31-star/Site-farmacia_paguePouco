@@ -106,8 +106,7 @@ function clienteElegivel(db, cliente, config, numero) {
   // Um pedido ANTIGO pendente, de outra cesta, não deve impedir o cliente
   // de recuperar uma nova cesta. O conflito de campanhas é tratado pela
   // idade do pedido em relação à atividade da cesta, abaixo.
-  if (config.apenasPrimeiraCompra && db.collection('orders').all().some(o =>
-    o.clienteId === cliente.id && o.statusFinanceiro === 'aprovado')) return false;
+  // A condição de primeira compra limita apenas o CUPOM, não o lembrete.
   return true;
 }
 function carrinhoAbandonado(db, cart, cliente, config, agora, ativadoEm) {
@@ -126,30 +125,44 @@ function carrinhoAbandonado(db, cart, cliente, config, agora, ativadoEm) {
       Date.parse(o.criadoEm)>=ultimaAtividade)) return false;
   return (cart.itens || []).every(i => Number.isInteger(Number(i.quantidade)) && Number(i.quantidade) > 0);
 }
-// Lista conservadora: não enviar ofertas de medicamentos, aparelhos, testes
-// ou qualquer item fora de higiene, beleza e fraldas.
-const CATEGORIAS_PERMITIDAS = new Set([
- 'higiene-pessoal','sabonetes','desodorantes','higiene-bucal',
- 'papel-higienico','beleza','cabelos','maquiagem','unhas',
- 'cuidados-com-o-corpo','dermocosmeticos','hidratantes','cuidados-faciais',
- 'fraldas','fraldas-descartaveis','lencos-umedecidos','chupetas-e-mamadeiras',
-]);
-function itensRecuperaveis(db, cart, {verificarEstoque=true}={}) {
-  const items = [];
-  for (const item of cart.itens || []) {
-    const p = db.collection('products').get(item.produtoId);
-    const categoria=db.collection('categories').get(p?.categoriaId);
-    if (!p || !podeVender(p).ok ||
-        !Number.isSafeInteger(Number(item.quantidade)) || Number(item.quantidade)<1 ||
-        (verificarEstoque && estoqueDisponivel(p)<Number(item.quantidade))) return [];
-    if (!CATEGORIAS_PERMITIDAS.has(String(categoria?.slug||''))) return [];
-    const tipo=String(p.sanitario?.classificacao||'nao_aplicavel').toLowerCase();
-    if (!['nao_aplicavel','cosmetico','cosmético','higiene'].includes(tipo) ||
-        p.sanitario?.requerReceita || p.sanitario?.controlado ||
-        p.sanitario?.antimicrobiano) return [];
+/**
+ * Sem lista fechada de categorias: qualquer SKU ativo, com estoque e
+ * APROVADO para venda online participa da contagem da cesta.
+ * podeVender() mantém as restrições sanitárias do próprio checkout.
+ */
+function itensRecuperaveis(db,cart,{verificarEstoque=true}={}) {
+  const items=[];
+  for(const item of cart.itens||[]) {
+    const p=db.collection('products').get(item.produtoId);
+    const qtd=Number(item.quantidade);
+    if(!p || !podeVender(p).ok || !Number.isSafeInteger(qtd) || qtd<1 ||
+        verificarEstoque && estoqueDisponivel(p)<qtd) return [];
     items.push(p);
   }
   return items;
+}
+function subtotalRecuperavel(db,cart) {
+  if(!itensRecuperaveis(db,cart).length) return null;
+  let total=0;
+  for(const item of cart.itens||[]) {
+    const p=db.collection('products').get(item.produtoId);
+    const preco=precoVigenteCentavos(p);
+    const valor=preco*Number(item.quantidade);
+    if(!Number.isSafeInteger(valor)||valor<0)return null;
+    total+=valor;
+    if(!Number.isSafeInteger(total))return null;
+  }
+  return total;
+}
+function podeOferecerCupomPrimeiraCompra(db,cliente,cfg) {
+  return !cfg.apenasPrimeiraCompra || !db.collection('orders').all().some(o=>
+    o.clienteId===cliente.id && o.statusFinanceiro==='aprovado');
+}
+// Nunca revelar medicamentos pelo nome numa campanha; o carrinho e
+// seus detalhes permanecem visíveis apenas na sessão autenticada.
+function podeDetalharProdutoMarketing(p) {
+  return ['nao_aplicavel','cosmetico','cosmético','higiene'].includes(
+    String(p?.sanitario?.classificacao||'nao_aplicavel').toLowerCase());
 }
 function descontoFormato(n) { return (n / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function nomeSeguro(v) { return String(v || 'cliente').replace(/[\r\n*~_<>\x60]/g,' ').trim().slice(0,48) || 'cliente'; }
@@ -171,8 +184,9 @@ function linkCarrinho(token) {
     '/conta/recuperar-carrinho/'+encodeURIComponent(token);
 }
 function mensagemCupom(cliente, itens, cupom, config, token, modo='nacional') {
-  const nomes = cliente.consentimentoWhatsappMarketingDetalhes === true
-    ? itens.slice(0,3).map((p,i)=>'• '+textoProduto(p.nome)).join('\n') : '';
+  const nomes = cliente.consentimentoWhatsappMarketingDetalhes === true &&
+    itens.every(podeDetalharProdutoMarketing)
+    ? itens.slice(0,3).map(p=>'• '+textoProduto(p.nome)).join('\n') : '';
   const produtos = nomes ? '\n🛍️ *Sua seleção:*\n'+nomes+'\n' :
     '\n🛍️ *Os produtos que você selecionou estão esperando!*\n';
   return '🛒 *'+nomeSeguro(cliente.nome)+', esquecendo alguma coisa?* 👀\n\n'+
@@ -205,7 +219,7 @@ export function proximaRecuperacaoPendente(db,agora=Date.now()) {
     return cfg.ativo && Number.isFinite(inicio) &&
       carrinhoAbandonado(db,cart,cliente,cfg,agora,inicio) &&
       clienteElegivel(db,cliente,cfg,numeroWhatsapp(cliente?.telefone)) &&
-      itensRecuperaveis(db,cart).length>0 &&
+      (subtotalRecuperavel(db,cart)??-1)>=cfg.compraMinimaCentavos &&
       (agora-Date.parse(cart.atualizadoEm))/3_600_000 >= cfg.primeiroLembreteHoras;
   });
 }
@@ -262,6 +276,8 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
         !carrinhoAbandonado(db,cart,cliente,cfg,agora,Date.parse(cfg.ativadoEm))) continue;
     const itens=itensRecuperaveis(db,cart);
     if (!itens.length) continue;
+    const subtotal=subtotalRecuperavel(db,cart);
+    if(subtotal==null || subtotal<cfg.compraMinimaCentavos) continue;
     // Se uma cesta já entrou em outra modalidade, nunca duplicar campanhas.
     if (campanhas.all().some(c=>c.carrinhoId===cart.id &&
         (c.modo||'nacional')!==modo)) continue;
@@ -285,11 +301,7 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     if (fila.get(cupomId)) continue;
     const ultimo=caminhosUltimosCupons(campanhas,cliente.id);
     if (ultimo && agora-Date.parse(ultimo.criadoEm) < cfg.intervaloDias*86_400_000) continue;
-    const subtotal=cart.itens.reduce((n,i)=>{
-      const p=db.collection('products').get(i.produtoId);
-      return n+precoVigenteCentavos(p)*Number(i.quantidade);
-    },0);
-    if (subtotal < cfg.compraMinimaCentavos) continue;
+    if (!podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
     const token=randomToken(24);
     const codigo=codigoNovo(db,modo);
     const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
@@ -397,12 +409,15 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
         !pedidoOnlineRecuperavel(db,pedido,{agora})) continue;
     const cliente=db.collection('customers').get(pedido.clienteId);
     const numero=numeroWhatsapp(cliente?.telefone);
-    if (!cliente || cliente.ativo===false || cliente.marketing!==true || !numero ||
-        cfg.apenasPrimeiraCompra && db.collection('orders').all().some(o=>
-          o.clienteId===cliente.id && o.statusFinanceiro==='aprovado')) continue;
+    if (!cliente || cliente.ativo===false || cliente.marketing!==true || !numero) continue;
     const cart=db.collection('carts').get(pedido.carrinhoId);
     if (!cart || cart.clienteId!==cliente.id || !(cart.itens||[]).length ||
         !itensRecuperaveis(db,cart,{verificarEstoque:false}).length) continue;
+    const subtotalPedido=cart.itens.reduce((n,i)=>{
+      const p=db.collection('products').get(i.produtoId);
+      return n+precoVigenteCentavos(p)*Number(i.quantidade);
+    },0);
+    if(!Number.isSafeInteger(subtotalPedido)||subtotalPedido<cfg.compraMinimaCentavos) continue;
     avaliados++;
     const idadeHoras=(agora-horaPedido)/3_600_000;
     const lembreteId='recuperacao:pedido:lembrete:'+pedido.id;
@@ -428,10 +443,7 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
       .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
     if (ultimo && agora-Date.parse(ultimo.criadoEm)<cfg.intervaloDias*86_400_000) continue;
     const itens=itensRecuperaveis(db,cart);
-    if (!itens.length) continue;
-    const subtotal=cart.itens.reduce((n,i)=>
-      n+precoVigenteCentavos(db.collection('products').get(i.produtoId))*Number(i.quantidade),0);
-    if (subtotal<cfg.compraMinimaCentavos) continue;
+    if (!itens.length || !podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
     const token=randomToken(24);
     const codigo=codigoNovo(db,'pedido');
     const produtosExclusivos=[...new Set(cart.itens.map(i=>String(i.produtoId)))].sort();
@@ -508,11 +520,10 @@ export function diagnosticoCarrinhosRecuperacao(db,{agora=Date.now(),limite=20}=
         o.statusFinanceiro==='pendente' && !o.pagamentoPresencial &&
         Date.parse(o.criadoEm||'')>=ultima))
         situacao='Pagamento posterior à cesta ainda pendente';
-      else if(cfg.apenasPrimeiraCompra && db.collection('orders').all().some(o=>
-        o.clienteId===cliente.id && o.statusFinanceiro==='aprovado'))
-        situacao='Campanha configurada somente para primeira compra';
       else if(!itensRecuperaveis(db,cart).length)
-        situacao='Cesta possui itens fora das categorias permitidas ou sem estoque';
+        situacao='Cesta possui itens inativos, indisponíveis ou bloqueados para venda online';
+      else if((subtotalRecuperavel(db,cart)??-1)<cfg.compraMinimaCentavos)
+        situacao='Cesta abaixo da compra mínima configurada';
       else if(campanhas.all().some(c=>c.carrinhoId===cart.id &&
         (c.modo||'nacional')!==modo))
         situacao='Cesta teve campanha de outra modalidade';
