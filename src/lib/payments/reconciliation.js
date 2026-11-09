@@ -84,13 +84,16 @@ export async function reconciliarPixAoConsultarPedido(db, pedidoId, {
   agora = Date.now(), intervaloMs = 60_000,
 } = {}) {
   const pedido = db.collection('orders').get(pedidoId);
-  if (!pedido || pedido.metodoPagamento !== 'pix' ||
-      pedido.statusFinanceiro !== 'pendente' || !pedido.pagamentoId) {
+  if (!pedido || !['pix','credit_card'].includes(pedido.metodoPagamento) ||
+      pedido.pagamentoPresencial || pedido.statusFinanceiro !== 'pendente' ||
+      !pedido.pagamentoId) {
     return { consultado: false, motivo: 'pedido_nao_pendente' };
   }
   const pagamento = db.collection('payments').get(pedido.pagamentoId);
   if (!pagamento || pagamento.provedor !== 'mercadopago' ||
-      pagamento.metodo !== 'pix' || pagamento.pedidoId !== pedido.id) {
+      pagamento.metodo !== pedido.metodoPagamento ||
+      pagamento.pedidoId !== pedido.id ||
+      (pedido.metodoPagamento==='credit_card' && !pagamento.checkoutProCartao)) {
     return { consultado: false, motivo: 'nao_e_pix_mercadopago' };
   }
   const ultima = Date.parse(pagamento.ultimaConsultaMercadoPagoEm || '');
