@@ -687,3 +687,155 @@ test('pedido antigo pendente não cancela lembrete após entrar na fila',async()
  });
  assert.equal(r.enviados,1);
 });
+
+
+test('alterar produtos cancela lembrete antigo e agenda novo após 1 hora, sem duplicar',async()=>{
+ const x=fixture({idade:2});
+ const primeira=executarRecuperacao(x.db,{agora:x.agora});
+ assert.equal(primeira.lembretes,1);
+ const antiga=x.db.collection('evolutionWhatsappOutbox').all()[0];
+ const antes=x.db.collection('carts').get('c-1');
+ // O cliente modifica a cesta enquanto a mensagem antiga ainda está na fila.
+ const editada=new Date(x.agora+30_000).toISOString();
+ x.db.collection('carts').update('c-1',{itens:[...antes.itens,{produtoId:'p1',quantidade:1}],
+   atualizadoEm:editada});
+ const enviadas=[];
+ const cancelamento=await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async(...args)=>{enviadas.push(args);return {ok:true,status:200};},
+ });
+ assert.equal(cancelamento.enviados,0);
+ assert.equal(enviadas.length,0);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').get(antiga.id).status,'cancelado');
+ const antesDoPrazo=executarRecuperacao(x.db,{agora:Date.parse(editada)+59*60_000});
+ assert.equal(antesDoPrazo.lembretes,0,'não antecipa o envio após alteração');
+ const diag=diagnosticoCarrinhosRecuperacao(x.db,{agora:Date.parse(editada)+59*60_000});
+ assert.equal(diag[0].situacao,'Aguardando completar prazo de inatividade',
+   'diagnóstico deve ignorar o lembrete cancelado do ciclo anterior');
+ const depois=executarRecuperacao(x.db,{agora:Date.parse(editada)+61*60_000});
+ assert.equal(depois.lembretes,1,'enfileira novo lembrete depois do novo prazo');
+ const novas=x.db.collection('evolutionWhatsappOutbox').all();
+ assert.equal(novas.length,2);
+ const segunda=novas.find(i=>i.id!==antiga.id);
+ assert.notEqual(segunda.id,antiga.id);
+ assert.equal(segunda.carrinhoAtualizadoEm,editada);
+ assert.equal(segunda.status,'fila');
+ assert.equal(executarRecuperacao(x.db,{agora:Date.parse(editada)+70*60_000}).lembretes,0);
+ const envio=await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async(...args)=>{enviadas.push(args);return {ok:true,status:200};},
+ });
+ assert.equal(envio.enviados,1);
+ assert.equal(enviadas.length,1);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').get(segunda.id).status,'enviado');
+ assert.equal(executarRecuperacao(x.db,{agora:Date.parse(editada)+80*60_000}).lembretes,0);
+});
+test('lembrete já entregue só é enviado de novo após edição e nova hora completa',async()=>{
+ const x=fixture({idade:2});
+ executarRecuperacao(x.db,{agora:x.agora});
+ const calls=[];
+ assert.equal((await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async(url,o)=>{calls.push(JSON.parse(o.body));return {ok:true,status:200};},
+ })).enviados,1);
+ const oldId=x.db.collection('evolutionWhatsappOutbox').all()[0].id;
+ const editada=new Date(x.agora+60_000).toISOString();
+ x.db.collection('carts').update('c-1',{atualizadoEm:editada});
+ assert.equal(executarRecuperacao(x.db,{agora:Date.parse(editada)+59*60_000}).lembretes,0);
+ assert.equal(executarRecuperacao(x.db,{agora:Date.parse(editada)+60*60_000}).lembretes,1);
+ const fila=x.db.collection('evolutionWhatsappOutbox').all();
+ assert.equal(fila.length,2);
+ assert.notEqual(fila[1].id,oldId);
+ assert.equal((await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async(url,o)=>{calls.push(JSON.parse(o.body));return {ok:true,status:200};},
+ })).enviados,1);
+ assert.equal(calls.length,2);
+});
+test('recuperação local também reinicia prazo após alteração de produtos',async()=>{
+ const x=fixture({idade:2,cepDestino:'45970000',localAtivo:true});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+ const antiga=x.db.collection('evolutionWhatsappOutbox').all()[0];
+ const novaAtividade=new Date(x.agora+1000).toISOString();
+ x.db.collection('carts').update('c-1',{atualizadoEm:novaAtividade});
+ await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>{throw Error('mensagem antiga não pode sair')},
+ });
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').get(antiga.id).status,'cancelado');
+ assert.equal(executarRecuperacao(x.db,{agora:Date.parse(novaAtividade)+61*60_000}).lembretes,1);
+ const nova=x.db.collection('evolutionWhatsappOutbox').all()[1];
+ assert.equal(nova.modo,'local');
+ assert.notEqual(nova.id,antiga.id);
+ assert.equal(nova.carrinhoAtualizadoEm,novaAtividade);
+});
+test('cupom cancelado por alteração não impede novo cupom e não ativa o antigo',async()=>{
+ const x=fixture({idade:26});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).cupons,1);
+ const antiga=x.db.collection('evolutionWhatsappOutbox').all()[0];
+ const cupomAntigo=x.db.collection('coupons').get(antiga.cupomId);
+ const editada=new Date(x.agora+10_000).toISOString();
+ x.db.collection('carts').update('c-1',{atualizadoEm:editada});
+ const r=await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>{throw Error('cupom antigo não pode ser enviado')},
+ });
+ assert.equal(r.enviados,0);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').get(antiga.id).status,'cancelado');
+ assert.equal(x.db.collection('coupons').get(cupomAntigo.id).ativo,false);
+ const posterior=Date.parse(editada)+26*3_600_000;
+ assert.equal(executarRecuperacao(x.db,{agora:posterior}).cupons,1,
+  'cupom cancelado não consome 15 dias e não bloqueia a versão atual');
+ const novos=x.db.collection('evolutionWhatsappOutbox').all();
+ assert.equal(novos.length,2);
+ const novo=novos[1];
+ assert.equal(novo.status,'fila');
+ assert.notEqual(novo.cupomId,antiga.cupomId);
+});
+test('campanha antiga de recuperação local não bloqueia nova global após troca de CEP',async()=>{
+ const x=fixture({idade:2,cepDestino:'45970000',localAtivo:true});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+ const anterior=x.db.collection('evolutionWhatsappOutbox').all()[0];
+ const editada=new Date(x.agora+1_000).toISOString();
+ x.db.collection('carts').update('c-1',{atualizadoEm:editada});
+ x.db.collection('customers').update('cliente-1',{
+   enderecos:[{id:'end-externo',cep:'29885000',cidade:'Ponto Belo',uf:'ES',padrao:true}],
+ });
+ await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>{throw Error('campanha antiga não pode ser enviada')},
+ });
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').get(anterior.id).status,'cancelado');
+ const r=executarRecuperacao(x.db,{agora:Date.parse(editada)+61*60_000});
+ assert.equal(r.lembretes,1);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').all()[1].modo,'nacional');
+});
+test('legado já enviado na versão atual não é reenviado após atualização do código',()=>{
+ const x=fixture({idade:2});
+ const c=x.db.collection('carts').get('c-1');
+ x.db.collection('evolutionWhatsappOutbox').insert({id:'recuperacao:lembrete:c-1',
+   tipo:'recuperacao_lembrete',status:'enviado',criadoEm:new Date(x.agora-30*60_000).toISOString(),
+   clienteId:'cliente-1',carrinhoId:'c-1',modo:'nacional'});
+ assert(Date.parse(x.db.collection('evolutionWhatsappOutbox').all()[0].criadoEm)>Date.parse(c.atualizadoEm));
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,0);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').count(),1);
+});
+test('legado cancelado antes da última edição não bloqueia a nova versão',()=>{
+ const x=fixture({idade:2});
+ x.db.collection('evolutionWhatsappOutbox').insert({id:'recuperacao:lembrete:c-1',
+   tipo:'recuperacao_lembrete',status:'cancelado',criadoEm:x.iso(3),
+   clienteId:'cliente-1',carrinhoId:'c-1',modo:'nacional'});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+ const mensagens=x.db.collection('evolutionWhatsappOutbox').all();
+ assert.equal(mensagens.length,2);
+ assert.notEqual(mensagens[1].id,mensagens[0].id);
+});
+test('pedido já criado impede reagendamento mesmo se o carrinho for alterado',()=>{
+ const x=fixture({idade:2});
+ executarRecuperacao(x.db,{agora:x.agora});
+ x.db.collection('orders').insert({id:'pedido-pago',carrinhoId:'c-1',
+   clienteId:'cliente-1',statusFinanceiro:'aprovado'});
+ const novoHorario=new Date(x.agora+10_000).toISOString();
+ x.db.collection('carts').update('c-1',{atualizadoEm:novoHorario});
+ assert.equal(executarRecuperacao(x.db,{agora:Date.parse(novoHorario)+3_600_000}).lembretes,0);
+});

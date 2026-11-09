@@ -235,8 +235,13 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
           Number.isFinite(ultimaAtividade) && Date.parse(o.criadoEm)>=ultimaAtividade));
       const compra=db.collection('orders').all().some(o=>
         o.clienteId===item.clienteId && o.statusFinanceiro==='aprovado');
-      const foiAtualizado=Date.parse(carrinho?.atualizadoEm||'')>
-        Date.parse(item.criadoEm||'')+1000;
+      // Em campanhas novas, comparar EXATAMENTE a versão da cesta. Não usar
+      // tolerância de 1 segundo, que pode enviar oferta já desatualizada.
+      // Mensagens antigas continuam reconhecidas pelo horário de criação.
+      const foiAtualizado=item.carrinhoAtualizadoEm
+        ? carrinho?.atualizadoEm!==item.carrinhoAtualizadoEm
+        : Date.parse(carrinho?.atualizadoEm||'')>
+          Date.parse(item.criadoEm||'')+1000;
       const produtosAgora=[...new Set((carrinho?.itens||[]).map(i=>String(i.produtoId)))].sort();
       const cupomDiferente=cupom && JSON.stringify(cupom.produtosExclusivos)!==JSON.stringify(produtosAgora);
       const subtotal=subtotalRecuperavel(db,carrinho);

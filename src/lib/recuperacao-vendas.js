@@ -217,6 +217,35 @@ function codigoNovo(db,modo='nacional') {
   }
   throw new Error('Não foi possível gerar código individual seguro.');
 }
+/**
+ * Cada alteração real do carrinho cria um ciclo distinto. Chave determinística:
+ * não duplica mensagens em duas passagens do alarme, mas não deixa mensagens
+ * canceladas de ciclos antigos travarem lembretes posteriores.
+ */
+function chaveRecuperacaoCarrinho(cart,modo,tipo) {
+  const prefixo=modo==='local'?'recuperacao:local:':'recuperacao:';
+  const base=prefixo+tipo+':'+cart.id;
+  return {atual:base+':'+Date.parse(cart.atualizadoEm||''),legada:base};
+}
+function registroCicloAtual(fila,cart,modo,tipo) {
+  const chaves=chaveRecuperacaoCarrinho(cart,modo,tipo);
+  const atual=fila.get(chaves.atual);
+  if(atual)return atual;
+  // Compatibilidade: não reenviar uma campanha antiga que já corresponde
+  // à cesta ATUAL, mas ignorar as canceladas antes da última edição.
+  const legado=fila.get(chaves.legada);
+  if(legado && Date.parse(legado.criadoEm||'')>=Date.parse(cart.atualizadoEm||''))
+    return legado;
+  return null;
+}
+function outraCampanhaNoCiclo(campanhas,fila,cart,modo) {
+  return campanhas.all().some(c=>
+    c.carrinhoId===cart.id && (c.modo||'nacional')!==modo &&
+    fila.get(c.id)?.status!=='cancelado' &&
+    (c.carrinhoAtualizadoEm===cart.atualizadoEm ||
+      !c.carrinhoAtualizadoEm &&
+      Date.parse(c.criadoEm||'')>=Date.parse(cart.atualizadoEm||'')));
+}
 export function proximaRecuperacaoPendente(db,agora=Date.now()) {
   return db.collection('carts').all().some(cart=>{
     if (!cart.clienteId) return false;
@@ -287,29 +316,30 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
     if (!itens.length) continue;
     const subtotal=subtotalRecuperavel(db,cart);
     if(subtotal==null || subtotal<minimoLembreteRecuperacao(db)) continue;
-    // Se uma cesta já entrou em outra modalidade, nunca duplicar campanhas.
-    if (campanhas.all().some(c=>c.carrinhoId===cart.id &&
-        (c.modo||'nacional')!==modo)) continue;
+    // Não misturar campanhas no mesmo ciclo, mas permitir uma nova cesta
+    // após alterar itens, inclusive se uma campanha anterior foi cancelada.
+    if (outraCampanhaNoCiclo(campanhas,fila,cart,modo)) continue;
     processados[modo]++;
     resumo.avaliados++;
     const idadeHoras=(agora-Date.parse(cart.atualizadoEm))/3_600_000;
-    const prefixo=modo==='local'?'recuperacao:local:':'recuperacao:';
-    const lembreteId=prefixo+'lembrete:'+cart.id;
+    const lembreteId=chaveRecuperacaoCarrinho(cart,modo,'lembrete').atual;
     if (idadeHoras >= cfg.primeiroLembreteHoras &&
         (idadeHoras < cfg.enviarCupomAposHoras || subtotal < cfg.compraMinimaCentavos) &&
-        !fila.get(lembreteId)) {
+        !registroCicloAtual(fila,cart,modo,'lembrete')) {
       const token=randomToken(24);
       fila.insert({id:lembreteId,tipo:'recuperacao_lembrete',modo,carrinhoId:cart.id,
+        carrinhoAtualizadoEm:cart.atualizadoEm,
         clienteId:cliente.id,numero,texto:mensagemLembrete(cliente,token,modo),status:'fila',
         criadoEm:nowISO(),tentativas:0});
       campanhas.insert({id:lembreteId,carrinhoId:cart.id,clienteId:cliente.id,modo,
+        carrinhoAtualizadoEm:cart.atualizadoEm,
         tipo:'lembrete',criadoEm:nowISO(),cupomId:null,token});
       resumo.lembretes++;
     }
     if (idadeHoras < cfg.enviarCupomAposHoras) continue;
-    const cupomId=prefixo+'cupom:'+cart.id;
-    if (fila.get(cupomId)) continue;
-    const ultimo=caminhosUltimosCupons(campanhas,cliente.id);
+    const cupomId=chaveRecuperacaoCarrinho(cart,modo,'cupom').atual;
+    if (registroCicloAtual(fila,cart,modo,'cupom')) continue;
+    const ultimo=caminhosUltimosCupons(campanhas,cliente.id,fila);
     if (ultimo && agora-Date.parse(ultimo.criadoEm) < cfg.intervaloDias*86_400_000) continue;
     if (subtotal<cfg.compraMinimaCentavos ||
         !podeOferecerCupomPrimeiraCompra(db,cliente,cfg)) continue;
@@ -323,10 +353,12 @@ export function executarRecuperacao(db,{agora=Date.now()}={}) {
       modoRecuperacao:modo,criadoEm:nowISO(),validadeHoras:cfg.validadeHoras,
       descricao:modo==='local'?'Recuperação local individual':'Recuperação de carrinho individual'});
     fila.insert({id:cupomId,tipo:'recuperacao_cupom',modo,carrinhoId:cart.id,
+      carrinhoAtualizadoEm:cart.atualizadoEm,
       clienteId:cliente.id,cupomId:cupom.id,numero,
       texto:mensagemCupom(cliente,itens,cupom,cfg,token,modo),
       status:'fila',criadoEm:nowISO(),tentativas:0});
     campanhas.insert({id:cupomId,carrinhoId:cart.id,clienteId:cliente.id,modo,
+      carrinhoAtualizadoEm:cart.atualizadoEm,
       tipo:'cupom',cupomId:cupom.id,criadoEm:nowISO(),token});
     resumo.cupons++;
     if (modo==='local') resumo.locais++;
@@ -478,8 +510,10 @@ export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}
   }
   return resumo;
 }
-function caminhosUltimosCupons(campanhas,clienteId) {
-  return campanhas.all().filter(c=>c.clienteId===clienteId&&c.tipo==='cupom')
+function caminhosUltimosCupons(campanhas,clienteId,fila) {
+  return campanhas.all().filter(c=>c.clienteId===clienteId && c.tipo==='cupom' &&
+    // Desconto cancelado antes do envio não consome os dias de intervalo.
+    ['fila','enviando','enviado','verificar'].includes(fila.get(c.id)?.status))
     .sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
 }
 
@@ -504,9 +538,8 @@ export function diagnosticoCarrinhosRecuperacao(db,{agora=Date.now(),limite=20}=
       const inicio=Date.parse(cfg.ativadoEm||'');
       const previstaEm=Number.isFinite(ultima) && Number.isFinite(cfg.primeiroLembreteHoras)
         ? new Date(ultima+cfg.primeiroLembreteHoras*3_600_000).toISOString() : null;
-      const prefixo=modo==='local'?'recuperacao:local:':'recuperacao:';
-      const aviso=modo==='indefinido'?null:fila.get(prefixo+'lembrete:'+cart.id);
-      const cupom=modo==='indefinido'?null:fila.get(prefixo+'cupom:'+cart.id);
+      const aviso=modo==='indefinido'?null:registroCicloAtual(fila,cart,modo,'lembrete');
+      const cupom=modo==='indefinido'?null:registroCicloAtual(fila,cart,modo,'cupom');
       let situacao='';
       if(aviso) {
         const rotulos={fila:'Na fila do WhatsApp',enviado:'Lembrete aceito pela Evolution',
@@ -536,9 +569,8 @@ export function diagnosticoCarrinhosRecuperacao(db,{agora=Date.now(),limite=20}=
         situacao='Cesta possui itens inativos, indisponíveis ou bloqueados para venda online';
       else if((subtotalRecuperavel(db,cart)??-1)<minimoLembreteRecuperacao(db))
         situacao='Cesta abaixo do valor mínimo da loja para recuperação';
-      else if(campanhas.all().some(c=>c.carrinhoId===cart.id &&
-        (c.modo||'nacional')!==modo))
-        situacao='Cesta teve campanha de outra modalidade';
+      else if(outraCampanhaNoCiclo(campanhas,fila,cart,modo))
+        situacao='Já existe campanha de outra modalidade neste ciclo';
       else if(agora-ultima < cfg.primeiroLembreteHoras*3_600_000)
         situacao='Aguardando completar prazo de inatividade';
       else if(agora-ultima >= cfg.enviarCupomAposHoras*3_600_000 &&
