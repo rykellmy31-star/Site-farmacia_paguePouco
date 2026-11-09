@@ -335,7 +335,7 @@ ${barraCookies(settings.cookies)}
     cep: ctx.cepSessao || '',
     logado: !!ctx.usuario,
   })};</script>
-<script src="/js/app.js?v=inteligencia-vendas-20261109" defer></script>
+<script src="/js/app.js?v=carrossel-pausa-6s-10s-20261104-inteligencia-vendas-20261109" defer></script>
 <script src="/js/visitas-site.js?v=20261108" defer></script>
 <script src="/js/password-toggle.js?v=20261107" defer></script>
 </body>
