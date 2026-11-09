@@ -107,10 +107,15 @@ test('cliente que recusou ofertas ou pedido em andamento nunca é contatado',()=
     carrinhoId:'c-antigo',statusFinanceiro:'aprovado'});
   assert.equal(executarRecuperacao(c.db,{agora:c.agora}).cupons,0);
 });
-test('não oferece itens sanitários sensíveis nem medicamentos, mesmo com marketing aceito',()=>{
+test('medicamento liberado para venda online não é bloqueado pela categoria',()=>{
   const {db,agora}=fixture({categoria:'medicamentos-isentos-de-prescricao'});
-  assert.equal(executarRecuperacao(db,{agora}).cupons,0);
-  assert.equal(db.collection('evolutionWhatsappOutbox').count(),0);
+  const p=db.collection('products').get('p1');
+  db.collection('products').update('p1',{sanitario:{classificacao:'isento_prescricao',
+    registroMS:'1234567890123',aprovadoFarmaceutico:true}});
+  const r=executarRecuperacao(db,{agora});
+  assert.equal(r.cupons,1);
+  assert.equal(db.collection('evolutionWhatsappOutbox').count(),1);
+  assert.doesNotMatch(db.collection('evolutionWhatsappOutbox').all()[0].texto,/Fralda Desc/);
 });
 test('o nome do produto só aparece se houver autorização explícita adicional',()=>{
   const {db,agora}=fixture({detalhes:true});
@@ -554,9 +559,67 @@ test('diagnóstico explica ausência de consentimento sem divulgar itens e núme
  const view=readFileSync(new URL('../src/views/admin/recuperacao-vendas.js',import.meta.url),'utf8');
  assert.match(view,/Diagnóstico de envio e prazo dos carrinhos/);
 });
-test('cesta com produto fora das categorias permitidas registra causa da ausência de envio',()=>{
- const {db,agora}=fixture({idade:2,categoria:'medicamentos'});
- assert.equal(executarRecuperacao(db,{agora}).lembretes,0);
+test('cesta de categoria não listada gera lembrete após uma hora quando vende online',()=>{
+ const {db,agora}=fixture({idade:2,categoria:'vitaminas-e-suplementos'});
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,1);
  assert.match(diagnosticoCarrinhosRecuperacao(db,{agora})[0].situacao,
-   /itens fora das categorias permitidas/);
+   /Na fila do WhatsApp/);
+});
+
+
+test('qualquer categoria vendável participa e o mínimo bloqueia lembrete e cupom antes de R$ 60',()=>{
+ const x=fixture({idade:2,categoria:'suplementos'});
+ x.db.collection('products').update('p1',{precoCentavos:5500});
+ const a=executarRecuperacao(x.db,{agora:x.agora});
+ assert.equal(a.lembretes,0);
+ assert.equal(a.cupons,0);
+ assert.match(diagnosticoCarrinhosRecuperacao(x.db,{agora:x.agora})[0].situacao,/abaixo da compra mínima/);
+ x.db.collection('products').update('p1',{precoCentavos:6000});
+ const b=executarRecuperacao(x.db,{agora:x.agora});
+ assert.equal(b.lembretes,1,'valor igual ao mínimo deve disparar');
+ const y=fixture({idade:26,categoria:'suplementos'});
+ y.db.collection('products').update('p1',{precoCentavos:5999});
+ assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,0);
+ y.db.collection('products').update('p1',{precoCentavos:6000});
+ assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,1);
+});
+test('três produtos de categorias diferentes contam juntos sem exigir categoria especial',async()=>{
+ const {db,agora}=fixture({idade:2,categoria:'higiene-pessoal'});
+ const novo=(id,categoriaId,slug,preco)=> {
+   db.collection('categories').insert({id:categoriaId,nome:slug,slug});
+   db.collection('products').insert({id,ativo:true,nome:'Produto '+id,
+     categoriaId,precoCentavos:preco,estoque:{quantidade:50,reservado:0},
+     sanitario:{classificacao:'nao_aplicavel'}});
+ };
+ novo('p2','cat2','suplementos',2000);
+ novo('p3','cat3','testes-e-aparelhos',2000);
+ db.collection('products').update('p1',{precoCentavos:1900});
+ db.collection('carts').update('c-1',{itens:[
+   {produtoId:'p1',quantidade:1,precoUnitarioCentavos:1900},
+   {produtoId:'p2',quantidade:1,precoUnitarioCentavos:2000},
+   {produtoId:'p3',quantidade:1,precoUnitarioCentavos:2000},
+ ]});
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,0,'R$ 59,00 é menor que R$ 60');
+ db.collection('products').update('p3',{precoCentavos:2200});
+ assert.equal(executarRecuperacao(db,{agora}).lembretes,1,'R$ 61,00 inclui os três produtos');
+ const msg=await processarFilaEvolution(db,{apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>({ok:true,status:200})});
+ assert.equal(msg.enviados,1);
+});
+test('cliente recorrente recebe lembrete mesmo com cupom de primeira compra ativo',()=>{
+ const x=fixture({idade:2});
+ x.db.collection('orders').insert({id:'antigo-aprovado',clienteId:'cliente-1',
+   carrinhoId:'outro',statusFinanceiro:'aprovado'});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+ const y=fixture({idade:26});
+ y.db.collection('orders').insert({id:'antigo-aprovado',clienteId:'cliente-1',
+   carrinhoId:'outro',statusFinanceiro:'aprovado'});
+ assert.equal(executarRecuperacao(y.db,{agora:y.agora}).cupons,0);
+});
+test('carrinho com medicamento sujeito a receita e bloqueado para venda permanece fora',()=>{
+ const x=fixture({idade:2,categoria:'medicamentos'});
+ x.db.collection('products').update('p1',{sanitario:{classificacao:'controlado',requerReceita:true}});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,0);
+ assert.match(diagnosticoCarrinhosRecuperacao(x.db,{agora:x.agora})[0].situacao,
+   /bloqueados para venda online/);
 });
