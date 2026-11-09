@@ -167,12 +167,6 @@ function podeOferecerCupomPrimeiraCompra(db,cliente,cfg) {
   return !cfg.apenasPrimeiraCompra || !db.collection('orders').all().some(o=>
     o.clienteId===cliente.id && o.statusFinanceiro==='aprovado');
 }
-// Nunca revelar medicamentos pelo nome numa campanha; o carrinho e
-// seus detalhes permanecem visíveis apenas na sessão autenticada.
-function podeDetalharProdutoMarketing(p) {
-  return ['nao_aplicavel','cosmetico','cosmético','higiene'].includes(
-    String(p?.sanitario?.classificacao||'nao_aplicavel').toLowerCase());
-}
 function descontoFormato(n) { return (n / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function nomeSeguro(v) { return String(v || 'cliente').replace(/[\r\n*~_<>\x60]/g,' ').trim().slice(0,48) || 'cliente'; }
 function mensagemLembrete(cliente,token,modo='nacional') {
@@ -209,7 +203,7 @@ function mensagemCupom(cliente, itens, cupom, config, token, modo='nacional') {
     ofertaCompacta(cupom,config)+
     (modo==='local'?'🏪 Pague na retirada ou na entrega local.\n':'')+
     '🛍️ *Concluir compra:* '+linkCarrinho(token)+'\n'+
-    '❤️ *Farmácia Pague Pouco — cuidando da sua saúde.*';
+    '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
 function codigoNovo(db,modo='nacional') {
   for (let n=0;n<8;n++) {
@@ -424,7 +418,7 @@ function mensagemCupomPagamento(cliente,pedido,cupom,cfg,token) {
   return '💳 Olá, '+primeiroNomeCupom(cliente)+'! Seu pagamento anterior não foi concluído.\n'+
     ofertaCompacta(cupom,cfg)+
     '🛍️ *Gerar novo pagamento:* '+linkCarrinho(token)+'\n'+
-    '❤️ *Farmácia Pague Pouco — cuidando da sua saúde.*';
+    '❤️ *Farmácia Pague Pouco, cuidando da sua saúde.*';
 }
 export function executarRecuperacaoPedidosOnline(db,{agora=Date.now(),resumo={}}={}) {
   const cfg=configRecuperacaoPedido(db);
