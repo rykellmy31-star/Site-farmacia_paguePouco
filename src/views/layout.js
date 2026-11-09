@@ -302,7 +302,7 @@ ${semIndex ? '<meta name="robots" content="noindex,follow">' : '<meta name="robo
 <meta name="theme-color" content="#8b0000">
 <link rel="icon" type="image/svg+xml" href="${e(tema.faviconUrl || '/img/favicon.svg?v=20261021-vermelho')}">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=rodape-compacto-20261108">
+<link rel="stylesheet" href="/styles.css?v=inteligencia-vendas-20261109">
 <style>
 :root{
   --primaria:${e(tema.corPrimaria || '#8b0000')};
@@ -335,7 +335,7 @@ ${barraCookies(settings.cookies)}
     cep: ctx.cepSessao || '',
     logado: !!ctx.usuario,
   })};</script>
-<script src="/js/app.js?v=carrossel-pausa-6s-10s-20261104" defer></script>
+<script src="/js/app.js?v=inteligencia-vendas-20261109" defer></script>
 <script src="/js/visitas-site.js?v=20261108" defer></script>
 <script src="/js/password-toggle.js?v=20261107" defer></script>
 </body>
