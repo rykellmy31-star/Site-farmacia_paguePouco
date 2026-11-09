@@ -27,7 +27,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
       c({nome:'enviarCupomAposHoras',rotulo:'Enviar cupom após (horas)',tipo:'number',valor:cfg.enviarCupomAposHoras,min:2,max:720,step:1})+
       c({nome:'descontoPercentual',rotulo:'Porcentagem de desconto (%)',tipo:'number',valor:cfg.descontoPercentual,min:0.01,max:50,step:0.01})+
       c({nome:'descontoMaximo',rotulo:'Desconto máximo (R$)',tipo:'text',valor:real(cfg.descontoMaximoCentavos)})+
-      c({nome:'compraMinima',rotulo:'Compra mínima (R$)',tipo:'text',valor:real(cfg.compraMinimaCentavos)})+
+      c({nome:'compraMinima',rotulo:'Valor mínimo da cesta para lembrete e cupom (R$)',tipo:'text',valor:real(cfg.compraMinimaCentavos)})+
       c({nome:'validadeHoras',rotulo:'Validade após envio (horas)',tipo:'number',valor:cfg.validadeHoras,min:1,max:720,step:1})+
       c({nome:'intervaloDias',rotulo:'Intervalo mínimo entre ofertas (dias)',tipo:'number',valor:cfg.intervaloDias,min:1,max:365,step:1})+
     '</div>'+
@@ -80,7 +80,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
       c({nome:'enviarCupomAposHoras',rotulo:'Enviar cupom local após (horas)',tipo:'number',valor:local.enviarCupomAposHoras,min:2,max:720,step:1})+
       c({nome:'descontoPercentual',rotulo:'Desconto local (%)',tipo:'number',valor:local.descontoPercentual,min:0.01,max:50,step:0.01})+
       c({nome:'descontoMaximo',rotulo:'Desconto máximo local (R$)',tipo:'text',valor:real(local.descontoMaximoCentavos)})+
-      c({nome:'compraMinima',rotulo:'Compra mínima local (R$)',tipo:'text',valor:real(local.compraMinimaCentavos)})+
+      c({nome:'compraMinima',rotulo:'Valor mínimo local para lembrete e cupom (R$)',tipo:'text',valor:real(local.compraMinimaCentavos)})+
       c({nome:'validadeHoras',rotulo:'Validade do cupom local (horas)',tipo:'number',valor:local.validadeHoras,min:1,max:720,step:1})+
       c({nome:'intervaloDias',rotulo:'Intervalo mínimo entre ofertas locais (dias)',tipo:'number',valor:local.intervaloDias,min:1,max:365,step:1})+
     '</div>'+
@@ -88,7 +88,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
     '<p class="texto-pequeno">O cupom é individual e pode ser utilizado uma única vez no pedido. '+
     'O pedido é registrado como aguardando pagamento presencial; a venda só entra na receita recuperada '+
     'quando a equipe confirmar o recebimento. As mensagens param após a criação do pedido. '+
-    'Somente WhatsApp de clientes autorizados e itens promocionais elegíveis.</p>'+
+    'Somente WhatsApp de clientes autorizados, produtos vendáveis e cesta acima do mínimo configurado.</p>'+
     '<p><button type="submit" class="botao destaque">Salvar recuperação local</button></p></form>';
   const estadosTeste={
     enviado:['sucesso','A Evolution API aceitou o envio. Confira se a mensagem chegou ao número informado.'],
@@ -180,7 +180,7 @@ export function telaRecuperacaoVendas(ctx,{cfg,cfgLocal,cfgPedido,resumo,erro=''
       'As mensagens usam ❤️ e o lema <strong>Farmácia Pague Pouco, cuidando da sua saúde.</strong></p>'+
       (erro?'<div class="alerta erro" role="alert">'+e(erro)+'</div>':'')+
       '<p class="texto-pequeno">Carrinho global: <strong>'+(cfg.ativo?'Ativado':'Desativado')+'</strong> • Pagamento não confirmado: <strong>'+(pedido.ativo?'Ativado':'Desativado')+'</strong> • Local: <strong>'+(local.ativo?'Ativado':'Desativado')+'</strong>. '+
-        'Apenas clientes com consentimento de ofertas, endereço conhecido e carrinhos recentes elegíveis são contatados. '+
+        'A recuperação considera todos os produtos ativos e vendáveis com estoque, sem filtro por categoria. O lembrete só é enviado após a cesta atingir o valor mínimo da modalidade, com autorização para ofertas e endereço conhecido. '+
         'Quando um pedido é gerado, o carrinho para de enviar mensagens. Pedidos online não pagos seguem suas regras próprias; após pagamento aprovado, a recuperação é interrompida. '+
         'O cliente pode cancelar ofertas em Minha conta → Meus dados.</p>'+
       indicadores+
