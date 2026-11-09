@@ -664,3 +664,26 @@ test('painel descreve mínimo da loja separadamente do valor de liberar cupom',(
  assert.match(view,/mínimo de compra da loja/);
  assert.doesNotMatch(view,/Valor mínimo da cesta para lembrete e cupom/);
 });
+
+
+test('carrinho de R$ 15 ainda recebe lembrete quando cupom venceu antes do ciclo',()=>{
+ const x=fixture({idade:26,categoria:'vitaminas'});
+ x.db.collection('products').update('p1',{precoCentavos:1500});
+ const r=executarRecuperacao(x.db,{agora:x.agora});
+ assert.equal(r.lembretes,1);
+ assert.equal(r.cupons,0);
+ assert.equal(x.db.collection('evolutionWhatsappOutbox').all()[0].tipo,'recuperacao_lembrete');
+});
+test('pedido antigo pendente não cancela lembrete após entrar na fila',async()=>{
+ const x=fixture({idade:2,categoria:'higiene'});
+ x.db.collection('products').update('p1',{precoCentavos:1500});
+ x.db.collection('orders').insert({id:'pedido-antigo-pendente',clienteId:'cliente-1',
+   carrinhoId:'outro-carrinho',criadoEm:x.iso(7),
+   statusFinanceiro:'pendente',metodoPagamento:'pix'});
+ assert.equal(executarRecuperacao(x.db,{agora:x.agora}).lembretes,1);
+ const r=await processarFilaEvolution(x.db,{
+   apiKey:'teste',baseUrl:'https://evolution.example.com',
+   enviar:async()=>({ok:true,status:200}),
+ });
+ assert.equal(r.enviados,1);
+});
