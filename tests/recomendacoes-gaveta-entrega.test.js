@@ -91,3 +91,36 @@ test('adicionar card na entrega recalcula frete; gaveta e CSS continuam mobile',
   assert.match(layout,/gaveta-20261109/);
   assert.doesNotMatch(layout,/abrirModalRecomendacoes/);
 });
+
+
+test('cesta lateral usa cards horizontais baixos com botão visível em celular',()=>{
+  const css=readFileSync(new URL('../public/styles.css',import.meta.url),'utf8');
+  const layout=readFileSync(new URL('../src/views/layout.js',import.meta.url),'utf8');
+  const parte=css.slice(css.lastIndexOf('CESTA LATERAL COMPACTA'));
+  assert(parte.length>500,'bloco específico da cesta compacta ausente');
+  assert.match(parte,/\.gaveta \.recomendacao-card\s*\{[^}]*display:\s*grid/);
+  assert.match(parte,/\.gaveta \.recomendacao-card\s*\{[^}]*grid-template-columns:\s*68px minmax\(0,1fr\)/);
+  assert.match(parte,/\.gaveta \.recomendacao-imagem\s*\{[^}]*height:\s*69px/);
+  assert.match(parte,/\.gaveta \.recomendacao-adicionar,[\s\S]*?min-height:\s*34px/);
+  assert.match(parte,/\.gaveta \.recomendacoes-trilha\s*\{[^}]*overflow-x:\s*auto/);
+  assert.match(parte,/\.gaveta \.corpo\s*\{[^}]*overflow|\.gaveta \.corpo\s*\{[^}]*min-height:\s*0/);
+  assert.match(layout,/styles\.css\?v=inteligencia-vendas-20261109-gaveta-compacta-20261109/);
+});
+test('rodapé da gaveta é compacto e cupom, total e finalizar permanecem disponíveis',()=>{
+  const css=readFileSync(new URL('../public/styles.css',import.meta.url),'utf8');
+  const cart=readFileSync(new URL('../src/views/cart.js',import.meta.url),'utf8');
+  const parte=css.slice(css.lastIndexOf('CESTA LATERAL COMPACTA'));
+  assert.match(parte,/\.gaveta footer\s*\{[^}]*max-height:\s*min\(48dvh,\s*258px\)/);
+  assert.match(parte,/\.gaveta footer\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(parte,/\.gaveta footer \[data-form-cupom\] \.entrada\s*\{[^}]*height:\s*40px/);
+  assert.match(parte,/\.gaveta footer \.resumo-linha\.total\s*\{[^}]*font-size:\s*1rem/);
+  assert.match(parte,/\.gaveta footer \.botao\.bloquinho\s*\{[^}]*min-height:\s*40px/);
+  assert.match(cart,/Cupom de desconto/);
+  assert.match(cart,/htmlResumoCarrinho\(cart, totais/);
+  assert.match(cart,/href="\/checkout">Finalizar compra/);
+  assert.match(cart,/href="\/carrinho">Ver cesta completa/);
+  // As etapas de checkout continuam sendo as páginas e funções existentes.
+  const checkout=readFileSync(new URL('../src/views/checkout.js',import.meta.url),'utf8');
+  assert.match(checkout,/export function telaPagamentoPresencial/);
+  assert.match(checkout,/export function telaPagamento\(/);
+});
