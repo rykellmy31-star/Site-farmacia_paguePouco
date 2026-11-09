@@ -1,7 +1,7 @@
 /** Evolution v2: avisos transacionais; nomes de itens só com autorização v2 do cliente. */
 import {getSetting} from './settings.js';
 import { destinoRecuperacao } from './recuperacao-destino.js';
-import { pedidoOnlineRecuperavel } from './recuperacao-vendas.js';
+import { pedidoOnlineRecuperavel, subtotalRecuperavel } from './recuperacao-vendas.js';
 import {nowISO} from './store.js';
 const COL='evolutionWhatsappOutbox', CFG='evolutionWhatsapp';
 export const DEFAULT_EVOLUTION=Object.freeze({
@@ -236,11 +236,14 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
         Date.parse(item.criadoEm||'')+1000;
       const produtosAgora=[...new Set((carrinho?.itens||[]).map(i=>String(i.produtoId)))].sort();
       const cupomDiferente=cupom && JSON.stringify(cupom.produtosExclusivos)!==JSON.stringify(produtosAgora);
+      const subtotal=subtotalRecuperavel(db,carrinho);
       if (config.ativo!==true || (item.modo||'nacional')!==destinoRecuperacao(db,carrinho,cliente) ||
           !cliente?.marketing || cliente.ativo===false ||
           numeroWhatsapp(cliente.telefone)!==item.numero ||
           !carrinho?.itens?.length || carrinho.clienteId!==item.clienteId ||
-          pedido || foiAtualizado || (compra && config.apenasPrimeiraCompra===true) ||
+          pedido || foiAtualizado || subtotal==null ||
+          subtotal<Number(config.compraMinimaCentavos||0) ||
+          (compra && config.apenasPrimeiraCompra===true && item.tipo==='recuperacao_cupom') ||
           (item.tipo==='recuperacao_cupom' && (!cupom || cupom.canceladoEm || cupomDiferente))) {
         col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
         if (cupom) db.collection('coupons').update(cupom.id,{ativo:false});
