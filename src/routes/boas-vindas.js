@@ -19,6 +19,7 @@ function telaPainel(ctx, resumo, evoAtivo, erro) {
     campoAdmin({nome:'ativo',rotulo:'Ativar o pop-up e a campanha',tipo:'checkbox',valor:cfg.ativo}),
     '<div class="campo-linha">',
     campoAdmin({nome:'validadeHoras',rotulo:'Validade após confirmação (horas)',tipo:'number',min:1,max:720,valor:cfg.validadeHoras,obrigatorio:true}),
+    campoAdmin({nome:'intervaloReexibicaoHoras',rotulo:'Reexibir após fechar sem cadastrar (horas)',tipo:'number',min:1,max:168,valor:cfg.intervaloReexibicaoHoras,obrigatorio:true}),
     campoAdmin({nome:'maxCadastrosIpDia',rotulo:'Máximo de cadastros por rede em 24h',tipo:'number',min:2,max:10,valor:cfg.maxCadastrosIpDia,obrigatorio:true}),
     '</div><div class="campo-linha">',
     campoAdmin({nome:'tipo',rotulo:'Tipo',valor:cfg.tipo,opcoes:[{valor:'percentual',texto:'Percentual (%)'},{valor:'fixo',texto:'Valor fixo (R$)'}]}),
@@ -131,7 +132,7 @@ export function registrarBoasVindas(app, db) {
     if (erro) return void res.redirect('/admin/boas-vindas?erro='+encodeURIComponent(erro));
     patchSetting(db,'boasVindas',dados.dados,req.adminUser,req);
     logAdmin(db,req.adminUser,'configurou_cupons_boas_vindas','settings','boasVindas',
-      {ativo:dados.dados.ativo,validadeHoras:dados.dados.validadeHoras},req);
+      {ativo:dados.dados.ativo,validadeHoras:dados.dados.validadeHoras,intervaloReexibicaoHoras:dados.dados.intervaloReexibicaoHoras},req);
     res.redirect('/admin/boas-vindas?salvo=1');
   });
 }
