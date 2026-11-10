@@ -89,6 +89,13 @@ export function iniciarBoasVindas(db, dados, {dispositivo='', ip='', agora=Date.
     return {ok:false, erro:'Leia e aceite as condições do cadastro e a Política de Privacidade.'};
 
   const col=db.collection(COL), dh=dispositivoHash(dispositivo), ih=redeHash(ip);
+  const bloqueado=db.collection('bloqueiosCupomBoasVindas').findOne(b=>
+    b.telefoneHash===assinatura('telefone:'+telefone) ||
+    b.emailHash===assinatura('email:'+email) ||
+    (dh && b.dispositivoHash===dh));
+  if(bloqueado)
+    return {ok:false,erro:'Este contato já utilizou um cupom de boas-vindas.'};
+
   if (clienteExistente(db,email,telefone) ||
       col.findOne(c=>c.status==='confirmado' &&
         (c.telefone===telefone || c.email===email || (dh && c.dispositivoHash===dh))))
@@ -139,6 +146,13 @@ export function confirmarBoasVindas(db, {desafio, codigo}, {agora=Date.now()}={}
     col.update(lead.id,{tentativas:(lead.tentativas||0)+1});
     return {ok:false,erro:'Código incorreto. Confira a mensagem recebida.'};
   }
+  const bloqueado=db.collection('bloqueiosCupomBoasVindas').findOne(b=>
+    b.telefoneHash===assinatura('telefone:'+lead.telefone) ||
+    b.emailHash===assinatura('email:'+lead.email) ||
+    (lead.dispositivoHash && b.dispositivoHash===lead.dispositivoHash));
+  if(bloqueado)
+    return {ok:false,erro:'Este contato já utilizou um cupom de boas-vindas.'};
+
   // Reválida antes de emitir: o intervalo entre solicitar e confirmar
   // não pode permitir cupom duplicado por telefone, e-mail ou navegador.
   if (clienteExistente(db,lead.email,lead.telefone) ||
@@ -180,6 +194,65 @@ export function confirmarBoasVindas(db, {desafio, codigo}, {agora=Date.now()}={}
   }
   return {ok:true,codigo:cupom.codigo,expiraEm,
     validadeHoras:cfg.validadeHoras,compraMinimaCentavos:cfg.compraMinimaCentavos};
+}
+
+/**
+ * Exclusão administrativa de PRÉ-CADASTRO. Preserva a conta de compras e
+ * pedidos. Cupons emitidos são revogados e mensagens pendentes canceladas.
+ * Após um resgate, mantém-se somente assinaturas anti-repetição (sem PII em
+ * claro) e o registro financeiro do cupom, para evitar novo benefício.
+ */
+export function excluirCadastroBoasVindas(db, id) {
+  const cadastros=db.collection(COL);
+  const lead=cadastros.get(String(id||''));
+  if(!lead)return {ok:false,erro:'Cadastro de boas-vindas não encontrado.'};
+
+  const cupons=db.collection('coupons');
+  const cupom=lead.cupomId?cupons.get(lead.cupomId):null;
+  if(lead.cupomId && (!cupom || cupom.boasVindas!==true ||
+      cupom.leadBoasVindasId!==lead.id)) {
+    return {ok:false,erro:'Não foi possível identificar o cupom vinculado. Nenhum dado foi alterado.'};
+  }
+  const data=nowISO();
+  const foiUsado=Number(cupom?.usos||0)>0;
+  if(foiUsado) {
+    // Sem nomes, e-mails ou números em claro; impede segundo benefício
+    // mesmo após a remoção da linha, preservando o histórico de resgates.
+    const bloqueios=db.collection('bloqueiosCupomBoasVindas');
+    bloqueios.insert({
+      id:'resgate:'+cupom.id,
+      telefoneHash:assinatura('telefone:'+lead.telefone),
+      emailHash:assinatura('email:'+lead.email),
+      dispositivoHash:lead.dispositivoHash||'',
+      cupomId:cupom.id,
+      motivo:'cupom_utilizado',
+      criadoEm:data,
+    });
+  }
+  if(cupom) {
+    cupons.update(cupom.id,{
+      ativo:false,
+      canceladoEm:data,
+      clienteExclusivoTelefone:null,
+      clienteExclusivoEmail:null,
+    });
+    // A cesta pode ter armazenado o desconto antes da revogação.
+    db.collection('carts').updateMany(
+      cart=>cart.cupom?.cupomId===cupom.id,
+      ()=>({cupom:null,atualizadoEm:data})
+    );
+  }
+  db.collection(FILA).updateMany(
+    msg=>msg.leadId===lead.id &&
+      ['boas_vindas_otp','boas_vindas_cupom'].includes(msg.tipo),
+    msg=>({
+      numero:null,texto:null,
+      status:msg.status==='fila'?'cancelado':msg.status,
+      atualizadoEm:data,
+    })
+  );
+  cadastros.remove(lead.id);
+  return {ok:true,cupomId:cupom?.id||null,cupomUtilizado:foiUsado};
 }
 
 export function listarBoasVindas(db) {
