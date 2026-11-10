@@ -6,21 +6,27 @@
   const confirmar=modal.querySelector('[data-bv-confirmar]');
   const sucesso=modal.querySelector('[data-bv-concluido]');
   const feedback=modal.querySelector('[data-bv-feedback]');
-  const chave='pp_bv_exibir_apos';
-  // Previa administrativa: ignora a pausa de 7 dias neste navegador.
+  // A chave nova ignora a antiga pausa de 7 dias aplicada a quem só fechou.
+  const chave='pp_bv_proxima_exibicao_v2';
+  const cadastroConcluido='pp_bv_cadastro_confirmado_v2';
   const previsualizacao=new URLSearchParams(location.search).get('visualizarBoasVindas')==='1';
+  const horas=Number(modal.dataset.intervaloHoras);
+  const intervaloHoras=Number.isSafeInteger(horas)&&horas>=1&&horas<=168?horas:6;
   let desafio='';
+  let cadastroConfirmado=false;
   const podeAbrir=()=>{
-    try { return Date.now()>=Number(localStorage.getItem(chave)||0); }
-    catch { return true; }
+    try {
+      return localStorage.getItem(cadastroConcluido)!=='1' &&
+        Date.now()>=Number(localStorage.getItem(chave)||0);
+    } catch { return !cadastroConfirmado; }
   };
   if(!previsualizacao && !podeAbrir()) return;
   const anterior=document.activeElement;
-  const fechar=(dias=7)=>{
+  const fechar=()=>{
     modal.hidden=true;
     document.body.classList.remove('ppbv-aberto');
-    if(!previsualizacao) {
-      try { localStorage.setItem(chave,String(Date.now()+dias*86400000)); } catch {}
+    if(!previsualizacao && !cadastroConfirmado) {
+      try { localStorage.setItem(chave,String(Date.now()+intervaloHoras*3600000)); } catch {}
     }
     anterior?.focus?.();
   };
@@ -89,7 +95,11 @@
       sucesso.querySelector('[data-bv-validade]').textContent=
         'Válido até '+data.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})+
         ' ('+result.validadeHoras+' horas após a confirmação).';
-      try {localStorage.setItem(chave,String(Date.now()+365*86400000));}catch{}
+      cadastroConfirmado=true;
+      try {
+        localStorage.setItem(cadastroConcluido,'1');
+        localStorage.removeItem(chave);
+      } catch {}
     }catch(erro){mostrarMensagem(erro.message);}
     finally{button.disabled=false;}
   });

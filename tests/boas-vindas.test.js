@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Collection} from '../src/lib/store.js';
 import {configBoasVindas, validarConfigBoasVindas, iniciarBoasVindas,
-  confirmarBoasVindas, listarBoasVindas, excluirCadastroBoasVindas} from '../src/lib/boas-vindas.js';
+  confirmarBoasVindas, listarBoasVindas, excluirCadastroBoasVindas,
+  jaConfirmouBoasVindasNesteNavegador} from '../src/lib/boas-vindas.js';
 import {validarCupom} from '../src/lib/cart.js';
 
 function memoria() {
@@ -40,10 +41,14 @@ test('campanha vem desligada e exige ativação explícita do admin',()=>{
 
 test('painel valida horas inteiras, desconto, limite e mínimo',()=>{
   const base={titulo:'Ganhe um cupom',subtitulo:'Cadastre-se para receber',tipo:'percentual',
-    valor:'10',validadeHoras:'24',compraMinima:'50',maxCadastrosIpDia:'4',ativo:'1'};
+    valor:'10',validadeHoras:'24',intervaloReexibicaoHoras:'6',compraMinima:'50',maxCadastrosIpDia:'4',ativo:'1'};
   assert.equal(validarConfigBoasVindas(base).ok,true);
   for (const validadeHoras of ['0','24.5','721','Infinity'])
     assert.equal(validarConfigBoasVindas({...base,validadeHoras}).ok,false);
+  for (const intervaloReexibicaoHoras of ['0','1.5','169','Infinity'])
+    assert.equal(validarConfigBoasVindas({...base,intervaloReexibicaoHoras}).ok,false);
+  assert.equal(validarConfigBoasVindas({...base,intervaloReexibicaoHoras:'1'}).ok,true);
+  assert.equal(validarConfigBoasVindas({...base,intervaloReexibicaoHoras:'168'}).ok,true);
   assert.equal(validarConfigBoasVindas({...base,valor:'101'}).ok,false);
   assert.equal(validarConfigBoasVindas({...base,compraMinima:'-10'}).ok,false);
 });
@@ -199,4 +204,39 @@ test('exclusão inexistente não altera dados e ação exige permissão e CSRF',
   assert.match(source,/name="_csrf"/);
   assert.match(source,/onsubmit="return confirm\(/);
   assert.match(source,/logAdmin\(db,req\.adminUser,'excluiu_cadastro_boas_vindas'/);
+});
+
+test('o navegador com WhatsApp confirmado deixa de receber o pop-up',()=>{
+  const db=memoria(),device='n'.repeat(32);
+  assert.equal(jaConfirmouBoasVindasNesteNavegador(db,device),false);
+  assert.equal(jaConfirmouBoasVindasNesteNavegador(db,'invalido'),false);
+  const iniciou=iniciarBoasVindas(db,dados,{dispositivo:device});
+  assert.equal(iniciou.ok,true);
+  assert.equal(jaConfirmouBoasVindasNesteNavegador(db,device),false);
+  assert.equal(confirmarBoasVindas(db,{
+    desafio:iniciou.desafio,codigo:codigoDaFila(db,iniciou.desafio)
+  }).ok,true);
+  assert.equal(jaConfirmouBoasVindasNesteNavegador(db,device),true);
+  assert.equal(jaConfirmouBoasVindasNesteNavegador(db,'m'.repeat(32)),false);
+});
+
+test('após resgate e exclusão, navegador ainda sabe que já ganhou o benefício',()=>{
+  const db=memoria(),device='b'.repeat(32);
+  const iniciou=iniciarBoasVindas(db,dados,{dispositivo:device});
+  assert.equal(confirmarBoasVindas(db,{desafio:iniciou.desafio,codigo:codigoDaFila(db,iniciou.desafio)}).ok,true);
+  const cupom=db.collection('coupons').findOne(c=>c.leadBoasVindasId===iniciou.desafio);
+  db.collection('coupons').update(cupom.id,{usos:1});
+  assert.equal(excluirCadastroBoasVindas(db,iniciou.desafio).ok,true);
+  assert.equal(jaConfirmouBoasVindasNesteNavegador(db,device),true);
+});
+
+test('o painel e a página expõem frequência configurável sem mudar a validade do cupom',async()=>{
+  const fs=await import('node:fs');
+  const admin=fs.readFileSync(new URL('../src/routes/boas-vindas.js',import.meta.url),'utf8');
+  const view=fs.readFileSync(new URL('../src/views/boas-vindas.js',import.meta.url),'utf8');
+  const layout=fs.readFileSync(new URL('../src/views/layout.js',import.meta.url),'utf8');
+  assert.match(admin,/nome:'intervaloReexibicaoHoras'/);
+  assert.match(view,/data-intervalo-horas/);
+  assert.match(layout,/jaConfirmouBoasVindasNesteNavegador/);
+  assert.match(layout,/20261110-reexibicao/);
 });

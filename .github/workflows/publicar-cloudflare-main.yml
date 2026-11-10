@@ -38,7 +38,7 @@ jobs:
         run: npm test
 
       - name: Verificar cupons de boas-vindas, consentimento e antifraude
-        run: node --test tests/boas-vindas.test.js
+        run: node --test tests/boas-vindas.test.js tests/boas-vindas-popup.test.js
 
       - name: Validar aprovacao e ativacao segura no cadastro antes da publicacao
         run: node --test tests/aprovacao-ativacao-primeiro-salvar.test.js

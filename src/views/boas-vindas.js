@@ -4,7 +4,7 @@ import {escapeHtml as e} from '../lib/security.js';
 export function popupBoasVindas(config) {
   if (!config?.ativo) return '';
   return [
-    '<div class="ppbv-fundo" id="ppbv" hidden>',
+    '<div class="ppbv-fundo" id="ppbv" data-intervalo-horas="'+Math.max(1,Math.min(168,Number(config.intervaloReexibicaoHoras)||6))+'" hidden>',
       '<section class="ppbv-janela" role="dialog" aria-modal="true" aria-labelledby="ppbv-titulo">',
         '<button type="button" class="ppbv-fechar" data-bv-fechar aria-label="Fechar oferta">×</button>',
         '<span class="ppbv-icone" aria-hidden="true">🎁</span>',
