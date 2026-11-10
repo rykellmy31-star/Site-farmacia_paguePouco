@@ -1,6 +1,6 @@
 /** Cadastro e verificação do cupom + painel administrativo isolado. */
 import {configBoasVindas, validarConfigBoasVindas, iniciarBoasVindas,
-  confirmarBoasVindas, listarBoasVindas} from '../lib/boas-vindas.js';
+  confirmarBoasVindas, listarBoasVindas, excluirCadastroBoasVindas} from '../lib/boas-vindas.js';
 import {evolutionConfig} from '../lib/evolution-whatsapp.js';
 import {patchSetting, getAllSettings} from '../lib/settings.js';
 import {rateLimit, randomToken, escapeHtml as e} from '../lib/security.js';
@@ -30,14 +30,22 @@ function telaPainel(ctx, resumo, evoAtivo, erro) {
     '<p class="texto-pequeno texto-suave">Cupom exclusivo por WhatsApp verificado, e-mail e navegador. O IP limita abusos sem impedir automaticamente familiares na mesma rede. Só será utilizado no primeiro pedido com os mesmos dados.</p>',
     '<button type="submit" class="botao">Salvar configurações</button></form>',
   ].join('');
+  const podeExcluir=can(ctx.adminUser,'promocoes.excluir');
   const linhas=resumo.registros.map(r=>{
     const c=ctx.db.collection('coupons').get(r.cupomId);
     const situacao=r.status!=='confirmado'?'Aguardando confirmação':
       (c?.usos||0)>0?'Utilizado':
       Date.parse(c?.expiraEm||'')<=Date.now()?'Expirado':'Ativo';
+    const excluir=podeExcluir
+      ? '<form method="post" action="/admin/boas-vindas/'+encodeURIComponent(r.id)+
+        '/excluir" onsubmit="return confirm(&quot;Excluir este pré-cadastro? O cupom será cancelado e os avisos pendentes interrompidos. As contas da loja e os pedidos não serão apagados.&quot;)">'+
+        '<input type="hidden" name="_csrf" value="'+v(ctx.csrf)+'">'+
+        '<button type="submit" class="botao pequeno perigo">Excluir</button></form>'
+      : '—';
     return '<tr><td>'+v(r.nome)+'</td><td>'+v(r.email)+'</td><td>'+v(r.telefone)+
       '</td><td>'+(r.marketing?'Sim':'Não')+'</td><td>'+v(c?.codigo||'—')+
-      '</td><td>'+v(situacao)+'</td><td>'+v(formatDateTime(r.confirmadoEm||r.criadoEm))+'</td></tr>';
+      '</td><td>'+v(situacao)+'</td><td>'+v(formatDateTime(r.confirmadoEm||r.criadoEm))+
+      '</td><td>'+excluir+'</td></tr>';
   });
   return paginaAdmin(ctx,{
     titulo:'Cupons de boas-vindas',ativo:'boas_vindas',
@@ -56,7 +64,7 @@ function telaPainel(ctx, resumo, evoAtivo, erro) {
       cfg.ativo ? '<p><a class="botao secundario" href="/?visualizarBoasVindas=1" target="_blank" rel="noopener noreferrer">👁️ Pré-visualizar pop-up no site</a></p>' : '',
       cfg.ativo ? '<p class="texto-pequeno texto-suave">A prévia sempre abre o pop-up neste navegador, mesmo que já tenha sido fechado anteriormente. Clientes cadastrados não verão ofertas repetidas na navegação normal.</p>' : '',
       painel({titulo:'Cadastros recentes (até 100)',corpo:tabelaAdmin({
-        colunas:['Nome','E-mail','WhatsApp','Ofertas autorizadas','Cupom','Situação','Data'],
+        colunas:['Nome','E-mail','WhatsApp','Ofertas autorizadas','Cupom','Situação','Data','Ações'],
         linhas,vazio:'Nenhum cadastro captado.'
       }),semPadding:true}),
       '<p class="texto-pequeno texto-suave">Os contatos com “Não” em ofertas autorizadas não devem receber publicidade. A confirmação por WhatsApp é separada do consentimento para marketing. Ao desativar, novos cadastros param; cupons emitidos continuam com a validade originalmente concedida.</p>',
@@ -97,6 +105,19 @@ export function registrarBoasVindas(app, db) {
     const evo=evolutionConfig(db);
     const erro=String(req.query.get('erro')||'').slice(0,180);
     res.html(telaPainel(ctx,listarBoasVindas(db),evo.ativo&&!!evo.instancia,erro));
+  });
+  app.post('/admin/boas-vindas/:id/excluir',(req,res)=>{
+    if (!req.adminUser) return void res.redirect('/admin/login');
+    if (!can(req.adminUser,'promocoes.excluir'))
+      return void res.status(403).html('Acesso negado.');
+    res.set('Cache-Control','no-store');
+    const resultado=excluirCadastroBoasVindas(db,req.params.id);
+    if(!resultado.ok)
+      return void res.redirect('/admin/boas-vindas?erro='+encodeURIComponent(resultado.erro));
+    logAdmin(db,req.adminUser,'excluiu_cadastro_boas_vindas','cadastroBoasVindas',req.params.id,{
+      cupomId:resultado.cupomId,cupomUtilizado:resultado.cupomUtilizado,
+    },req);
+    res.redirect('/admin/boas-vindas?salvo=1');
   });
   app.post('/admin/boas-vindas',(req,res)=>{
     if (!req.adminUser) return void res.redirect('/admin/login');
