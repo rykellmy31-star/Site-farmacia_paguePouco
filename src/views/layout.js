@@ -11,6 +11,7 @@ import { estiloSeloDesconto } from '../lib/efeito-selo-desconto.js';
 import { textoInstitucionalDinamico, dadosEmpresaVisiveis, campoCadastrado } from '../lib/dados-institucionais.js';
 import { escapeHtml as e } from '../lib/security.js';
 import { popupBoasVindas } from './boas-vindas.js';
+import { jaConfirmouBoasVindasNesteNavegador } from '../lib/boas-vindas.js';
 
 export { escapeHtml, sanitizeHtml };
 export const money = (cents) => formatBRL((Number(cents) || 0) / 100);
@@ -278,7 +279,8 @@ export function paginaPublica(ctx, { titulo, descricao, conteudo, headExtra = ''
   const tema = settings.tema || {};
   const seo = settings.seo || {};
   const previsualizarBoasVindas = req?.query?.get('visualizarBoasVindas') === '1';
-  const mostrarBoasVindas = corpoClasse === 'pagina-inicial' && (!ctx.usuario || previsualizarBoasVindas);
+  const mostrarBoasVindas = corpoClasse === 'pagina-inicial' && (previsualizarBoasVindas ||
+    (!ctx.usuario && !jaConfirmouBoasVindasNesteNavegador(db, req?.cookies?.pp_bv_dispositivo)));
   const fundoHome = normalizarFundoHome(tema.fundoHome);
   const classeFundoHome = corpoClasse === 'pagina-inicial' && fundoHome.modo !== 'padrao'
     ? (fundoHome.modo === 'imagem' ? ' fundo-personalizado fundo-imagem' : ' fundo-personalizado fundo-cor') : '';
@@ -341,7 +343,7 @@ ${mostrarBoasVindas ? popupBoasVindas(settings.boasVindas) : ''}
   })};</script>
 <script src="/js/app.js?v=carrossel-pausa-6s-10s-20261104-inteligencia-vendas-20261109-gaveta" defer></script>
 <script src="/js/visitas-site.js?v=20261108" defer></script>
-${mostrarBoasVindas ? '<script src="/js/boas-vindas.js?v=20261109" defer></script>' : ''}
+${mostrarBoasVindas ? '<script src="/js/boas-vindas.js?v=20261110-reexibicao" defer></script>' : ''}
 <script src="/js/password-toggle.js?v=20261107" defer></script>
 </body>
 </html>`;
