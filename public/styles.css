@@ -1783,3 +1783,36 @@ body .rodape .rodape-inferior p { margin: 0 0 3px; }
   }
   .gaveta footer .botao.bloquinho { min-height: 37px; }
 }
+
+/* Modal de cupom de boas-vindas: adaptável sem zoom nos campos do celular. */
+.ppbv-fundo[hidden],.ppbv-janela [hidden]{display:none!important}
+.ppbv-fundo{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;
+  padding:16px;background:rgba(19,25,33,.64);overflow-y:auto}
+body.ppbv-aberto{overflow:hidden}
+.ppbv-janela{width:min(100%,520px);max-height:calc(100dvh - 32px);overflow-y:auto;position:relative;
+  background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.27);
+  padding:clamp(20px,4vw,36px);color:#26303c;text-align:left}
+.ppbv-fechar{position:absolute;top:8px;right:12px;border:0;background:transparent;
+  color:#737373;font-size:34px;line-height:1;cursor:pointer;padding:6px}
+.ppbv-icone{display:block;text-align:center;font-size:32px}
+.ppbv-janela h2{font-size:clamp(23px,5vw,31px);line-height:1.2;text-align:center;color:#8b0000;margin:7px 0}
+.ppbv-subtitulo{text-align:center;margin:6px 0 20px;color:#4b5563;font-size:16px}
+.ppbv-janela form{display:flex;flex-direction:column;gap:6px}
+.ppbv-janela form>label:not(.ppbv-check){font-size:13px;font-weight:650;margin-top:6px}
+.ppbv-janela input:not([type=checkbox]){display:block;width:100%;max-width:100%;padding:11px 13px;border:1px solid #c5cad2;
+  border-radius:9px;background:#fff;color:#111827;font-size:16px;min-height:44px}
+.ppbv-check{display:flex;align-items:flex-start;gap:9px;font-size:12px;line-height:1.45;cursor:pointer;margin-top:6px}
+.ppbv-check input{flex:none;margin-top:3px}
+.ppbv-check a{color:#8b0000;text-decoration:underline}
+.ppbv-enviar{display:block;width:100%;border:0;border-radius:9px;background:#8b0000;color:#fff!important;
+  font-size:15px;font-weight:700;text-align:center;text-decoration:none;padding:13px 12px;cursor:pointer;margin:9px 0 0}
+.ppbv-enviar:disabled{opacity:.55;cursor:wait}
+.ppbv-feedback{margin:6px 0;padding:10px;border:1px solid #f5b8b8;border-radius:9px;background:#fff2f2;
+  color:#8b0000;font-size:13px}
+.ppbv-rodape{font-size:11px;text-align:center;color:#6b7280;margin:15px 0 0}
+.ppbv-concluido{text-align:center}
+.ppbv-concluido h3{color:#8b0000}
+.ppbv-cupom{display:block;padding:13px;background:#fff4f4;border:1px dashed #8b0000;
+  border-radius:10px;font-size:23px;letter-spacing:.06em;overflow-wrap:anywhere}
+@media(max-width:480px){.ppbv-fundo{align-items:center;padding:10px}.ppbv-janela{padding:20px 17px;
+  max-height:calc(100dvh - 20px);border-radius:14px}.ppbv-janela h2{font-size:24px}}
