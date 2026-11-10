@@ -148,6 +148,17 @@ export const DEFAULT_SETTINGS = () => ({
     institucionalTitulo: 'Farmácia Pague Pouco',
     institucionalTexto: 'Preços baixos todos os dias, atendimento farmacêutico e entrega para todo o país.',
   },
+  // Desligado por padrão: somente o administrador habilita a campanha.
+  boasVindas: {
+    ativo: false,
+    titulo: 'Ganhe um cupom exclusivo! 🎁',
+    subtitulo: 'Cadastre-se e receba uma oferta especial para sua primeira compra.',
+    tipo: 'percentual',
+    valor: 10,
+    compraMinimaCentavos: 5000,
+    validadeHoras: 24,
+    maxCadastrosIpDia: 4,
+  },
   cookies: {
     ativo: true,
     titulo: 'Usamos cookies',
