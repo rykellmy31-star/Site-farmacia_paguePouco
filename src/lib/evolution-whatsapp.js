@@ -218,7 +218,9 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
   if(!cfg.ativo||!urlBase||!cfg.instancia||!String(apiKey).trim()||
       !hostValido(urlBase))return {ativo:false,processados:0};
   const col=db.collection(COL);
-  const fila=col.all().filter(i=>i.status==='fila').slice(0,Math.max(1,Math.min(max,5)));
+  const fila=col.all().filter(i=>i.status==='fila')
+    .sort((a,b)=>Number(b.tipo==='boas_vindas_otp')-Number(a.tipo==='boas_vindas_otp'))
+    .slice(0,Math.max(1,Math.min(max,5)));
   let enviados=0,verificar=0;
   for(const item of fila){
     if(col.get(item.id)?.status!=='fila')continue;
@@ -349,6 +351,19 @@ export async function processarFilaEvolution(db,{apiKey='',baseUrl='',enviar=glo
           pedido.rotaEntregaId!==rota.id ||
           !['saiu_para_entrega','entregue'].includes(pedido.statusOperacional) ||
           !autorizado || !andamentoValido) {
+        col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
+        await persistir();
+        continue;
+      }
+    }
+    if(item.tipo==='boas_vindas_otp' || item.tipo==='boas_vindas_cupom') {
+      const lead=db.collection('cadastrosBoasVindas').get(item.leadId);
+      const cupom=item.cupomId?db.collection('coupons').get(item.cupomId):null;
+      const valido=item.tipo==='boas_vindas_otp'
+        ? lead?.status==='pendente' && Date.parse(lead.codigoExpiraEm||'')>Date.now()
+        : lead?.status==='confirmado' && lead.receberCupomWhatsapp===true &&
+          cupom?.ativo===true && Date.parse(cupom.expiraEm||'')>Date.now();
+      if(!valido || lead?.telefone!==item.numero) {
         col.update(item.id,{status:'cancelado',texto:null,atualizadoEm:nowISO()});
         await persistir();
         continue;

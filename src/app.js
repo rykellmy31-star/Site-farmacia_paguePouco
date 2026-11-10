@@ -21,6 +21,7 @@ import { registrarRotasWebhook } from './routes/webhooks.js';
 import { registrarRotasInovafarma } from './routes/inovafarma.js';
 import { registrarRotasRoboInova } from './routes/inovafarma-robo.js';
 import { registrarRotasAdmin } from './routes/admin.js';
+import { registrarBoasVindas } from './routes/boas-vindas.js';
 import { registrarRotasEntregador } from './routes/entregador.js';
 
 export function createApplication(db) {
@@ -195,6 +196,7 @@ registrarRotasApi(app, db);
 registrarRotasConta(app, db);
 registrarRotasCheckout(app, db);
 registrarRotasAdmin(app, db);
+registrarBoasVindas(app, db);
 registrarRotasEntregador(app, db);
 registrarRotasWebhook(app, db);
 registrarRotasInovafarma(app, db);
