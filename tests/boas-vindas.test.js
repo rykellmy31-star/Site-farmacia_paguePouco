@@ -107,3 +107,15 @@ test('não envia promoção futura sem consentimento separado',()=>{
   assert.equal(db.collection('cadastrosBoasVindas').get(iniciou.desafio).marketing,false);
   assert.equal(db.collection('evolutionWhatsappOutbox').get('boas_vindas_cupom:'+iniciou.desafio),null);
 });
+
+test('pré-visualização administrativa ignora ocultação sem reativar a campanha', async () => {
+  const fs = await import('node:fs');
+  const layout = fs.readFileSync(new URL('../src/views/layout.js', import.meta.url),'utf8');
+  const script = fs.readFileSync(new URL('../public/js/boas-vindas.js', import.meta.url),'utf8');
+  const painel = fs.readFileSync(new URL('../src/routes/boas-vindas.js', import.meta.url),'utf8');
+  assert.match(layout,/visualizarBoasVindas/);
+  assert.match(layout,/mostrarBoasVindas/);
+  assert.match(script,/!previsualizacao && !podeAbrir\(\)/);
+  assert.match(painel,/Pré-visualizar pop-up no site/);
+  assert.match(painel,/cfg.ativo \?/);
+});

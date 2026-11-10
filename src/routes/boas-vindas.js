@@ -53,6 +53,8 @@ function telaPainel(ctx, resumo, evoAtivo, erro) {
       cartaoMetrica('Cupons expirados',metricas.expirados),
       '</div>',
       painel({titulo:'Configurações da campanha',corpo:form}),
+      cfg.ativo ? '<p><a class="botao secundario" href="/?visualizarBoasVindas=1" target="_blank" rel="noopener noreferrer">👁️ Pré-visualizar pop-up no site</a></p>' : '',
+      cfg.ativo ? '<p class="texto-pequeno texto-suave">A prévia sempre abre o pop-up neste navegador, mesmo que já tenha sido fechado anteriormente. Clientes cadastrados não verão ofertas repetidas na navegação normal.</p>' : '',
       painel({titulo:'Cadastros recentes (até 100)',corpo:tabelaAdmin({
         colunas:['Nome','E-mail','WhatsApp','Ofertas autorizadas','Cupom','Situação','Data'],
         linhas,vazio:'Nenhum cadastro captado.'

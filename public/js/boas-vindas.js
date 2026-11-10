@@ -7,17 +7,21 @@
   const sucesso=modal.querySelector('[data-bv-concluido]');
   const feedback=modal.querySelector('[data-bv-feedback]');
   const chave='pp_bv_exibir_apos';
+  // Previa administrativa: ignora a pausa de 7 dias neste navegador.
+  const previsualizacao=new URLSearchParams(location.search).get('visualizarBoasVindas')==='1';
   let desafio='';
   const podeAbrir=()=>{
     try { return Date.now()>=Number(localStorage.getItem(chave)||0); }
     catch { return true; }
   };
-  if(!podeAbrir()) return;
+  if(!previsualizacao && !podeAbrir()) return;
   const anterior=document.activeElement;
   const fechar=(dias=7)=>{
     modal.hidden=true;
     document.body.classList.remove('ppbv-aberto');
-    try { localStorage.setItem(chave,String(Date.now()+dias*86400000)); } catch {}
+    if(!previsualizacao) {
+      try { localStorage.setItem(chave,String(Date.now()+dias*86400000)); } catch {}
+    }
     anterior?.focus?.();
   };
   const mostrarMensagem=(mensagem)=>{
@@ -30,7 +34,7 @@
     if(!modal.hidden && event.key==='Escape') fechar();
   });
   setTimeout(()=>{
-    if(!podeAbrir()) return;
+    if(!previsualizacao && !podeAbrir()) return;
     modal.hidden=false;
     document.body.classList.add('ppbv-aberto');
     modal.querySelector('[data-bv-fechar]')?.focus();
