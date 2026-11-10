@@ -21,6 +21,7 @@ export function validarConfigBoasVindas(body) {
   const tipo = String(body.tipo || 'percentual');
   const valor = Number(String(body.valor || '').replace(',', '.'));
   const validadeHoras = Number(body.validadeHoras);
+  const intervaloReexibicaoHoras = Number(body.intervaloReexibicaoHoras);
   const minimo = Number(String(body.compraMinima || '0').replace(',', '.'));
   const maxCadastrosIpDia = Number(body.maxCadastrosIpDia);
   const titulo = String(body.titulo || '').trim().slice(0, 80);
@@ -30,6 +31,8 @@ export function validarConfigBoasVindas(body) {
       !Number.isFinite(valor * 100)) return {ok:false, erro:'Valor do desconto inválido.'};
   if (!Number.isSafeInteger(validadeHoras) || validadeHoras < 1 || validadeHoras > 720)
     return {ok:false, erro:'A validade deve ser de 1 a 720 horas.'};
+  if (!Number.isSafeInteger(intervaloReexibicaoHoras) || intervaloReexibicaoHoras < 1 || intervaloReexibicaoHoras > 168)
+    return {ok:false, erro:'O intervalo para reexibir o pop-up deve ser de 1 a 168 horas.'};
   if (!Number.isFinite(minimo) || minimo < 0 || minimo > 100000 ||
       !Number.isSafeInteger(Math.round(minimo * 100)))
     return {ok:false, erro:'Compra mínima inválida.'};
@@ -40,7 +43,7 @@ export function validarConfigBoasVindas(body) {
   return {ok:true, dados:{
     ativo: body.ativo === '1' || body.ativo === 'on',
     titulo, subtitulo, tipo, valor: Math.round(valor * 100) / 100,
-    validadeHoras, compraMinimaCentavos: Math.round(minimo * 100),
+    validadeHoras, intervaloReexibicaoHoras, compraMinimaCentavos: Math.round(minimo * 100),
     maxCadastrosIpDia,
   }};
 }
@@ -72,6 +75,19 @@ function clienteExistente(db, email, numero) {
   return db.collection('customers').findOne(c =>
     c.email?.trim().toLowerCase() === email ||
     numeroWhatsapp(c.telefone) === numero);
+}
+
+/**
+ * Evita reapresentar a oferta após o WhatsApp ter sido confirmado neste
+ * navegador. O cookie contém token aleatório; buscamos só seu HMAC.
+ */
+export function jaConfirmouBoasVindasNesteNavegador(db, token) {
+  const hash=dispositivoHash(token);
+  if(!hash)return false;
+  return Boolean(
+    db.collection(COL).findOne(c=>c.status==='confirmado' && c.dispositivoHash===hash) ||
+    db.collection('bloqueiosCupomBoasVindas').findOne(c=>c.dispositivoHash===hash)
+  );
 }
 
 export function iniciarBoasVindas(db, dados, {dispositivo='', ip='', agora=Date.now()}={}) {
