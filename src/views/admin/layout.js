@@ -20,6 +20,7 @@ const MENU = [
   { id: 'inteligencia_vendas', rotulo: 'Inteligência de Vendas', href: '/admin/inteligencia-vendas', perm: 'relatorios.ver', somenteAdmin: true, icone: '✨' },
   { id: 'visitas_site', rotulo: 'Visitas e conversões', href: '/admin/visitas', perm: 'relatorios.ver', somenteAdmin: true, icone: '👁️' },
   { id: 'promocoes', rotulo: 'Cupons e promoções', href: '/admin/promocoes', perm: 'promocoes.ver', icone: '🏷️' },
+  { id: 'boas_vindas', rotulo: 'Cupons de boas-vindas', href: '/admin/boas-vindas', perm: 'promocoes.ver', icone: '🎁' },
   { id: 'pagamentos', rotulo: 'Pagamentos', href: '/admin/pagamentos', perm: 'pagamentos.ver', icone: '💳' },
   { id: 'relatorios', rotulo: 'Relatórios', href: '/admin/relatorios', perm: 'relatorios.ver', icone: '📈' },
   { separador: 'Site' },
