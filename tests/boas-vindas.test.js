@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Collection} from '../src/lib/store.js';
 import {configBoasVindas, validarConfigBoasVindas, iniciarBoasVindas,
-  confirmarBoasVindas, listarBoasVindas} from '../src/lib/boas-vindas.js';
+  confirmarBoasVindas, listarBoasVindas, excluirCadastroBoasVindas} from '../src/lib/boas-vindas.js';
 import {validarCupom} from '../src/lib/cart.js';
 
 function memoria() {
@@ -118,4 +118,85 @@ test('pré-visualização administrativa ignora ocultação sem reativar a campa
   assert.match(script,/!previsualizacao && !podeAbrir\(\)/);
   assert.match(painel,/Pré-visualizar pop-up no site/);
   assert.match(painel,/cfg.ativo \?/);
+});
+
+test('administrador exclui pré-cadastro pendente e limpa o código de WhatsApp',()=>{
+  const db=memoria();
+  const iniciou=iniciarBoasVindas(db,dados,{dispositivo:'p'.repeat(32)});
+  assert.equal(iniciou.ok,true);
+  const msg=db.collection('evolutionWhatsappOutbox').get('boas_vindas_otp:'+iniciou.desafio);
+  assert.equal(msg.status,'fila');
+  const result=excluirCadastroBoasVindas(db,iniciou.desafio);
+  assert.equal(result.ok,true);
+  assert.equal(result.cupomId,null);
+  assert.equal(db.collection('cadastrosBoasVindas').get(iniciou.desafio),null);
+  assert.equal(listarBoasVindas(db).metricas.iniciados,0);
+  assert.equal(db.collection('evolutionWhatsappOutbox').get(msg.id).status,'cancelado');
+  assert.equal(db.collection('evolutionWhatsappOutbox').get(msg.id).numero,null);
+  assert.equal(db.collection('evolutionWhatsappOutbox').get(msg.id).texto,null);
+  assert.equal(db.collection('coupons').count(),0);
+  assert.equal(confirmarBoasVindas(db,{desafio:iniciou.desafio,codigo:'123456'}).ok,false);
+  assert.equal(iniciarBoasVindas(db,dados,{dispositivo:'p'.repeat(32)}).ok,true);
+});
+
+test('exclusão de cadastro confirmado revoga cupom e limpa carrinho sem apagar conta ou pedidos',()=>{
+  const db=memoria();
+  const iniciou=iniciarBoasVindas(db,dados,{dispositivo:'t'.repeat(32)});
+  const codigo=codigoDaFila(db,iniciou.desafio);
+  assert.equal(confirmarBoasVindas(db,{desafio:iniciou.desafio,codigo}).ok,true);
+  const cupom=db.collection('coupons').findOne(c=>c.leadBoasVindasId===iniciou.desafio);
+  assert.equal(cupom.ativo,true);
+  db.collection('carts').insert({id:'c1',cupom:{cupomId:cupom.id,codigo:cupom.codigo,desconto:1000}});
+  db.collection('carts').insert({id:'c2',cupom:{cupomId:'outro',codigo:'OUTRO',desconto:200}});
+  db.collection('customers').insert({id:'clienteReal',nome:'Maria Silva',
+    email:dados.email,telefone:dados.telefone,ativo:true});
+  db.collection('orders').insert({id:'pedidoReal',clienteId:'clienteReal',statusFinanceiro:'aprovado'});
+  const resultado=excluirCadastroBoasVindas(db,iniciou.desafio);
+  assert.equal(resultado.ok,true);
+  assert.equal(resultado.cupomUtilizado,false);
+  const revogado=db.collection('coupons').get(cupom.id);
+  assert.equal(revogado.ativo,false);
+  assert.equal(revogado.clienteExclusivoEmail,null);
+  assert.equal(revogado.clienteExclusivoTelefone,null);
+  assert.equal(validarCupom(db,cupom.codigo,{subtotalCentavos:10000,clienteId:'clienteReal'}).ok,false);
+  assert.equal(db.collection('carts').get('c1').cupom,null);
+  assert.equal(db.collection('carts').get('c2').cupom.codigo,'OUTRO');
+  assert.equal(db.collection('customers').get('clienteReal').email,dados.email);
+  assert.equal(db.collection('orders').get('pedidoReal').clienteId,'clienteReal');
+  assert.equal(db.collection('evolutionWhatsappOutbox').get('boas_vindas_cupom:'+iniciou.desafio).status,'cancelado');
+  assert.equal(db.collection('evolutionWhatsappOutbox').get('boas_vindas_cupom:'+iniciou.desafio).texto,null);
+  assert.equal(listarBoasVindas(db).metricas.confirmados,0);
+});
+
+test('cupom já usado mantém histórico e impede novo benefício após exclusão',()=>{
+  const db=memoria(),device='w'.repeat(32);
+  const iniciou=iniciarBoasVindas(db,dados,{dispositivo:device});
+  assert.equal(confirmarBoasVindas(db,{desafio:iniciou.desafio,codigo:codigoDaFila(db,iniciou.desafio)}).ok,true);
+  const cupom=db.collection('coupons').findOne(c=>c.leadBoasVindasId===iniciou.desafio);
+  db.collection('coupons').update(cupom.id,{usos:1});
+  const excluido=excluirCadastroBoasVindas(db,iniciou.desafio);
+  assert.equal(excluido.ok,true);
+  assert.equal(excluido.cupomUtilizado,true);
+  assert.equal(db.collection('coupons').get(cupom.id).usos,1);
+  assert.equal(db.collection('bloqueiosCupomBoasVindas').count(),1);
+  assert.equal(db.collection('bloqueiosCupomBoasVindas').all()[0].telefoneHash?.includes(dados.telefone),false);
+  assert.equal(iniciarBoasVindas(db,{...dados,email:'outra@example.com'},
+    {dispositivo:'a'.repeat(32)}).ok,false);
+  assert.equal(iniciarBoasVindas(db,{...dados,telefone:'(73) 99999-9876'},
+    {dispositivo:'b'.repeat(32)}).ok,false);
+  assert.equal(iniciarBoasVindas(db,{...dados,email:'nova@example.com',telefone:'(73) 99999-9876'},
+    {dispositivo:device}).ok,false);
+});
+
+test('exclusão inexistente não altera dados e ação exige permissão e CSRF',async()=>{
+  const db=memoria();
+  assert.equal(excluirCadastroBoasVindas(db,'id-inexistente').ok,false);
+  assert.equal(db.collection('cadastrosBoasVindas').count(),0);
+  const fs=await import('node:fs');
+  const source=fs.readFileSync(new URL('../src/routes/boas-vindas.js',import.meta.url),'utf8');
+  assert.match(source,/app\.post\('\/admin\/boas-vindas\/:id\/excluir'/);
+  assert.match(source,/can\(req\.adminUser,'promocoes\.excluir'\)/);
+  assert.match(source,/name="_csrf"/);
+  assert.match(source,/onsubmit="return confirm\(/);
+  assert.match(source,/logAdmin\(db,req\.adminUser,'excluiu_cadastro_boas_vindas'/);
 });
