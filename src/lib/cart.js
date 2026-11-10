@@ -181,7 +181,7 @@ export function validarCupom(db, codigo, { subtotalCentavos, clienteId = null, i
   if (cupom.boasVindas === true) {
     // Cupom entregue apenas a um WhatsApp confirmado, um e-mail e uma conta.
     const cliente = clienteId ? db.collection('customers').get(clienteId) : null;
-    const bruto = String(cliente?.telefone || '').replace(/\\D/g,'');
+    const bruto = String(cliente?.telefone || '').replace(/\D/g,'');
     const fone = bruto.length===10 || bruto.length===11 ? '55'+bruto : bruto;
     if (!cliente || !cupom.clienteExclusivoEmail || !cupom.clienteExclusivoTelefone ||
         String(cliente.email||'').trim().toLowerCase() !== cupom.clienteExclusivoEmail ||
