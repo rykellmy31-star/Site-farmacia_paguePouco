@@ -10,6 +10,7 @@ import { normalizarFundoHome } from '../lib/fundo-home.js';
 import { estiloSeloDesconto } from '../lib/efeito-selo-desconto.js';
 import { textoInstitucionalDinamico, dadosEmpresaVisiveis, campoCadastrado } from '../lib/dados-institucionais.js';
 import { escapeHtml as e } from '../lib/security.js';
+import { popupBoasVindas } from './boas-vindas.js';
 
 export { escapeHtml, sanitizeHtml };
 export const money = (cents) => formatBRL((Number(cents) || 0) / 100);
@@ -329,6 +330,7 @@ ${menuMobile()}
 ${gavetaCarrinho()}
 ${widgetWhatsApp(settings.whatsapp, req?.pathname || '/')}
 ${barraCookies(settings.cookies)}
+${corpoClasse === 'pagina-inicial' && !ctx.usuario ? popupBoasVindas(settings.boasVindas) : ''}
 <script>window.PP_CONFIG=${JSON.stringify({
     cartCount: ctx.cartCount || 0,
     csrf: ctx.csrf || '',
@@ -337,6 +339,7 @@ ${barraCookies(settings.cookies)}
   })};</script>
 <script src="/js/app.js?v=carrossel-pausa-6s-10s-20261104-inteligencia-vendas-20261109-gaveta" defer></script>
 <script src="/js/visitas-site.js?v=20261108" defer></script>
+${corpoClasse === 'pagina-inicial' && !ctx.usuario ? '<script src="/js/boas-vindas.js?v=20261109" defer></script>' : ''}
 <script src="/js/password-toggle.js?v=20261107" defer></script>
 </body>
 </html>`;
