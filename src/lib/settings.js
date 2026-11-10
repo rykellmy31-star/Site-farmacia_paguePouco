@@ -157,6 +157,7 @@ export const DEFAULT_SETTINGS = () => ({
     valor: 10,
     compraMinimaCentavos: 5000,
     validadeHoras: 24,
+    intervaloReexibicaoHoras: 6, // Para visitantes que fecharam sem concluir o cadastro.
     maxCadastrosIpDia: 4,
   },
   cookies: {
