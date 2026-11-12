@@ -9,7 +9,7 @@ const TTL=30*60*1000;
 const idDe=p=>String(p.codigoInterno||p.inovaCatalogo?.codigoInterno||'').trim();
 const hash=lista=>crypto.createHash('sha256').update(JSON.stringify(lista
   .map(p=>[p.id,idDe(p),p.ean,p.precoCentavos,p.precoPromocionalCentavos,
-    p.precoInternoInovaCentavos,p.ativo,p.inovaArquivado?.em,p.inovaPromocoes])
+    p.precoInternoInovaCentavos,p.precoFixoSite===true,p.ativo,p.inovaArquivado?.em,p.inovaPromocoes])
   .sort((a,b)=>String(a[0]).localeCompare(String(b[0]))))).digest('hex');
 const error=(erro,status=400)=>({ok:false,erro,status});
 
@@ -23,7 +23,7 @@ export function avaliarPrecosInternos(db, itens) {
   }
   const plano=[],resumo={total:itens.length,aplicaveis:0,comDesconto:0,
     semDesconto:0,semCadastro:0,identificacaoAmbigua:0,eanDivergente:0,
-    controlados:0,arquivados:0,precoDivergente:0,promocaoManual:0,
+    controlados:0,arquivados:0,precoFixoSite:0,precoDivergente:0,promocaoManual:0,
     campanhaConflitante:0,semMudanca:0,alertasPreco:0};
   for(const linha of itens){
     const encontrados=byCode.get(linha.codigo)||[];
@@ -43,6 +43,9 @@ export function avaliarPrecosInternos(db, itens) {
     if(!motivo&&p?.inovaArquivado?.em){motivo='arquivado';resumo.arquivados++;}
     if(!motivo&&(linha.controlado||p?.bloqueioControladoInova?.ativo||
       p?.sanitario?.controlado)){motivo='controlado';resumo.controlados++;}
+    if(!motivo&&p?.precoFixoSite===true){
+      motivo='preco_fixo_site';resumo.precoFixoSite++;
+    }
     const normal=Number(p?.precoCentavos||0);
     // Preço do InovaFarma tem precedência comercial. Desconto manual,
     // campanha pré-existente e mudança expressiva NÃO bloqueiam o preço
@@ -112,6 +115,8 @@ export function aplicarPrecosInternos(db,id,operadorId,{frase,confirmado,autoriz
       const prods=db.collection('products'),agora=new Date().toISOString();
       for(const item of revalidado.plano){
         if(item.motivo!=='apto')continue;
+        if(prods.get(item.produtoId)?.precoFixoSite===true)
+          throw new Error('Preço fixo ativado depois da prévia.');
         // Não altera EAN, ativo, estoque, sanitarismo, fotos ou campanhas.
         prods.update(item.produtoId,{
           precoCentavos:item.novoBase,precoInternoInovaCentavos:item.novoPromo,

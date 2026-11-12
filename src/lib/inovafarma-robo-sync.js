@@ -257,11 +257,15 @@ function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteraco
      it.quantidade<comprometido) {
     indicadores.pendentes++;return detalhe(it,'saldo_menor_que_reservas_ou_quarentena');
   }
+  const precoFixo=p.precoFixoSite===true;
   const temPrecoPromo=Object.hasOwn(it,'precoPromocionalCentavos');
+  const atualizarPromoInova=temPrecoPromo&&!precoFixo;
   const promoAnterior=Number(p.precoInternoInovaCentavos||0);
+  const precoAtual=Number(p.precoCentavos||0);
+  const precoDepois=precoFixo?precoAtual:it.precoCentavos;
   const alterou=Number(estoque.quantidade||0)!==it.quantidade||
-    Number(p.precoCentavos||0)!==it.precoCentavos||
-    (temPrecoPromo&&promoAnterior!==it.precoPromocionalCentavos);
+    precoAtual!==precoDepois||
+    (atualizarPromoInova&&promoAnterior!==it.precoPromocionalCentavos);
   if(!alterou){indicadores.semAlteracao++;return null;}
   // O preço promocional é uma camada própria: NÃO apaga descontos manuais,
   // campanhas por período, nome, fotos, EAN, categorias ou ativação.
@@ -269,8 +273,8 @@ function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteraco
   const estoqueAntes=Number(estoque.quantidade||0);
   const precoAntesCentavos=Number(p.precoCentavos||0);
   produtos.update(p.id,{estoque:{...estoque,quantidade:it.quantidade},
-    precoCentavos:it.precoCentavos,
-    ...(temPrecoPromo?{precoInternoInovaCentavos:it.precoPromocionalCentavos,
+    ...(!precoFixo?{precoCentavos:it.precoCentavos}:{}),
+    ...(atualizarPromoInova?{precoInternoInovaCentavos:it.precoPromocionalCentavos,
       precoInternoInovaAtualizadoEm:agora}:{}),
     atualizadoEm:agora});
   // A fotografia ANTES/DEPOIS pertence ao lote e é persistida na mesma
@@ -280,8 +284,8 @@ function aplicarProduto(db,it,agora,indicadores,duplicadosEan=new Set(),alteraco
     codigoInterno:String(p.codigoInterno||it.codigoInterno),
     ean:String(p.ean||it.ean||''),
     estoqueAntes,estoqueDepois:it.quantidade,
-    precoAntesCentavos,precoDepoisCentavos:it.precoCentavos,
-    ...(temPrecoPromo?{promoAnteriorCentavos:promoAnterior,
+    precoAntesCentavos,precoDepoisCentavos:precoDepois,
+    ...(atualizarPromoInova?{promoAnteriorCentavos:promoAnterior,
       promoDepoisCentavos:it.precoPromocionalCentavos}:{}),
   });
   // Auditoria compacta; nunca registrar preço de custo, CPF ou nomes de clientes.

@@ -15,7 +15,7 @@ const SO_CONFIRMACAO = 'APLICAR DESCONTOS INOVAFARMA';
 const assinatura = produtos => crypto.createHash('sha256').update(JSON.stringify(
   produtos.map(p=>[
     p.id,p.codigoInterno,p.ean,p.precoCentavos,
-    p.precoPromocionalCentavos,p.inovaPromocoes,p.inovaArquivado?.em,
+    p.precoPromocionalCentavos,p.inovaPromocoes,p.precoFixoSite===true,p.inovaArquivado?.em,
   ]).sort((a,b)=>String(a[0]).localeCompare(String(b[0])))
 )).digest('hex');
 const agrupar = promocao => {
@@ -56,7 +56,7 @@ function avaliar(db, linhas, politica, momento=new Date()) {
   const resumo={
     codigos:0,prontos:0,campanhasAceitas:0,semProduto:0,codigoDuplicado:0,
     precoDivergente:0,semDataFinal:0,semDiaSemanal:0,
-    pagamentosRestritos:0,precosInvalidos:0,arquivados:0,
+    pagamentosRestritos:0,precosInvalidos:0,arquivados:0,precoFixoSite:0,
     vencidas:0,conflitosAtuais:0,manuaisSubstituidas:0,
   };
   for (const [codigo, campanhas] of agrupar(linhas)) {
@@ -72,6 +72,9 @@ function avaliar(db, linhas, politica, momento=new Date()) {
     }
     const p=lista[0];linha.produtoId=p.id;
     if(p.inovaArquivado?.em){linha.status='arquivado';resumo.arquivados++;plano.push(linha);continue;}
+    if(p.precoFixoSite===true){
+      linha.status='preco_fixo_site';resumo.precoFixoSite++;plano.push(linha);continue;
+    }
     if(!CODIGO.test(codigo)){linha.status='codigo_invalido';resumo.precosInvalidos++;plano.push(linha);continue;}
     const base=Number(p.precoCentavos);
     if(!Number.isSafeInteger(base)||base<=0||
@@ -203,7 +206,8 @@ export function aplicarPromocoesInova(db,id,operadorId,{
       for(const item of previa.plano){
         if(item.status!=='pronto')continue;
         const p=originais.get(item.produtoId);
-        if(!p||p.inovaArquivado?.em||Number(p.precoCentavos)!==item.ofertas[0].precoVendaCentavos)
+        if(!p||p.inovaArquivado?.em||p.precoFixoSite===true||
+          Number(p.precoCentavos)!==item.ofertas[0].precoVendaCentavos)
           throw new Error('Produto foi alterado.');
         originais.update(p.id,{
           // ERP passa a ser fonte da promoção deste produto. Remover a

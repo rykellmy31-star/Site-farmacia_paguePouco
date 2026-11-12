@@ -161,7 +161,8 @@ function avaliar(db,itens) {
     if(item.quantidade===0)resumo.esgotados++;
     const precoAnteriorCentavos=cadastrado?.precoCentavos??null;
     const alterarPreco=tipo!=='conflito' && !!cadastrado &&
-      item.precoCentavos!==null && item.precoCentavos!==precoAnteriorCentavos;
+      cadastrado.precoFixoSite!==true && item.precoCentavos!==null &&
+      item.precoCentavos!==precoAnteriorCentavos;
     if(alterarPreco)resumo.precosAtualizados++;
     if(tipo==='novo' && item.precoCentavos!==null)resumo.precosNovos++;
     if(item.precoCentavos===null)resumo.precosAusentes++;

@@ -317,6 +317,7 @@ export function registrarRotasAdmin(app, db) {
     if (categoria) todos = todos.filter((p) => p.categoriaId === categoria || p.subcategoriaId === categoria);
     if (status === 'ativo') todos = todos.filter((p) => p.ativo);
     if (status === 'inativo') todos = todos.filter((p) => !p.ativo);
+    if (status === 'preco_fixo_site') todos = todos.filter((p) => p.precoFixoSite === true);
     if (status === 'estoque_baixo') todos = todos.filter((p) => Number(p.estoque?.quantidade || 0) <= Number(p.estoque?.minimo || 0));
     todos = filtrarProdutosPorEstoque(todos, status);
     if (status === 'bloqueado') todos = todos.filter((p) => p.ativo && !podeVender(p).ok);
@@ -325,6 +326,28 @@ export function registrarRotasAdmin(app, db) {
     const total = todos.length;
     const produtos = todos.slice((pagina - 1) * porPagina, pagina * porPagina);
     res.html(telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, categorias: db.collection('categories').all().sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')), filtros: { categoria, status, diaPromocao, promosOrganizadas: req.query.get('promosOrganizadas') || '' } }));
+  });
+
+  // Proteção individual: o preço editado no site não é alterado pelo robô.
+  // Mesmo com o bloqueio, o estoque continua sendo atualizado pelo ERP.
+  app.post('/admin/produtos/:id/preco-fixo', (req, res) => {
+    if (!guard(req, res, 'produtos.editar')) return;
+    const produto = db.collection('products').get(req.params.id);
+    if (!produto || produto.inovaArquivado?.em)
+      return void res.status(404).html('Produto indisponível para edição.');
+    const valor = String(req.body.ativo || '');
+    if (valor !== '1' && valor !== '0')
+      return void res.status(400).html('Opção de preço fixo inválida.');
+    if (valor === '1' && (!Number.isSafeInteger(produto.precoCentavos) ||
+        produto.precoCentavos <= 0))
+      return void res.status(400).html('Defina um preço de venda positivo antes de ativar o preço fixo.');
+    db.collection('products').update(produto.id, {
+      precoFixoSite: valor === '1',
+      atualizadoEm: new Date().toISOString(),
+    });
+    logAdmin(db, req.adminUser, valor === '1' ? 'ativou_preco_fixo_site' :
+      'desativou_preco_fixo_site', 'produto', produto.id, {}, req);
+    res.redirect('/admin/produtos?precoFixoAlterado=1');
   });
 
   // Marcação administrativa para facilitar a escolha dos produtos por dia.
@@ -2032,6 +2055,7 @@ function registrarApi(app, db) {
       descricao: String(body.descricao || ''),
       caracteristicas,
       precoCentavos: preco,
+      precoFixoSite: body.precoFixoSite === '1' || body.precoFixoSite === 'on',
       precoPromocionalCentavos: precoPromo > 0 && precoPromo < preco ? precoPromo : 0,
       peso: Number(body.peso) || 0,
       dimensoes: { largura: Number(body.largura) || 0, altura: Number(body.altura) || 0, comprimento: Number(body.comprimento) || 0 },
@@ -2059,6 +2083,8 @@ function registrarApi(app, db) {
     if (!guardApi(req, res, 'produtos.criar')) return;
     if (!cleanText(req.body.nome, 200)) return void res.json({ ok: false, erro: 'Informe o nome do produto.' }, 400);
     const dados = lerProdutoDoForm(req.body);
+    if (dados.precoFixoSite && (!Number.isSafeInteger(dados.precoCentavos) || dados.precoCentavos <= 0))
+      return void res.json({ok:false,erro:'Preço fixo exige preço de venda maior que zero.'},400);
     dados.slug = slugUnicoProduto(db, dados.nome);
     const quantidadeInicial = Math.max(0, Number(req.body.quantidade) || 0);
     if (inovaAtiva() && quantidadeInicial > 0) {
@@ -2103,6 +2129,8 @@ function registrarApi(app, db) {
     if (aprovarAoSalvar && revisaoInovaPendente && !confirmouRevisao)
       return void res.json({ok:false,erro:'Confira a classificação sanitária e marque a confirmação antes de salvar.'},409);
     const dados = lerProdutoDoForm(req.body);
+    if (dados.precoFixoSite && (!Number.isSafeInteger(dados.precoCentavos) || dados.precoCentavos <= 0))
+      return void res.json({ok:false,erro:'Preço fixo exige preço de venda maior que zero.'},400);
     // Fonte preenchida pela API do EAN não pode desaparecer na edição.
     dados.logisticaFonte=produto.logisticaFonte||null;
     if(req.body.confirmouMedidasLogisticas==='1'&&dados.logisticaFonte)
@@ -2282,6 +2310,11 @@ function registrarApi(app, db) {
         };
         if (existente) {
           if (existente.inovaArquivado?.em) { erros++; continue; }
+          // CSV de catálogo não tem autorização para reprecificar itens protegidos.
+          if (existente.precoFixoSite === true) {
+            dados.precoCentavos = existente.precoCentavos;
+            dados.precoPromocionalCentavos = existente.precoPromocionalCentavos;
+          }
           db.collection('products').update(existente.id, dados);
           if (obj.quantidade && !inovaAtiva()) {
             registrarMovimentoEstoque(db, { produtoId: existente.id, tipo: 'ajuste', quantidade: Number(obj.quantidade), origem: 'importacao_csv', usuarioId: req.adminUser.id });

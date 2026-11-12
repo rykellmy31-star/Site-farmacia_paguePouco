@@ -9,7 +9,7 @@ const motivos={
   alteracao_grande:'Diferença expressiva do preço base',desconto_manual:'Desconto manual no site',
   campanha_preco_base:'Campanha existente no site',
   preco_base_invalido:'Preço atual inválido',desconto_extremo:'Desconto superior a 80%',
-  sem_mudanca:'Sem alteração',
+  sem_mudanca:'Sem alteração',preco_fixo_site:'Preço fixo no site — protegido',
 };
 export function telaPreviaPrecosInternos(ctx,previa){
   const r=previa.resumo,fonte=previa.fonte;
@@ -24,6 +24,7 @@ export function telaPreviaPrecosInternos(ctx,previa){
     ' · Identificações ambíguas: '+e(r.identificacaoAmbigua)+
     ' · Produtos com desconto manual (sem bloqueio): '+e(r.promocaoManual)+
     ' · Produtos controlados ignorados: '+e(r.controlados)+
+    ' · Preços fixos protegidos: '+e(r.precoFixoSite||0)+
     ' · Produtos com campanhas (sem bloqueio): '+e(r.campanhaConflitante)+
     ' · Diferenças expressivas (aviso): '+e(r.alertasPreco)+'.</p>';
   // Busca um SKU mesmo quando não está entre os 100 primeiros.
@@ -72,7 +73,8 @@ export function telaPreviaPrecosInternos(ctx,previa){
         '" placeholder="Ex.: 797222" maxlength="80">'+
         '<button class="botao secundario" type="submit">Verificar produto</button></form>'+
         '<div class="alerta info">Descontos internos sem data final informada no arquivo. '+
-        'O desconto interno do Inova tem prioridade; promoções manuais e campanhas permanecem cadastradas. '+
+        'O desconto interno do Inova tem prioridade somente nos produtos sem preço fixo. '+
+        'Promoções manuais e campanhas permanecem cadastradas. '+
         'Uma nova exportação XLSX será necessária para atualizar alterações futuras.</div>'+
         tabela+confirmar}),
   });

@@ -315,3 +315,40 @@ test('robô V3: preço promocional válido superior a 80% de desconto não bloqu
   assert.equal(novo.precoInternoInovaCentavos,100);
   assert.equal(novo.ativo,false,'um produto novo continua inativo');
 });
+
+
+test('preço fixo do site impede reprecificação V3 sem bloquear atualização de estoque',()=>{
+  const db=fakeDB();configurarRoboInova(db);
+  db.collection('products').insert({
+    id:'fixado',codigoInterno:'800001',ean:'7891000000001',nome:'Preço especial no site',
+    precoCentavos:1000,precoPromocionalCentavos:800,
+    precoInternoInovaCentavos:900,precoFixoSite:true,
+    ativo:true,estoque:{quantidade:6,reservado:0,quarentena:0},
+  });
+  db.collection('products').insert({
+    id:'fixado-sem-saldo',codigoInterno:'800002',ean:'7891000000002',
+    nome:'Outro preço protegido',precoCentavos:1000,precoFixoSite:true,
+    ativo:true,estoque:{quantidade:2,reservado:0,quarentena:0},
+  });
+  const itens=arquivo();itens[0].quantidade=4;
+  itens[0].precoCentavos=1600;itens[0].precoPromocionalCentavos=1200;
+  itens[1].precoCentavos=1800;itens[1].precoPromocionalCentavos=1500;
+  enviarTudo(db,itens);
+  const resultado=aplicarBlocoRoboInova(db,{arquivoHash:sha,bloco:0});
+  assert.equal(resultado.ok,true,JSON.stringify(resultado));
+  const fixado=db.collection('products').get('fixado');
+  assert.equal(fixado.estoque.quantidade,4);
+  assert.equal(fixado.precoCentavos,1000);
+  assert.equal(fixado.precoInternoInovaCentavos,900);
+  assert.equal(fixado.precoPromocionalCentavos,800);
+  assert.equal(fixado.precoFixoSite,true);
+  const semSaldo=db.collection('products').get('fixado-sem-saldo');
+  assert.equal(semSaldo.estoque.quantidade,2);
+  assert.equal(semSaldo.precoCentavos,1000);
+  assert.equal(semSaldo.precoInternoInovaCentavos,undefined);
+  const alteracoes=db.collection('inovaRoboBlocos').get(sha+':0').alteracoes;
+  assert.equal(alteracoes.length,1);
+  assert.deepEqual([alteracoes[0].estoqueAntes,alteracoes[0].estoqueDepois,
+    alteracoes[0].precoAntesCentavos,alteracoes[0].precoDepoisCentavos],
+    [6,4,1000,1000]);
+});

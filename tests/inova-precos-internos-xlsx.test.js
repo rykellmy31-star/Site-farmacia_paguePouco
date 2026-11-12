@@ -222,3 +222,25 @@ test('identificação conflitante e bloqueio sanitário continuam impedindo prod
     controlado:true}]);
   assert.equal(r.plano[0].motivo,'controlado');
 });
+
+
+test('importação XLSX de preços internos ignora produtos com preço fixo do site',()=>{
+  const db=dbFake();
+  db.collection('products').insert({
+    id:'preco-fixo',codigoInterno:'795818',ean:'7891025107897',
+    precoCentavos:1000,precoFixoSite:true,precoInternoInovaCentavos:900,
+    precoPromocionalCentavos:800,ativo:true,estoque:{quantidade:5}
+  });
+  const prev=prepararPrecosInternos(db,excel,'admin');
+  assert.equal(prev.ok,true);
+  assert.equal(prev.resumo.precoFixoSite,1);
+  assert.equal(prev.resumo.aplicaveis,0);
+  assert.equal(prev.plano.find(x=>x.codigo==='795818').motivo,'preco_fixo_site');
+  assert.equal(aplicarPrecosInternos(db,prev.id,'admin',{
+    frase:'APLICAR PRECOS INTERNOS INOVA',confirmado:'1',autorizacaoOnline:'1'
+  }).status,409);
+  const produto=db.collection('products').get('preco-fixo');
+  assert.equal(produto.precoCentavos,1000);
+  assert.equal(produto.precoInternoInovaCentavos,900);
+  assert.equal(precoVigenteCentavos(produto,new Date('2026-11-12T12:00:00Z')),1000);
+});
