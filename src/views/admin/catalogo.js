@@ -6,6 +6,7 @@ import { CLASSIFICACOES, descontoPercentual, temPromocao, estoqueDisponivel, pod
 import { uploadStats } from '../../lib/uploads.js';
 import { toCents } from '../../lib/format.js';
 import { inovaAtiva } from '../../lib/inovafarma-stock.js';
+import { can } from '../../lib/permissions.js';
 import { statusOperacionalExibido } from '../../lib/orders.js';
 import {vigenciasPromocaoInova} from '../../lib/rotulos-vigencia-inova.js';
 import {DIAS_PROMOCAO,diasPromocaoMarcados,diasPromocaoInova} from '../../lib/promocoes-semanais-organizacao.js';
@@ -111,6 +112,7 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
       </div>
     </div>
 
+    ${ctx.req?.query?.get('precoFixoAlterado') === '1' ? '<div class="alerta sucesso" role="status">Proteção de preço atualizada. O estoque continua sendo sincronizado normalmente.</div>' : ''}
     ${/^[0-9]{1,2}$/.test(String(filtros.promosOrganizadas||'')) ?
       '<div class="alerta info">'+e(filtros.promosOrganizadas)+
       ' produto(s) tiveram marcação organizacional atualizada. Descontos não foram modificados.</div>' : ''}
@@ -132,6 +134,7 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
           <option value="">Todos os status</option>
           <option value="ativo" ${filtros.status === 'ativo' ? 'selected' : ''}>Ativos</option>
           <option value="inativo" ${filtros.status === 'inativo' ? 'selected' : ''}>Inativos</option>
+          <option value="preco_fixo_site" ${filtros.status === 'preco_fixo_site' ? 'selected' : ''}>Preço fixo no site</option>
           <option value="arquivados" ${filtros.status === 'arquivados' ? 'selected' : ''}>Arquivados (recuperáveis)</option>
           <option value="todos_incluindo_arquivados" ${filtros.status === 'todos_incluindo_arquivados' ? 'selected' : ''}>Todos, incluindo arquivados</option>
           <option value="estoque_baixo" ${filtros.status === 'estoque_baixo' ? 'selected' : ''}>Estoque baixo</option>
@@ -192,12 +195,13 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
               <strong>${e(p.nome)}</strong><br>
               <span class="texto-pequeno texto-suave">SKU ${e(p.sku || '—')} · ${e(p.marca || '—')}</span>
               ${p.destaque ? ' <span class="etiqueta laranja">Destaque</span>' : ''}
+              ${p.precoFixoSite === true ? ' <span class="etiqueta">🔒 Preço fixo</span>' : ''}
             </td>
             <td>${e(cat?.nome || '—')}</td>
             <td>
               ${money(precoVigenteCentavos(p))}
               ${temPromocao(p) ? `<br><span class="texto-pequeno texto-suave"><s>${money(p.precoCentavos)}</s> −${descontoPercentual(p)}%</span>` : ''}
-              ${p.inovaPromocoes?.length ? (
+              ${p.inovaPromocoes?.length && p.precoFixoSite !== true ? (
                 vigenciasPromocaoInova(p).length ?
                   '<br><span class="texto-pequeno texto-suave">Promoção InovaFarma:</span>'+
                   vigenciasPromocaoInova(p).map(v=>
@@ -223,6 +227,15 @@ export function telaProdutos(ctx, { produtos, total, pagina, porPagina, busca, c
             </td>
             <td class="acoes-linha">
               <a class="botao pequeno secundario" href="/admin/produtos/${e(p.id)}">Editar</a>
+              ${can(ctx.adminUser,'produtos.editar') && !p.inovaArquivado?.em ? `
+                <form method="post" action="/admin/produtos/${e(p.id)}/preco-fixo" style="display:inline">
+                  <input type="hidden" name="_csrf" value="${e(ctx.csrf)}">
+                  <input type="hidden" name="ativo" value="${p.precoFixoSite === true ? '0' : '1'}">
+                  <button class="botao pequeno ${p.precoFixoSite === true ? '' : 'secundario'}" type="submit"
+                    title="${p.precoFixoSite === true ? 'Liberar atualização do preço pelo InovaFarma' : 'Proteger o preço escolhido no site'}">
+                    ${p.precoFixoSite === true ? '🔒 Preço fixo: ativo' : '🔓 Manter preço fixo'}
+                  </button>
+                </form>` : ''}
               <a class="botao pequeno secundario" href="/produto/${e(p.slug)}" target="_blank">Ver</a>
               ${p.inovaArquivado?.em
                 ? (ctx.adminUser?.role === 'super_admin'
@@ -314,6 +327,9 @@ export function telaProdutoForm(ctx, { produto, categorias, marcas, todasMidia }
               ${campoAdmin({ nome: 'preco', rotulo: 'Preço de venda (R$)', tipo: 'number', step: '0.01', min: '0', valor: p.precoCentavos != null ? (p.precoCentavos / 100).toFixed(2) : '', obrigatorio: true })}
               ${campoAdmin({ nome: 'precoPromocional', rotulo: 'Preço promocional (R$)', tipo: 'number', step: '0.01', min: '0', valor: p.precoPromocionalCentavos ? (p.precoPromocionalCentavos / 100).toFixed(2) : '', dica: 'Deixe em branco para não aplicar promoção.' })}
             </div>
+            ${campoAdmin({ nome: 'precoFixoSite', rotulo: 'Manter preço fixo no site', tipo: 'checkbox', valor: p.precoFixoSite === true,
+              dica: 'Ative para impedir que o robô InovaFarma altere o preço de venda. O estoque continua sincronizando.' })}
+            <p class="texto-pequeno texto-suave mb-0">Quando ativo, o preço exibido na loja é o preço de venda informado acima, sem descontos importados ou promocionais. Desative para voltar à atualização automática.</p>
             <p class="texto-pequeno texto-suave mb-0">Use ponto ou vírgula para os centavos. O desconto em % é calculado automaticamente.</p>
             `,
           })}
