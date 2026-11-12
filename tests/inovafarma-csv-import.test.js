@@ -229,3 +229,21 @@ test('prévia mostra coluna de preço anterior e novo, inclui alerta de diferen�
   assert.match(html,/diferença superior a 50%/);
   assert.match(html,/saldos e preços de venda/);
 });
+
+
+test('relatório CSV respeita preço fixo e continua atualizando o saldo do SKU',()=>{
+  const db=criarDB();
+  db.collection('products').update('existente',{
+    precoFixoSite:true,precoCentavos:1000,precoInternoInovaCentavos:900
+  });
+  const arquivo=csv('Código de barras;Descrição;Estoque atual;Preço de Venda;Código Interno\n'
+    +EAN1+';Produto existente;5;R$ 16,00;100\n');
+  const previa=prepararRelatorioEstoque(db,arquivo,{operadorId:'admin'});
+  assert.equal(previa.ok,true);
+  assert.equal(previa.resumo.precosAtualizados,0);
+  assert.equal(aplicarRelatorioEstoque(db,previa.id,'admin').ok,true);
+  const produto=db.collection('products').get('existente');
+  assert.equal(produto.estoque.quantidade,5);
+  assert.equal(produto.precoCentavos,1000);
+  assert.equal(produto.precoInternoInovaCentavos,900);
+});
