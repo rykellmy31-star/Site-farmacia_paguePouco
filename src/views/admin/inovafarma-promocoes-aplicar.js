@@ -14,6 +14,7 @@ const rotulos={
   sem_produto:'Código não encontrado no site',
   codigo_duplicado:'Código repetido no catálogo',
   arquivado:'Produto arquivado',
+  preco_fixo_site:'Preço fixo no site — não importar desconto',
   codigo_invalido:'Código interno inválido',
   preco_divergente:'Preço normal diferente do InovaFarma; atualize estoque/preços primeiro',
   sem_data_final:'Sem data final: defina validade no formulário',
@@ -42,7 +43,8 @@ export function telaPreviaAplicacaoPromocoesInova(ctx,previa) {
       '<p><strong>Não encontrados:</strong> '+fmt(resumo.semProduto)+
       ' · <strong>Duplicados:</strong> '+fmt(resumo.codigoDuplicado)+
       ' · <strong>Preço divergente:</strong> '+fmt(resumo.precoDivergente)+
-      ' · <strong>Arquivados:</strong> '+fmt(resumo.arquivados)+'</p>'+
+      ' · <strong>Arquivados:</strong> '+fmt(resumo.arquivados)+
+      ' · <strong>Preços fixos protegidos:</strong> '+fmt(resumo.precoFixoSite||0)+'</p>'+
       '<p><strong>Sem validade indicada:</strong> '+fmt(resumo.semDataFinal)+
       ' · <strong>Pagamento não autorizado:</strong> '+fmt(resumo.pagamentosRestritos)+
       ' · <strong>Campanhas encerradas:</strong> '+fmt(resumo.vencidas)+
@@ -70,7 +72,7 @@ export function telaPreviaAplicacaoPromocoesInova(ctx,previa) {
           '<td>'+fmt(rotulos[p.status]||p.status)+'</td></tr>';
       }).join('')+'</tbody></table></div>'+
       '<p class="texto-pequeno">Produtos ausentes, duplicados, com preço divergente ou '+ 
-      'com campanhas inseguras não serão atualizados nesta importação.</p>'})+
+      'com campanhas inseguras ou preço fixo no site não serão atualizados nesta importação.</p>'})+
     painel({titulo:'Confirmação de aplicação de descontos',corpo:
       (confirmacao?
         '<form method="post" action="/admin/estoque/promocoes/aplicar">'+
