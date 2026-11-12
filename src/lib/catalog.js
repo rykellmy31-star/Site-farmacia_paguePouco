@@ -137,6 +137,9 @@ export function estoqueDisponivel(produto) {
 
 export function precoVigenteCentavos(produto, referencia = new Date()) {
   const normal = Number(produto?.precoCentavos || 0);
+  // Preço fixo é o valor de venda escolhido no site: descontos do ERP,
+  // campanhas importadas e promoções anteriores não o substituem.
+  if (produto?.precoFixoSite === true) return normal;
   const interno = Number(produto?.precoInternoInovaCentavos || 0);
   // Quando o InovaFarma informa um desconto no cadastro interno, este é
   // o preço autoritativo do SKU. Não combinar com descontos manuais ou
