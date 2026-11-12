@@ -180,3 +180,25 @@ test('rotas aplicam permissões e não permitem publicidade de descontos não co
   const page=readFileSync(new URL('../src/views/admin/importacao-estoque.js',import.meta.url),'utf8');
   assert.match(page,/formaction="\/admin\/estoque\/promocoes\/preparar"/);
 });
+
+
+test('preço fixo ignora promoções Inova sem remover promoção manual do banco',()=>{
+  const {db}=montarDb();
+  db.collection('products').update('p1',{precoFixoSite:true,precoCentavos:2000});
+  const prev=prepararPromocoesInova(db,csvRapido(),'super',{
+    aceitaTodosOnline:'1',fimSemData:'2026-11-30'
+  },ref);
+  assert.equal(prev.ok,true);
+  assert.equal(prev.resumo.precoFixoSite,1);
+  assert.equal(prev.plano.find(x=>x.produtoId==='p1').status,'preco_fixo_site');
+  const r=aplicarPromocoesInova(db,prev.id,'super',{
+    frase:'APLICAR DESCONTOS INOVAFARMA',confirmado:'1',aceitaTodosOnline:'1'
+  },ref);
+  assert.equal(r.ok,true);
+  const p=db.collection('products').get('p1');
+  assert.equal(p.precoCentavos,2000);
+  assert.equal(p.precoPromocionalCentavos,1700);
+  assert.equal(p.inovaPromocoes,undefined);
+  assert.equal(precoVigenteCentavos(p,new Date('2026-11-12T12:00:00Z')),2000);
+  assert.equal(temPromocao(p,new Date('2026-11-12T12:00:00Z')),false);
+});
